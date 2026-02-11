@@ -245,9 +245,22 @@ async fn run_loop(
 fn key_event_to_bytes(key: &crossterm::event::KeyEvent) -> Option<Vec<u8>> {
     use crossterm::event::{KeyCode, KeyModifiers};
 
+    let has_alt = key.modifiers.contains(KeyModifiers::ALT);
+    let has_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let has_super = key.modifiers.contains(KeyModifiers::SUPER);
+
+    // CSI modifier parameter: 1=none, 2=Shift, 3=Alt, 4=Shift+Alt,
+    // 5=Ctrl, 6=Ctrl+Shift, 7=Ctrl+Alt, 8=Ctrl+Shift+Alt
+    // Super (Cmd) maps the same way as Ctrl for terminal purposes.
+    let modifier_param = 1
+        + if key.modifiers.contains(KeyModifiers::SHIFT) { 1 } else { 0 }
+        + if has_alt { 2 } else { 0 }
+        + if has_ctrl || has_super { 4 } else { 0 };
+    let has_modifier = modifier_param > 1;
+
     let bytes = match key.code {
         KeyCode::Char(ch) => {
-            if key.modifiers.contains(KeyModifiers::CONTROL) {
+            if has_ctrl {
                 let upper = ch.to_ascii_uppercase();
                 match upper {
                     'A'..='Z' => vec![upper as u8 - 64],
@@ -255,6 +268,13 @@ fn key_event_to_bytes(key: &crossterm::event::KeyEvent) -> Option<Vec<u8>> {
                     '3' | '[' => vec![27],
                     _ => vec![ch as u8],
                 }
+            } else if has_alt {
+                // Alt+char sends ESC prefix + char
+                let mut buf = vec![27u8];
+                let mut char_buf = [0u8; 4];
+                let s = ch.encode_utf8(&mut char_buf);
+                buf.extend_from_slice(s.as_bytes());
+                buf
             } else {
                 let mut buf = [0u8; 4];
                 let s = ch.encode_utf8(&mut buf);
@@ -262,9 +282,22 @@ fn key_event_to_bytes(key: &crossterm::event::KeyEvent) -> Option<Vec<u8>> {
             }
         }
         KeyCode::Enter => vec![b'\r'],
-        KeyCode::Backspace => vec![8],
+        KeyCode::Backspace => {
+            if has_alt {
+                vec![27, 127] // Alt+Backspace: ESC + DEL (word delete)
+            } else {
+                vec![8]
+            }
+        }
         KeyCode::Tab => vec![9],
         KeyCode::Esc => vec![27],
+        KeyCode::Left if has_modifier => format!("\x1b[1;{}D", modifier_param).into_bytes(),
+        KeyCode::Right if has_modifier => format!("\x1b[1;{}C", modifier_param).into_bytes(),
+        KeyCode::Up if has_modifier => format!("\x1b[1;{}A", modifier_param).into_bytes(),
+        KeyCode::Down if has_modifier => format!("\x1b[1;{}B", modifier_param).into_bytes(),
+        KeyCode::Home if has_modifier => format!("\x1b[1;{}H", modifier_param).into_bytes(),
+        KeyCode::End if has_modifier => format!("\x1b[1;{}F", modifier_param).into_bytes(),
+        KeyCode::Delete if has_modifier => format!("\x1b[3;{}~", modifier_param).into_bytes(),
         KeyCode::Left => vec![27, 91, 68],
         KeyCode::Right => vec![27, 91, 67],
         KeyCode::Up => vec![27, 91, 65],
