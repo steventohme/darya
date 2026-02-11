@@ -1,0 +1,36 @@
+src/main.rs
+  6093804467321b42 134-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.2",
+  "base_commit_sha": "10ecbfee52e5e14f4efe22e5b3a5de0847b9e4a1",
+  "prompts": {
+    "6093804467321b42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0068c2f5-e6d5-43e0-8eeb-fa8cb6bc0a5f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 8,
+      "total_deletions": 1,
+      "accepted_lines": 8,
+      "overriden_lines": 0
+    },
+    "8d94e7e39ed977d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb60841f-dc84-419d-9713-bf797ffcd289",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 246,
+      "overriden_lines": 0
+    }
+  }
+}
