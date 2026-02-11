@@ -1,4 +1,4 @@
-use ratatui::layout::Rect;
+use ratatui::layout::{Alignment, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use ratatui::Frame;
@@ -86,6 +86,24 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &Sessio
                             }
                         }
                     }
+                }
+
+                // Show overlay bar if session has exited
+                if app.exited_sessions.contains(session_id) && inner.height > 0 {
+                    let overlay_area = Rect::new(
+                        inner.x,
+                        inner.y + inner.height - 1,
+                        inner.width,
+                        1,
+                    );
+                    let overlay = Paragraph::new(" [exited] press r to restart ")
+                        .alignment(Alignment::Center)
+                        .style(
+                            Style::default()
+                                .fg(app.theme.bg)
+                                .bg(app.theme.session_exited),
+                        );
+                    frame.render_widget(overlay, overlay_area);
                 }
 
                 return;

@@ -42,6 +42,8 @@ pub struct App {
     pub prompt: Option<Prompt>,
     /// Sessions that have received a bell (needs attention)
     pub attention_sessions: HashSet<String>,
+    /// Sessions whose process has exited
+    pub exited_sessions: HashSet<String>,
     /// Status message to show briefly
     pub status_message: Option<String>,
     pub theme: Theme,
@@ -59,6 +61,7 @@ impl App {
             session_ids: HashMap::new(),
             active_session_id: None,
             attention_sessions: HashSet::new(),
+            exited_sessions: HashSet::new(),
             prompt: None,
             status_message: None,
             theme,
@@ -77,6 +80,15 @@ impl App {
                     && self.input_mode == InputMode::Terminal)
                 {
                     self.attention_sessions.insert(session_id.clone());
+                }
+            }
+            AppEvent::SessionExited { session_id } => {
+                self.exited_sessions.insert(session_id.clone());
+                // If user is in terminal mode on this session, kick to nav mode
+                if self.active_session_id.as_deref() == Some(session_id)
+                    && self.input_mode == InputMode::Terminal
+                {
+                    self.input_mode = InputMode::Navigation;
                 }
             }
             AppEvent::Tick => {}
@@ -186,11 +198,11 @@ impl App {
             }
             KeyCode::Tab => {
                 self.active_panel = Panel::Terminal;
-                if self.active_session_id.is_some() {
-                    if let Some(ref id) = self.active_session_id {
-                        self.attention_sessions.remove(id);
+                if let Some(ref id) = self.active_session_id {
+                    self.attention_sessions.remove(id);
+                    if !self.exited_sessions.contains(id) {
+                        self.input_mode = InputMode::Terminal;
                     }
-                    self.input_mode = InputMode::Terminal;
                 }
             }
             _ => {}
@@ -206,7 +218,9 @@ impl App {
             KeyCode::Char('i') | KeyCode::Enter => {
                 if let Some(ref id) = self.active_session_id {
                     self.attention_sessions.remove(id);
-                    self.input_mode = InputMode::Terminal;
+                    if !self.exited_sessions.contains(id) {
+                        self.input_mode = InputMode::Terminal;
+                    }
                 }
             }
             KeyCode::Char(c @ '1'..='9') => {
@@ -246,6 +260,19 @@ impl App {
 
     pub fn selected_worktree_path(&self) -> Option<&PathBuf> {
         self.worktrees.get(self.selected_worktree).map(|wt| &wt.path)
+    }
+
+    pub fn needs_session_restart(&self, key: &KeyEvent) -> bool {
+        if key.code != KeyCode::Char('r')
+            || self.prompt.is_some()
+            || self.input_mode != InputMode::Navigation
+        {
+            return false;
+        }
+        self.selected_worktree_path()
+            .and_then(|p| self.session_ids.get(p))
+            .map(|id| self.exited_sessions.contains(id))
+            .unwrap_or(false)
     }
 
     pub fn needs_session_spawn(&self, key: &KeyEvent) -> bool {

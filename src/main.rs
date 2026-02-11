@@ -131,6 +131,7 @@ async fn run_loop(
                         session_manager.remove(&session_id);
                         app.session_ids.retain(|_, v| v != &session_id);
                         app.attention_sessions.remove(&session_id);
+                        app.exited_sessions.remove(&session_id);
                         app.input_mode = InputMode::Navigation;
                         app.status_message = Some("Session closed".to_string());
                     } else {
@@ -165,6 +166,7 @@ async fn run_loop(
                         if let Some(session_id) = app.session_ids.remove(&wt.path) {
                             session_manager.remove(&session_id);
                             app.attention_sessions.remove(&session_id);
+                            app.exited_sessions.remove(&session_id);
                             if app.active_session_id.as_deref() == Some(&session_id) {
                                 app.active_session_id = None;
                             }
@@ -214,14 +216,50 @@ async fn run_loop(
                     }
                 }
 
+                // Handle session restart on 'r' for exited sessions
+                else if app.needs_session_restart(key) {
+                    if let Some(wt_path) = app.selected_worktree_path().cloned() {
+                        if let Some(old_id) = app.session_ids.remove(&wt_path) {
+                            session_manager.remove(&old_id);
+                            app.attention_sessions.remove(&old_id);
+                            app.exited_sessions.remove(&old_id);
+                            if app.active_session_id.as_deref() == Some(&old_id) {
+                                app.active_session_id = None;
+                            }
+                        }
+                        let (rows, cols) = pty_size(terminal);
+                        match session_manager.spawn_session(
+                            wt_path.clone(),
+                            rows,
+                            cols,
+                            app.theme.mode,
+                        ) {
+                            Ok(id) => {
+                                app.session_ids.insert(wt_path, id.clone());
+                                app.active_session_id = Some(id);
+                                app.active_panel = Panel::Terminal;
+                                app.input_mode = InputMode::Terminal;
+                            }
+                            Err(e) => {
+                                app.status_message =
+                                    Some(format!("Failed to restart session: {}", e));
+                            }
+                        }
+                    }
+                }
+
                 // Forward keys to PTY in terminal mode
                 if app.input_mode == InputMode::Terminal && app.prompt.is_none() {
                     // Don't forward Tab — it switches to sidebar
                     if key.code != KeyCode::Tab {
                         if let Some(ref session_id) = app.active_session_id {
-                            if let Some(bytes) = key_event_to_bytes(key) {
-                                if let Some(session) = session_manager.get_mut(session_id) {
-                                    let _ = session.write_input(&bytes);
+                            if !app.exited_sessions.contains(session_id.as_str()) {
+                                if let Some(bytes) = key_event_to_bytes(key) {
+                                    if let Some(session) =
+                                        session_manager.get_mut(session_id)
+                                    {
+                                        let _ = session.write_input(&bytes);
+                                    }
                                 }
                             }
                         }

@@ -14,10 +14,19 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
         .map(|(i, wt)| {
             let session_id = app.session_ids.get(&wt.path);
             let has_session = session_id.is_some();
+            let is_exited = session_id
+                .map(|id| app.exited_sessions.contains(id))
+                .unwrap_or(false);
             let needs_attention = session_id
                 .map(|id| app.attention_sessions.contains(id))
                 .unwrap_or(false);
-            let indicator = if has_session { "●" } else { "○" };
+            let indicator = if is_exited {
+                "✕"
+            } else if has_session {
+                "●"
+            } else {
+                "○"
+            };
 
             let branch_str = wt
                 .branch
@@ -25,6 +34,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
                 .unwrap_or("detached");
 
             let main_marker = if wt.is_main { " [main]" } else { "" };
+            let exited_marker = if is_exited { " [exited]" } else { "" };
 
             // Hotkey label: 1-9 for first 9, 0 for 10th
             let hotkey = if i < 9 {
@@ -35,7 +45,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
                 " ".to_string()
             };
 
-            let indicator_color = if needs_attention {
+            let indicator_color = if is_exited {
+                app.theme.session_exited
+            } else if needs_attention {
                 app.theme.session_attention
             } else if has_session {
                 app.theme.session_active
@@ -43,7 +55,27 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
                 app.theme.session_inactive
             };
 
-            let line = if needs_attention {
+            let line = if is_exited {
+                let exited_color = app.theme.session_exited;
+                Line::from(vec![
+                    Span::styled(
+                        format!("{} {} ", hotkey, indicator),
+                        Style::default().fg(exited_color).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!("{}{}", wt.name, main_marker),
+                        Style::default().fg(app.theme.fg),
+                    ),
+                    Span::styled(
+                        exited_marker.to_string(),
+                        Style::default().fg(exited_color).add_modifier(Modifier::DIM),
+                    ),
+                    Span::styled(
+                        format!("  {}", branch_str),
+                        Style::default().fg(app.theme.fg_dim),
+                    ),
+                ])
+            } else if needs_attention {
                 let attn = app.theme.session_attention;
                 Line::from(vec![
                     Span::styled(

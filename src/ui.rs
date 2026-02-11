@@ -81,9 +81,15 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             Panel::Sidebar => "sidebar",
             Panel::Terminal => "terminal",
         };
+        let has_exited_selected = app
+            .selected_worktree_path()
+            .and_then(|p| app.session_ids.get(p))
+            .map(|id| app.exited_sessions.contains(id))
+            .unwrap_or(false);
+        let restart_hint = if has_exited_selected { "  r:restart" } else { "" };
         format!(
-            " [{}] [{}]  q:quit  Tab:switch  j/k:navigate  a:add  d:delete  Enter:session  Esc:back",
-            mode_str, panel_str
+            " [{}] [{}]  q:quit  Tab:switch  j/k:navigate  a:add  d:delete  Enter:session{}",
+            mode_str, panel_str, restart_hint
         )
     };
     let status_style = if app.status_message.is_some() {

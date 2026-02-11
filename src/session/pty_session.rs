@@ -142,6 +142,9 @@ impl PtySession {
                     Err(_) => break,
                 }
             }
+            let _ = event_tx.send(AppEvent::SessionExited {
+                session_id: session_id.clone(),
+            });
         });
 
         // Get writer for sending input
