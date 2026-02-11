@@ -6,11 +6,12 @@ use crate::error::{DaryaError, Result};
 
 pub struct WorktreeManager {
     pub repo_root: PathBuf,
+    pub dir_format: String,
 }
 
 impl WorktreeManager {
-    pub fn new(repo_root: PathBuf) -> Self {
-        Self { repo_root }
+    pub fn new(repo_root: PathBuf, dir_format: String) -> Self {
+        Self { repo_root, dir_format }
     }
 
     pub fn list(&self) -> Result<Vec<Worktree>> {
@@ -31,15 +32,23 @@ impl WorktreeManager {
         Ok(parse_porcelain(&stdout, &self.repo_root))
     }
 
-    pub fn add(&self, name: &str, branch: &str) -> Result<()> {
-        let worktree_path = self.repo_root.parent().unwrap_or(&self.repo_root).join(name);
+    pub fn add(&self, branch: &str) -> Result<()> {
+        let repo_name = self
+            .repo_root
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "repo".to_string());
+        let dir_name = self.dir_format
+            .replace("{repo}", &repo_name)
+            .replace("{branch}", branch);
+        let worktree_path = self.repo_root.parent().unwrap_or(&self.repo_root).join(dir_name);
         let output = Command::new("git")
             .args([
                 "worktree",
                 "add",
                 "-b",
                 branch,
-                worktree_path.to_str().unwrap_or(name),
+                worktree_path.to_str().unwrap_or(branch),
             ])
             .current_dir(&self.repo_root)
             .output()

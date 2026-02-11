@@ -75,7 +75,7 @@ async fn main() -> color_eyre::Result<()> {
 
     // Find git root and load worktrees
     let repo_root = find_git_root()?;
-    let wt_manager = WorktreeManager::new(repo_root);
+    let wt_manager = WorktreeManager::new(repo_root, app_config.worktree_dir_format);
     let worktrees = wt_manager.list()?;
 
     // Setup terminal
@@ -140,7 +140,7 @@ async fn run_loop(
 
                 // Handle worktree creation
                 if let Some(branch_name) = app.wants_create_worktree(key) {
-                    match wt_manager.add(&branch_name, &branch_name) {
+                    match wt_manager.add(&branch_name) {
                         Ok(()) => {
                             app.prompt = None;
                             if let Ok(worktrees) = wt_manager.list() {

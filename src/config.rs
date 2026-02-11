@@ -103,15 +103,24 @@ struct TerminalToml {
 }
 
 #[derive(Debug, Deserialize, Default)]
+struct WorktreeToml {
+    dir_format: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
 struct ConfigToml {
     theme: Option<ThemeToml>,
     terminal: Option<TerminalToml>,
+    worktree: Option<WorktreeToml>,
 }
+
+pub const DEFAULT_WORKTREE_DIR_FORMAT: &str = "{repo}-{branch}";
 
 /// Loaded application config (theme + terminal settings).
 pub struct AppConfig {
     pub theme: Theme,
     pub terminal_start_bottom: bool,
+    pub worktree_dir_format: String,
 }
 
 /// Parse a hex color string like "#33FF33" or "33FF33" into a ratatui Color.
@@ -130,19 +139,22 @@ fn parse_hex_color(s: &str) -> Option<Color> {
 pub fn load_config() -> AppConfig {
     let mut theme = Theme::default();
     let mut terminal_start_bottom = true;
+    let mut worktree_dir_format = DEFAULT_WORKTREE_DIR_FORMAT.to_string();
+
+    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone() };
 
     let Some(home) = dirs_path() else {
-        return AppConfig { theme, terminal_start_bottom };
+        return defaults();
     };
 
     let config_path = home.join(".config").join("darya").join("config.toml");
     let Ok(contents) = std::fs::read_to_string(&config_path) else {
-        return AppConfig { theme, terminal_start_bottom };
+        return defaults();
     };
 
     let Ok(config) = toml::from_str::<ConfigToml>(&contents) else {
         eprintln!("Warning: failed to parse {}", config_path.display());
-        return AppConfig { theme, terminal_start_bottom };
+        return defaults();
     };
 
     if let Some(ref t) = config.theme {
@@ -184,7 +196,13 @@ pub fn load_config() -> AppConfig {
         }
     }
 
-    AppConfig { theme, terminal_start_bottom }
+    if let Some(ref w) = config.worktree {
+        if let Some(ref fmt) = w.dir_format {
+            worktree_dir_format = fmt.clone();
+        }
+    }
+
+    AppConfig { theme, terminal_start_bottom, worktree_dir_format }
 }
 
 fn dirs_path() -> Option<std::path::PathBuf> {
