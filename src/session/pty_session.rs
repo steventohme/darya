@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
@@ -10,11 +11,51 @@ use crate::config::{ThemeMode, CLAUDE_COMMAND};
 use crate::error::{DaryaError, Result};
 use crate::event::AppEvent;
 
+/// Callback that detects when Claude Code finishes a task.
+/// Claude Code emits OSC 9;4;0 (clear progress indicator) when done,
+/// rather than a standalone BEL character.
+pub struct PtyCallback {
+    done_count: Arc<AtomicUsize>,
+}
+
+impl vt100::Callbacks for PtyCallback {
+    fn audible_bell(&mut self, _: &mut vt100::Screen) {
+        // Standalone BEL — also counts as a notification
+        self.done_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn unhandled_osc(&mut self, _: &mut vt100::Screen, params: &[&[u8]]) {
+        match params.first().copied() {
+            // OSC 9 — iTerm2-style notifications and progress
+            Some(b"9") => {
+                // Skip "still working" progress states (9;4;3 indeterminate, 9;4;1 percentage)
+                if params.len() >= 3 && params[1] == b"4" {
+                    match params[2] {
+                        b"3" | b"1" => return,
+                        _ => {}
+                    }
+                }
+                // Everything else is attention-worthy:
+                // - 9;4;0 = progress done (task finished)
+                // - 9;4;2 = progress error
+                // - 9;<message> = notification (e.g. permission request)
+                self.done_count.fetch_add(1, Ordering::Relaxed);
+            }
+            // OSC 777 — Ghostty/rxvt-unicode notifications
+            // Format: 777;notify;title;body
+            Some(b"777") => {
+                self.done_count.fetch_add(1, Ordering::Relaxed);
+            }
+            _ => {}
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub struct PtySession {
     pub id: String,
     pub worktree_path: PathBuf,
-    pub parser: Arc<RwLock<vt100::Parser>>,
+    pub parser: Arc<RwLock<vt100::Parser<PtyCallback>>>,
     writer: Box<dyn Write + Send>,
     master: Box<dyn MasterPty + Send>,
 }
@@ -59,8 +100,14 @@ impl PtySession {
             }
         });
 
-        // Create vt100 parser
-        let parser = Arc::new(RwLock::new(vt100::Parser::new(rows, cols, 1000)));
+        // Create vt100 parser with task-done detection callback
+        let done_count = Arc::new(AtomicUsize::new(0));
+        let callbacks = PtyCallback {
+            done_count: done_count.clone(),
+        };
+        let parser = Arc::new(RwLock::new(vt100::Parser::new_with_callbacks(
+            rows, cols, 1000, callbacks,
+        )));
 
         // Reader task: read from PTY → feed to parser → signal event loop
         let mut reader = pair
@@ -71,18 +118,21 @@ impl PtySession {
         let session_id = id.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
+            let mut last_done_count = 0usize;
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
-                        // Scan for BEL character (0x07) before processing
-                        if buf[..n].contains(&0x07) {
+                        if let Ok(mut p) = parser_clone.write() {
+                            p.process(&buf[..n]);
+                        }
+                        // Check if Claude Code signaled task completion (OSC 9;4;0)
+                        let current = done_count.load(Ordering::Relaxed);
+                        if current > last_done_count {
+                            last_done_count = current;
                             let _ = event_tx.send(AppEvent::SessionBell {
                                 session_id: session_id.clone(),
                             });
-                        }
-                        if let Ok(mut p) = parser_clone.write() {
-                            p.process(&buf[..n]);
                         }
                         // Signal the event loop to redraw
                         let _ = event_tx.send(AppEvent::PtyOutput {
