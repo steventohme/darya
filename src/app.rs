@@ -226,7 +226,6 @@ impl App {
 
     pub fn needs_session_spawn(&self, key: &KeyEvent) -> bool {
         self.prompt.is_none()
-            && self.active_panel == Panel::Sidebar
             && key.code == KeyCode::Enter
             && self.input_mode == InputMode::Navigation
     }
