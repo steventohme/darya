@@ -51,12 +51,12 @@ impl Theme {
     pub fn light() -> Self {
         Self {
             mode: ThemeMode::Light,
-            bg: Color::Rgb(0xE8, 0xE3, 0xDE),
+            bg: Color::Rgb(0xC8, 0xC3, 0xBE),
             fg: Color::Rgb(0x2A, 0x2A, 0x2A),
-            fg_dim: Color::Rgb(0x9A, 0x90, 0x88),
+            fg_dim: Color::Rgb(0x7A, 0x74, 0x6E),
             border_active: Color::Rgb(0xD0, 0x6B, 0x1A),
-            border_inactive: Color::Rgb(0xD0, 0xC8, 0xC0),
-            highlight_bg: Color::Rgb(0xE8, 0xE0, 0xD8),
+            border_inactive: Color::Rgb(0xA0, 0x9A, 0x94),
+            highlight_bg: Color::Rgb(0xB8, 0xB3, 0xAE),
             session_active: Color::Rgb(0xD0, 0x6B, 0x1A),
             session_inactive: Color::Rgb(0x9A, 0x90, 0x88),
             status_bar_fg: Color::Rgb(0xF5, 0xF0, 0xEB),

@@ -1,6 +1,6 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{App, InputMode, Panel, Prompt};
@@ -91,6 +91,7 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
             let block = Block::default()
                 .title(" New worktree (branch name) ")
                 .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
                 .border_style(Style::default().fg(theme.prompt_border));
             let inner = block.inner(popup_area);
             frame.render_widget(block, popup_area);
@@ -103,6 +104,7 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
             let block = Block::default()
                 .title(" Confirm Delete ")
                 .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
                 .border_style(Style::default().fg(theme.prompt_delete_border));
             let inner = block.inner(popup_area);
             frame.render_widget(block, popup_area);

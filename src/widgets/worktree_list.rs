@@ -1,7 +1,7 @@
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState};
+use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState};
 use ratatui::Frame;
 
 use crate::app::App;
@@ -64,6 +64,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
             Block::default()
                 .title(" Worktrees ")
                 .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
                 .border_style(border_style),
         )
         .highlight_style(

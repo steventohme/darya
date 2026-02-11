@@ -1,6 +1,6 @@
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use ratatui::Frame;
 use tui_term::widget::PseudoTerminal;
 
@@ -18,6 +18,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &Sessio
     let block = Block::default()
         .title(" Claude Code ")
         .borders(Borders::ALL)
+        .border_type(BorderType::Thick)
         .border_style(border_style);
     let inner = block.inner(area);
     frame.render_widget(block, area);
