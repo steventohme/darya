@@ -1,0 +1,23 @@
+Cargo.toml
+  8d94e7e39ed977d8 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.1",
+  "base_commit_sha": "ddef8253a623d833d476a26b85b5170d59a1b441",
+  "prompts": {
+    "8d94e7e39ed977d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb60841f-dc84-419d-9713-bf797ffcd289",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 206,
+      "total_deletions": 58,
+      "accepted_lines": 174,
+      "overriden_lines": 0
+    }
+  }
+}
