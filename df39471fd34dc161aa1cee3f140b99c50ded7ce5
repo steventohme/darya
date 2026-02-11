@@ -1,0 +1,25 @@
+src/widgets/worktree_list.rs
+  4a9e54f3f84f334e 14,25-33,36
+src/app.rs
+  4a9e54f3f84f334e 153-159,194-199,212-218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.1",
+  "base_commit_sha": "df39471fd34dc161aa1cee3f140b99c50ded7ce5",
+  "prompts": {
+    "4a9e54f3f84f334e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f51b2f63-443b-44d1-970f-9290817f6ca0",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 31,
+      "total_deletions": 2,
+      "accepted_lines": 31,
+      "overriden_lines": 0
+    }
+  }
+}
