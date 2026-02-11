@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use crate::config::Theme;
 use crate::event::AppEvent;
 use crate::worktree::types::Worktree;
 
@@ -41,10 +42,11 @@ pub struct App {
     pub prompt: Option<Prompt>,
     /// Status message to show briefly
     pub status_message: Option<String>,
+    pub theme: Theme,
 }
 
 impl App {
-    pub fn new(worktrees: Vec<Worktree>) -> Self {
+    pub fn new(worktrees: Vec<Worktree>, theme: Theme) -> Self {
         Self {
             running: true,
             input_mode: InputMode::Navigation,
@@ -55,6 +57,7 @@ impl App {
             active_session_id: None,
             prompt: None,
             status_message: None,
+            theme,
         }
     }
 
