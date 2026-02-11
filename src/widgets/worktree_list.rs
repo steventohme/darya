@@ -7,6 +7,14 @@ use ratatui::Frame;
 use crate::app::App;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
+    // Derive repo name from the main worktree's directory name
+    let repo_name = app
+        .worktrees
+        .iter()
+        .find(|wt| wt.is_main)
+        .map(|wt| wt.name.as_str())
+        .unwrap_or("repo");
+
     let items: Vec<ListItem> = app
         .worktrees
         .iter()
@@ -33,7 +41,6 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
                 .as_deref()
                 .unwrap_or("detached");
 
-            let main_marker = if wt.is_main { " [main]" } else { "" };
             let exited_marker = if is_exited { " [exited]" } else { "" };
 
             // Hotkey label: 1-9 for first 9, 0 for 10th
@@ -63,16 +70,16 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
                         Style::default().fg(exited_color).add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(
-                        format!("{}{}", wt.name, main_marker),
+                        repo_name.to_string(),
                         Style::default().fg(app.theme.fg),
+                    ),
+                    Span::styled(
+                        format!(" [{}]", branch_str),
+                        Style::default().fg(app.theme.fg_dim),
                     ),
                     Span::styled(
                         exited_marker.to_string(),
                         Style::default().fg(exited_color).add_modifier(Modifier::DIM),
-                    ),
-                    Span::styled(
-                        format!("  {}", branch_str),
-                        Style::default().fg(app.theme.fg_dim),
                     ),
                 ])
             } else if needs_attention {
@@ -83,11 +90,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
                         Style::default().fg(attn).add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(
-                        format!("{}{}", wt.name, main_marker),
+                        repo_name.to_string(),
                         Style::default().fg(attn).add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(
-                        format!("  {}", branch_str),
+                        format!(" [{}]", branch_str),
                         Style::default().fg(attn),
                     ),
                 ])
@@ -98,11 +105,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
                         Style::default().fg(indicator_color),
                     ),
                     Span::styled(
-                        format!("{}{}", wt.name, main_marker),
+                        repo_name.to_string(),
                         Style::default().fg(app.theme.fg),
                     ),
                     Span::styled(
-                        format!("  {}", branch_str),
+                        format!(" [{}]", branch_str),
                         Style::default().fg(app.theme.fg_dim),
                     ),
                 ])
