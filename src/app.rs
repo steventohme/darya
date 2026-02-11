@@ -150,6 +150,13 @@ impl App {
                 // Signal that we want to start a session for this worktree
                 // Actual spawning is handled by main loop
             }
+            // 1-9, 0 jump to worktree by index (0 = 10th)
+            KeyCode::Char(c @ '1'..='9') => {
+                self.jump_to_worktree((c as usize) - ('1' as usize));
+            }
+            KeyCode::Char('0') => {
+                self.jump_to_worktree(9);
+            }
             KeyCode::Char('a') => {
                 self.prompt = Some(Prompt::CreateWorktree {
                     input: String::new(),
@@ -184,6 +191,12 @@ impl App {
                     self.input_mode = InputMode::Terminal;
                 }
             }
+            KeyCode::Char(c @ '1'..='9') => {
+                self.jump_to_worktree((c as usize) - ('1' as usize));
+            }
+            KeyCode::Char('0') => {
+                self.jump_to_worktree(9);
+            }
             _ => {}
         }
     }
@@ -194,6 +207,13 @@ impl App {
             self.input_mode = InputMode::Navigation;
         }
         // In terminal mode, keys get forwarded to PTY (handled in main loop)
+    }
+
+    fn jump_to_worktree(&mut self, index: usize) {
+        if index < self.worktrees.len() {
+            self.selected_worktree = index;
+            self.switch_to_selected_session();
+        }
     }
 
     fn switch_to_selected_session(&mut self) {

@@ -11,7 +11,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
         .worktrees
         .iter()
         .enumerate()
-        .map(|(_i, wt)| {
+        .map(|(i, wt)| {
             let has_session = app.session_ids.contains_key(&wt.path);
             let indicator = if has_session { "●" } else { "○" };
 
@@ -22,9 +22,18 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
 
             let main_marker = if wt.is_main { " [main]" } else { "" };
 
+            // Hotkey label: 1-9 for first 9, 0 for 10th
+            let hotkey = if i < 9 {
+                format!("{}", i + 1)
+            } else if i == 9 {
+                "0".to_string()
+            } else {
+                " ".to_string()
+            };
+
             let line = Line::from(vec![
                 Span::styled(
-                    format!(" {} ", indicator),
+                    format!("{} {} ", hotkey, indicator),
                     Style::default().fg(if has_session {
                         Color::Green
                     } else {
