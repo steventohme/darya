@@ -139,6 +139,13 @@ async fn run_loop(
                 {
                     if app.prompt.is_some() {
                         app.prompt = None;
+                    } else if app.input_mode == InputMode::Editor {
+                        // Exit edit mode back to read-only navigation
+                        if let Some(ref mut editor) = app.editor {
+                            editor.read_only = true;
+                            editor.editor_state.mode = edtui::EditorMode::Normal;
+                        }
+                        app.input_mode = InputMode::Navigation;
                     } else if let Some(session_id) = app.active_session_id.take() {
                         session_manager.remove(&session_id);
                         app.session_ids.retain(|_, v| v != &session_id);
