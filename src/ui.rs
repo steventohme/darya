@@ -92,12 +92,13 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
                 .title(" New worktree (branch name) ")
                 .borders(Borders::ALL)
                 .border_type(BorderType::Thick)
-                .border_style(Style::default().fg(theme.prompt_border));
+                .border_style(Style::default().fg(theme.prompt_border))
+                .style(Style::default().bg(theme.bg));
             let inner = block.inner(popup_area);
             frame.render_widget(block, popup_area);
 
             let text = Paragraph::new(format!("{}█", input))
-                .style(Style::default().fg(theme.fg).add_modifier(Modifier::BOLD));
+                .style(Style::default().fg(theme.fg).bg(theme.bg).add_modifier(Modifier::BOLD));
             frame.render_widget(text, inner);
         }
         Prompt::ConfirmDelete { worktree_name } => {
@@ -105,12 +106,13 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
                 .title(" Confirm Delete ")
                 .borders(Borders::ALL)
                 .border_type(BorderType::Thick)
-                .border_style(Style::default().fg(theme.prompt_delete_border));
+                .border_style(Style::default().fg(theme.prompt_delete_border))
+                .style(Style::default().bg(theme.bg));
             let inner = block.inner(popup_area);
             frame.render_widget(block, popup_area);
 
             let text = Paragraph::new(format!("Delete '{}'? (y/N)", worktree_name))
-                .style(Style::default().fg(theme.fg));
+                .style(Style::default().fg(theme.fg).bg(theme.bg));
             frame.render_widget(text, inner);
         }
     }
