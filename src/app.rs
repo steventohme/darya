@@ -2,8 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use edtui::{EditorEventHandler, EditorState as EdtuiState, Lines as EdtuiLines};
 
 const IGNORED_NAMES: &[&str] = &["target", "node_modules", "__pycache__"];
+const MAX_FILE_SIZE: u64 = 1_048_576; // 1MB
 
 use crate::config::Theme;
 use crate::event::AppEvent;
@@ -202,6 +204,64 @@ impl FileExplorerState {
     }
 }
 
+pub struct EditorViewState {
+    pub file_path: PathBuf,
+    pub editor_state: EdtuiState,
+    pub event_handler: EditorEventHandler,
+    pub modified: bool,
+    pub read_only: bool,
+    pub file_extension: String,
+}
+
+impl EditorViewState {
+    pub fn open(path: PathBuf) -> Result<Self, String> {
+        let metadata =
+            std::fs::metadata(&path).map_err(|e| format!("Cannot read file: {}", e))?;
+        if metadata.len() > MAX_FILE_SIZE {
+            return Err(format!(
+                "File too large ({}KB > 1MB)",
+                metadata.len() / 1024
+            ));
+        }
+
+        let content =
+            std::fs::read_to_string(&path).map_err(|e| format!("Cannot read file: {}", e))?;
+        let lines = EdtuiLines::from(content.as_str());
+        let editor_state = EdtuiState::new(lines);
+        let event_handler = EditorEventHandler::default();
+
+        let file_extension = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("")
+            .to_string();
+
+        Ok(Self {
+            file_path: path,
+            editor_state,
+            event_handler,
+            modified: false,
+            read_only: true,
+            file_extension,
+        })
+    }
+
+    pub fn save(&mut self) -> Result<(), String> {
+        let content = self.editor_state.lines.to_string();
+        std::fs::write(&self.file_path, content)
+            .map_err(|e| format!("Failed to save: {}", e))?;
+        self.modified = false;
+        Ok(())
+    }
+
+    pub fn file_name(&self) -> &str {
+        self.file_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+    }
+}
+
 pub struct App {
     pub running: bool,
     pub input_mode: InputMode,
@@ -230,6 +290,7 @@ pub struct App {
     /// Height of the terminal panel area, used for page-scroll sizing
     pub terminal_height: u16,
     pub file_explorer: FileExplorerState,
+    pub editor: Option<EditorViewState>,
 }
 
 impl App {
@@ -258,6 +319,7 @@ impl App {
             scroll_offsets: HashMap::new(),
             terminal_height: 24,
             file_explorer: FileExplorerState::new(explorer_root),
+            editor: None,
         }
     }
 
