@@ -7,6 +7,29 @@ use crate::app::{App, InputMode, Panel, Prompt};
 use crate::session::manager::SessionManager;
 use crate::widgets;
 
+/// Compute the inner Rect where the terminal PTY is rendered.
+/// Replicates the layout (header/main/status + sidebar/terminal split + border).
+pub fn compute_pty_rect(size: Rect) -> Rect {
+    let outer = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
+        .split(size);
+
+    let main_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+        .split(outer[1]);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick);
+    block.inner(main_chunks[1])
+}
+
 pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) {
     let size = frame.area();
 

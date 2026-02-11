@@ -17,6 +17,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::backend::CrosstermBackend;
+use ratatui::layout::Rect;
 use ratatui::Terminal;
 
 use app::{App, InputMode, Panel};
@@ -40,9 +41,8 @@ fn find_git_root() -> color_eyre::Result<PathBuf> {
 /// Calculate the terminal area available for the PTY (excluding borders and sidebar).
 fn pty_size(terminal: &Terminal<CrosstermBackend<io::Stdout>>) -> (u16, u16) {
     let size = terminal.size().unwrap_or_default();
-    let cols = (size.width * 75 / 100).saturating_sub(2).max(10);
-    let rows = size.height.saturating_sub(3).max(4);
-    (rows, cols)
+    let rect = ui::compute_pty_rect(size.into());
+    (rect.height.max(1), rect.width.max(1))
 }
 
 /// Restore the terminal to normal state. Called on both clean exit and panic.
@@ -231,9 +231,8 @@ async fn run_loop(
 
             // Handle resize
             if let AppEvent::Resize(w, h) = &event {
-                let cols = (w * 75 / 100).saturating_sub(2).max(10);
-                let rows = h.saturating_sub(3).max(4);
-                session_manager.resize_all(rows, cols);
+                let rect = ui::compute_pty_rect(Rect::new(0, 0, *w, *h));
+                session_manager.resize_all(rect.height.max(1), rect.width.max(1));
             }
 
             app.handle_event(&event);
