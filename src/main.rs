@@ -9,6 +9,7 @@ mod worktree;
 
 use std::io;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture, KeyCode};
 use crossterm::execute;
@@ -54,10 +55,21 @@ fn restore_terminal() {
 async fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
 
-    // Install panic hook that restores terminal before printing the panic
+    // Load config and sync Claude Code's theme to match
+    let app_config = config::load_config();
+    let theme = app_config.theme;
+    let terminal_start_bottom = app_config.terminal_start_bottom;
+    let original_claude_theme = config::sync_claude_theme(theme.mode);
+    let claude_theme_for_panic = Arc::new(Mutex::new(original_claude_theme.clone()));
+
+    // Install panic hook that restores terminal and Claude theme before printing the panic
+    let panic_theme = Arc::clone(&claude_theme_for_panic);
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         restore_terminal();
+        if let Ok(val) = panic_theme.lock() {
+            config::restore_claude_theme(val.clone());
+        }
         default_hook(info);
     }));
 
@@ -73,9 +85,8 @@ async fn main() -> color_eyre::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Load config and create app
-    let theme = config::load_theme();
-    let mut app = App::new(worktrees, theme);
+    // Create app with loaded theme
+    let mut app = App::new(worktrees, theme, terminal_start_bottom);
     let (mut events, event_tx) = create_event_handler();
     let mut session_manager = SessionManager::new(event_tx);
 
@@ -89,8 +100,9 @@ async fn main() -> color_eyre::Result<()> {
     )
     .await;
 
-    // Restore terminal (normal exit path)
+    // Restore terminal and Claude theme (normal exit path)
     restore_terminal();
+    config::restore_claude_theme(original_claude_theme);
     terminal.show_cursor()?;
 
     result

@@ -45,10 +45,11 @@ pub struct App {
     /// Status message to show briefly
     pub status_message: Option<String>,
     pub theme: Theme,
+    pub terminal_start_bottom: bool,
 }
 
 impl App {
-    pub fn new(worktrees: Vec<Worktree>, theme: Theme) -> Self {
+    pub fn new(worktrees: Vec<Worktree>, theme: Theme, terminal_start_bottom: bool) -> Self {
         Self {
             running: true,
             input_mode: InputMode::Navigation,
@@ -61,6 +62,7 @@ impl App {
             prompt: None,
             status_message: None,
             theme,
+            terminal_start_bottom,
         }
     }
 
