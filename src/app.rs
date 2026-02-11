@@ -608,6 +608,7 @@ impl App {
             && !self.show_help
             && key.code == KeyCode::Enter
             && self.input_mode == InputMode::Navigation
+            && matches!(self.focused_view(), ViewKind::Worktrees | ViewKind::Terminal)
     }
 
     /// Check if user confirmed worktree creation. Returns the branch name.
