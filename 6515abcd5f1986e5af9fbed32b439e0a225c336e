@@ -1,0 +1,55 @@
+src/app.rs
+  6b6d391a7cbf36c6 51-54,73-74,211,230,234-238,275-305
+src/widgets/terminal_panel.rs
+  6b6d391a7cbf36c6 28-30,93-105
+src/ui.rs
+  6b6d391a7cbf36c6 90-94,96-97
+src/main.rs
+  6b6d391a7cbf36c6 90-91,272-278,282
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.1",
+  "base_commit_sha": "6515abcd5f1986e5af9fbed32b439e0a225c336e",
+  "prompts": {
+    "6355195a388c4134": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6db545f9-143d-45e7-b203-dc80ef2bee7a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    },
+    "6b6d391a7cbf36c6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1829f123-e5da-4a3b-8fcd-887f2e388c01",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 78,
+      "total_deletions": 3,
+      "accepted_lines": 78,
+      "overriden_lines": 0
+    },
+    "8d94e7e39ed977d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb60841f-dc84-419d-9713-bf797ffcd289",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 246,
+      "overriden_lines": 0
+    }
+  }
+}
