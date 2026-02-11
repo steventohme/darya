@@ -4,11 +4,11 @@ use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use ratatui::Frame;
 use tui_term::widget::PseudoTerminal;
 
-use crate::app::{App, Panel};
+use crate::app::App;
 use crate::session::manager::SessionManager;
 
-pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &SessionManager) {
-    let border_style = if app.active_panel == Panel::Terminal {
+pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &SessionManager, is_focused: bool) {
+    let border_style = if is_focused {
         Style::default().fg(app.theme.border_active)
     } else {
         Style::default().fg(app.theme.border_inactive)

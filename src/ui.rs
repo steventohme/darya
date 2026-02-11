@@ -1,15 +1,16 @@
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
-use crate::app::{App, InputMode, Panel, Prompt};
+use crate::app::{App, InputMode, PanelFocus, Prompt, ViewKind};
 use crate::session::manager::SessionManager;
 use crate::widgets;
 
 /// Compute the inner Rect where the terminal PTY is rendered.
-/// Replicates the layout (header/main/status + sidebar/terminal split + border).
-pub fn compute_pty_rect(size: Rect) -> Rect {
+/// Finds whichever panel (left or right) has the Terminal view and returns its inner rect.
+/// If neither panel has Terminal, returns a fallback based on the right panel.
+pub fn compute_pty_rect(size: Rect, left_view: ViewKind, right_view: ViewKind) -> Rect {
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -24,10 +25,55 @@ pub fn compute_pty_rect(size: Rect) -> Rect {
         .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
         .split(outer[1]);
 
+    let chunk = if left_view == ViewKind::Terminal {
+        main_chunks[0]
+    } else if right_view == ViewKind::Terminal {
+        main_chunks[1]
+    } else {
+        // Terminal not visible — use right panel as fallback for sizing
+        main_chunks[1]
+    };
+
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Thick);
-    block.inner(main_chunks[1])
+    block.inner(chunk)
+}
+
+fn render_view(
+    frame: &mut Frame,
+    area: Rect,
+    view: ViewKind,
+    app: &mut App,
+    session_manager: &SessionManager,
+    is_focused: bool,
+) {
+    match view {
+        ViewKind::Worktrees => widgets::worktree_list::render(frame, area, app, is_focused),
+        ViewKind::Terminal => widgets::terminal_panel::render(frame, area, app, session_manager, is_focused),
+        ViewKind::FileExplorer => render_file_explorer_placeholder(frame, area, app, is_focused),
+    }
+}
+
+fn render_file_explorer_placeholder(frame: &mut Frame, area: Rect, app: &App, is_focused: bool) {
+    let border_style = if is_focused {
+        Style::default().fg(app.theme.border_active)
+    } else {
+        Style::default().fg(app.theme.border_inactive)
+    };
+
+    let block = Block::default()
+        .title(" Files ")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick)
+        .border_style(border_style);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let placeholder = Paragraph::new("  File explorer (coming soon)")
+        .alignment(Alignment::Left)
+        .style(Style::default().fg(app.theme.fg_dim));
+    frame.render_widget(placeholder, inner);
 }
 
 pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) {
@@ -57,17 +103,19 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
         );
     frame.render_widget(header, outer[0]);
 
-    // Main layout: sidebar | terminal
+    // Main layout: left panel | right panel
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
         .split(outer[1]);
 
-    // Sidebar
-    widgets::worktree_list::render(frame, main_chunks[0], app);
+    // Left panel
+    let left_focused = app.panel_focus == PanelFocus::Left;
+    render_view(frame, main_chunks[0], app.left_panel.view, app, session_manager, left_focused);
 
-    // Terminal panel
-    widgets::terminal_panel::render(frame, main_chunks[1], app, session_manager);
+    // Right panel
+    let right_focused = app.panel_focus == PanelFocus::Right;
+    render_view(frame, main_chunks[1], app.right_panel.view, app, session_manager, right_focused);
 
     // Status bar
     let status_text = if let Some(ref msg) = app.status_message {
@@ -77,9 +125,10 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             InputMode::Navigation => "NAV",
             InputMode::Terminal => "TERM",
         };
-        let panel_str = match app.active_panel {
-            Panel::Sidebar => "sidebar",
-            Panel::Terminal => "terminal",
+        let view_str = match app.focused_view() {
+            ViewKind::Worktrees => "worktrees",
+            ViewKind::Terminal => "terminal",
+            ViewKind::FileExplorer => "files",
         };
         let has_exited_selected = app
             .selected_worktree_path()
@@ -93,8 +142,8 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ""
         };
         format!(
-            " [{}] [{}]  q:quit  Tab:switch  j/k:navigate  a:add  d:delete  Enter:session  ?:help{}{}",
-            mode_str, panel_str, restart_hint, scroll_hint
+            " [{}] [{}]  q:quit  Tab:switch  Ctrl+1/2/3:view  ?:help{}{}",
+            mode_str, view_str, restart_hint, scroll_hint
         )
     };
     let status_style = if app.status_message.is_some() {

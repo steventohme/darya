@@ -45,6 +45,11 @@
 5. **Document Results**: Add review section to `tasks/todo.md`
 6. **Capture Lessons**: Update `tasks/lessons.md` after corrections
 
+## Target Environment
+
+- **Terminal**: iTerm2 on macOS only. Do not worry about Terminal.app or other emulator compatibility.
+- **Keyboard protocol**: Kitty keyboard enhancement is enabled — Ctrl+number keys work.
+
 ## Core Principles
 
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.

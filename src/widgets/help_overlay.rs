@@ -4,12 +4,12 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
-use crate::app::{App, Panel};
+use crate::app::{App, ViewKind};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
-    let (title, bindings) = match app.active_panel {
-        Panel::Sidebar => (
-            "Navigation — Sidebar",
+    let (title, bindings) = match app.focused_view() {
+        ViewKind::Worktrees => (
+            "Navigation — Worktrees",
             vec![
                 ("j/k, ↑/↓", "Navigate worktrees"),
                 ("1-9, 0", "Jump to worktree"),
@@ -17,20 +17,31 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 ("a", "Add worktree"),
                 ("d", "Delete worktree"),
                 ("r", "Restart exited session"),
-                ("Tab", "Switch to terminal"),
+                ("Tab", "Switch panel"),
+                ("Ctrl+1/2/3", "Switch view"),
                 ("q", "Quit"),
                 ("Ctrl+C", "Close session / Quit"),
             ],
         ),
-        Panel::Terminal => (
+        ViewKind::Terminal => (
             "Navigation — Terminal",
             vec![
                 ("i, Enter", "Enter terminal mode"),
                 ("PgUp/PgDn", "Scroll output"),
                 ("1-9, 0", "Jump to worktree"),
-                ("Tab", "Switch to sidebar"),
+                ("Tab", "Switch panel"),
+                ("Ctrl+1/2/3", "Switch view"),
                 ("q", "Quit"),
                 ("Ctrl+C", "Close session / Quit"),
+            ],
+        ),
+        ViewKind::FileExplorer => (
+            "Navigation — Files",
+            vec![
+                ("1-9, 0", "Jump to worktree"),
+                ("Tab", "Switch panel"),
+                ("Ctrl+1/2/3", "Switch view"),
+                ("q", "Quit"),
             ],
         ),
     };

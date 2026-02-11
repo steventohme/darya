@@ -14,9 +14,20 @@ pub enum InputMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Panel {
-    Sidebar,
+pub enum PanelFocus {
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewKind {
+    Worktrees,
     Terminal,
+    FileExplorer,
+}
+
+pub struct PanelState {
+    pub view: ViewKind,
 }
 
 /// Overlay prompts for user input
@@ -31,7 +42,9 @@ pub enum Prompt {
 pub struct App {
     pub running: bool,
     pub input_mode: InputMode,
-    pub active_panel: Panel,
+    pub panel_focus: PanelFocus,
+    pub left_panel: PanelState,
+    pub right_panel: PanelState,
     pub worktrees: Vec<Worktree>,
     pub selected_worktree: usize,
     /// Maps worktree path -> session ID for worktrees with active sessions
@@ -60,7 +73,9 @@ impl App {
         Self {
             running: true,
             input_mode: InputMode::Navigation,
-            active_panel: Panel::Sidebar,
+            panel_focus: PanelFocus::Left,
+            left_panel: PanelState { view: ViewKind::Worktrees },
+            right_panel: PanelState { view: ViewKind::Terminal },
             worktrees,
             selected_worktree: 0,
             session_ids: HashMap::new(),
@@ -75,6 +90,45 @@ impl App {
             scroll_offsets: HashMap::new(),
             terminal_height: 24,
         }
+    }
+
+    pub fn focused_view(&self) -> ViewKind {
+        match self.panel_focus {
+            PanelFocus::Left => self.left_panel.view,
+            PanelFocus::Right => self.right_panel.view,
+        }
+    }
+
+    pub fn focused_panel_mut(&mut self) -> &mut PanelState {
+        match self.panel_focus {
+            PanelFocus::Left => &mut self.left_panel,
+            PanelFocus::Right => &mut self.right_panel,
+        }
+    }
+
+    pub fn set_focused_view(&mut self, view: ViewKind) {
+        self.focused_panel_mut().view = view;
+    }
+
+    /// Focus whichever panel currently shows the Terminal view.
+    /// If neither panel has Terminal, switch the non-worktrees panel to Terminal and focus it.
+    pub fn focus_terminal_panel(&mut self) {
+        if self.left_panel.view == ViewKind::Terminal {
+            self.panel_focus = PanelFocus::Left;
+        } else if self.right_panel.view == ViewKind::Terminal {
+            self.panel_focus = PanelFocus::Right;
+        } else {
+            // Neither panel shows Terminal — put it on the right panel
+            self.right_panel.view = ViewKind::Terminal;
+            self.panel_focus = PanelFocus::Right;
+        }
+    }
+
+    pub fn toggle_focus(&mut self) {
+        self.panel_focus = match self.panel_focus {
+            PanelFocus::Left => PanelFocus::Right,
+            PanelFocus::Right => PanelFocus::Left,
+        };
     }
 
     pub fn handle_event(&mut self, event: &AppEvent) {
@@ -151,6 +205,16 @@ impl App {
     }
 
     fn handle_nav_key(&mut self, key: KeyEvent) {
+        // Ctrl+1/2/3: switch focused panel's view
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            match key.code {
+                KeyCode::Char('1') => { self.set_focused_view(ViewKind::Worktrees); return; }
+                KeyCode::Char('2') => { self.set_focused_view(ViewKind::Terminal); return; }
+                KeyCode::Char('3') => { self.set_focused_view(ViewKind::FileExplorer); return; }
+                _ => {}
+            }
+        }
+
         if key.code == KeyCode::Char('?') {
             self.show_help = !self.show_help;
             return;
@@ -159,13 +223,14 @@ impl App {
             self.show_help = false;
             return;
         }
-        match self.active_panel {
-            Panel::Sidebar => self.handle_sidebar_key(key),
-            Panel::Terminal => self.handle_terminal_panel_nav_key(key),
+        match self.focused_view() {
+            ViewKind::Worktrees => self.handle_worktrees_key(key),
+            ViewKind::Terminal => self.handle_terminal_nav_key(key),
+            ViewKind::FileExplorer => self.handle_file_explorer_key(key),
         }
     }
 
-    fn handle_sidebar_key(&mut self, key: KeyEvent) {
+    fn handle_worktrees_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') => self.running = false,
             KeyCode::Char('j') | KeyCode::Down => {
@@ -213,12 +278,15 @@ impl App {
                 }
             }
             KeyCode::Tab => {
-                self.active_panel = Panel::Terminal;
-                if let Some(ref id) = self.active_session_id {
-                    self.attention_sessions.remove(id);
-                    if !self.exited_sessions.contains(id) {
-                        self.input_mode = InputMode::Terminal;
-                        self.reset_scroll();
+                self.toggle_focus();
+                // If we just focused a Terminal view with active non-exited session, enter terminal mode
+                if self.focused_view() == ViewKind::Terminal {
+                    if let Some(ref id) = self.active_session_id {
+                        self.attention_sessions.remove(id);
+                        if !self.exited_sessions.contains(id) {
+                            self.input_mode = InputMode::Terminal;
+                            self.reset_scroll();
+                        }
                     }
                 }
             }
@@ -226,11 +294,11 @@ impl App {
         }
     }
 
-    fn handle_terminal_panel_nav_key(&mut self, key: KeyEvent) {
+    fn handle_terminal_nav_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
-                self.active_panel = Panel::Sidebar;
+                self.toggle_focus();
             }
             KeyCode::Char('i') | KeyCode::Enter => {
                 if let Some(ref id) = self.active_session_id {
@@ -260,9 +328,25 @@ impl App {
     fn handle_terminal_key(&mut self, key: KeyEvent) {
         if key.code == KeyCode::Tab {
             self.input_mode = InputMode::Navigation;
-            self.active_panel = Panel::Sidebar;
+            self.toggle_focus();
         }
         // All other keys get forwarded to PTY (handled in main loop)
+    }
+
+    fn handle_file_explorer_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('q') => self.running = false,
+            KeyCode::Tab => {
+                self.toggle_focus();
+            }
+            KeyCode::Char(c @ '1'..='9') => {
+                self.jump_to_worktree((c as usize) - ('1' as usize));
+            }
+            KeyCode::Char('0') => {
+                self.jump_to_worktree(9);
+            }
+            _ => {}
+        }
     }
 
     fn jump_to_worktree(&mut self, index: usize) {

@@ -6,7 +6,7 @@ use ratatui::Frame;
 
 use crate::app::App;
 
-pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
+pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
     // Derive repo name from the main worktree's directory name
     let repo_name = app
         .worktrees
@@ -118,7 +118,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
         })
         .collect();
 
-    let border_style = if app.active_panel == crate::app::Panel::Sidebar {
+    let border_style = if is_focused {
         Style::default().fg(app.theme.border_active)
     } else {
         Style::default().fg(app.theme.border_inactive)
