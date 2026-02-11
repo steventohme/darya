@@ -52,6 +52,7 @@ fn render_view(
         ViewKind::Worktrees => widgets::worktree_list::render(frame, area, app, is_focused),
         ViewKind::Terminal => widgets::terminal_panel::render(frame, area, app, session_manager, is_focused),
         ViewKind::FileExplorer => widgets::file_explorer::render(frame, area, app, is_focused),
+        ViewKind::Editor => widgets::editor::render(frame, area, app, is_focused),
     }
 }
 
@@ -103,11 +104,13 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
         let mode_str = match app.input_mode {
             InputMode::Navigation => "NAV",
             InputMode::Terminal => "TERM",
+            InputMode::Editor => "EDIT",
         };
         let view_str = match app.focused_view() {
             ViewKind::Worktrees => "worktrees",
             ViewKind::Terminal => "terminal",
             ViewKind::FileExplorer => "files",
+            ViewKind::Editor => "editor",
         };
         let has_exited_selected = app
             .selected_worktree_path()
@@ -121,7 +124,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ""
         };
         format!(
-            " [{}] [{}]  q:quit  Tab:switch  Ctrl+1/2/3:view  ?:help{}{}",
+            " [{}] [{}]  q:quit  Tab:switch  Ctrl+1/2/3/4:view  ?:help{}{}",
             mode_str, view_str, restart_hint, scroll_hint
         )
     };

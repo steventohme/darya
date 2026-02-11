@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use edtui::{EditorEventHandler, EditorState as EdtuiState, Lines as EdtuiLines};
+use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Lines as EdtuiLines};
 
 const IGNORED_NAMES: &[&str] = &["target", "node_modules", "__pycache__"];
 const MAX_FILE_SIZE: u64 = 1_048_576; // 1MB
@@ -15,6 +15,7 @@ use crate::worktree::types::Worktree;
 pub enum InputMode {
     Navigation,
     Terminal,
+    Editor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +29,7 @@ pub enum ViewKind {
     Worktrees,
     Terminal,
     FileExplorer,
+    Editor,
 }
 
 pub struct PanelState {
@@ -355,6 +357,13 @@ impl App {
         }
     }
 
+    pub fn open_editor_in_other_panel(&mut self) {
+        match self.panel_focus {
+            PanelFocus::Left => self.right_panel.view = ViewKind::Editor,
+            PanelFocus::Right => self.left_panel.view = ViewKind::Editor,
+        }
+    }
+
     pub fn toggle_focus(&mut self) {
         self.panel_focus = match self.panel_focus {
             PanelFocus::Left => PanelFocus::Right,
@@ -403,6 +412,7 @@ impl App {
         match self.input_mode {
             InputMode::Navigation => self.handle_nav_key(key),
             InputMode::Terminal => self.handle_terminal_key(key),
+            InputMode::Editor => self.handle_editor_key(key),
         }
     }
 
@@ -442,6 +452,7 @@ impl App {
                 KeyCode::Char('1') => { self.set_focused_view(ViewKind::Worktrees); return; }
                 KeyCode::Char('2') => { self.set_focused_view(ViewKind::Terminal); return; }
                 KeyCode::Char('3') => { self.set_focused_view(ViewKind::FileExplorer); return; }
+                KeyCode::Char('4') => { self.set_focused_view(ViewKind::Editor); return; }
                 _ => {}
             }
         }
@@ -458,6 +469,7 @@ impl App {
             ViewKind::Worktrees => self.handle_worktrees_key(key),
             ViewKind::Terminal => self.handle_terminal_nav_key(key),
             ViewKind::FileExplorer => self.handle_file_explorer_key(key),
+            ViewKind::Editor => self.handle_editor_key(key),
         }
     }
 
@@ -571,7 +583,17 @@ impl App {
             KeyCode::Char('k') | KeyCode::Up => self.file_explorer.move_up(),
             KeyCode::Enter | KeyCode::Char('l') => {
                 if let Some(path) = self.file_explorer.enter() {
-                    self.status_message = Some(path.display().to_string());
+                    match EditorViewState::open(path) {
+                        Ok(state) => {
+                            let name = state.file_name().to_string();
+                            self.editor = Some(state);
+                            self.open_editor_in_other_panel();
+                            self.status_message = Some(format!("Opened {}", name));
+                        }
+                        Err(e) => {
+                            self.status_message = Some(e);
+                        }
+                    }
                 }
             }
             KeyCode::Char('h') => self.file_explorer.collapse_or_parent(),
@@ -595,6 +617,75 @@ impl App {
                 self.jump_to_worktree(9);
             }
             _ => {}
+        }
+    }
+
+    fn handle_editor_key(&mut self, key: KeyEvent) {
+        let Some(ref mut editor) = self.editor else {
+            // No file open — only Tab and q work
+            match key.code {
+                KeyCode::Tab => self.toggle_focus(),
+                KeyCode::Char('q') => self.running = false,
+                _ => {}
+            }
+            return;
+        };
+
+        if self.input_mode == InputMode::Editor {
+            // Edit mode: Ctrl+S saves, Esc exits to read-only, rest forwarded to edtui
+            if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('s') {
+                match editor.save() {
+                    Ok(()) => self.status_message = Some("Saved".to_string()),
+                    Err(e) => self.status_message = Some(e),
+                }
+                return;
+            }
+            if key.code == KeyCode::Esc {
+                editor.read_only = true;
+                editor.editor_state.mode = EditorMode::Normal;
+                self.input_mode = InputMode::Navigation;
+                return;
+            }
+            // Track modifications on any non-modifier keypress in insert mode
+            if editor.editor_state.mode == EditorMode::Insert {
+                editor.modified = true;
+            }
+            editor.event_handler.on_key_event(key, &mut editor.editor_state);
+            return;
+        }
+
+        // Read-only mode (Navigation): intercept our keys, forward the rest to edtui Normal mode
+        match key.code {
+            KeyCode::Char('e') => {
+                editor.read_only = false;
+                editor.editor_state.mode = EditorMode::Insert;
+                self.input_mode = InputMode::Editor;
+            }
+            KeyCode::Char('q') => self.running = false,
+            KeyCode::Tab => {
+                self.toggle_focus();
+                if self.focused_view() == ViewKind::Terminal {
+                    if let Some(ref id) = self.active_session_id {
+                        self.attention_sessions.remove(id);
+                        if !self.exited_sessions.contains(id) {
+                            self.input_mode = InputMode::Terminal;
+                            self.reset_scroll();
+                        }
+                    }
+                }
+            }
+            KeyCode::Char(c @ '1'..='9') => {
+                self.jump_to_worktree((c as usize) - ('1' as usize));
+            }
+            KeyCode::Char('0') => {
+                self.jump_to_worktree(9);
+            }
+            _ => {
+                // Forward navigation keys to edtui in Normal mode
+                editor.event_handler.on_key_event(key, &mut editor.editor_state);
+                // Force back to Normal in case edtui changed mode
+                editor.editor_state.mode = EditorMode::Normal;
+            }
         }
     }
 
