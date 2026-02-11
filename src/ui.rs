@@ -1,5 +1,5 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
@@ -10,17 +10,35 @@ use crate::widgets;
 pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) {
     let size = frame.area();
 
-    // Full layout: content area + status bar
+    // Fill background with theme color
+    let bg_block = Block::default().style(Style::default().bg(app.theme.bg));
+    frame.render_widget(bg_block, size);
+
+    // Full layout: header + content area + status bar
     let outer = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
         .split(size);
+
+    // Header
+    let header = Paragraph::new(" darya")
+        .style(
+            Style::default()
+                .fg(app.theme.border_active)
+                .bg(app.theme.highlight_bg)
+                .add_modifier(Modifier::BOLD),
+        );
+    frame.render_widget(header, outer[0]);
 
     // Main layout: sidebar | terminal
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
-        .split(outer[0]);
+        .split(outer[1]);
 
     // Sidebar
     widgets::worktree_list::render(frame, main_chunks[0], app);
@@ -46,20 +64,20 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
         )
     };
     let status_style = if app.status_message.is_some() {
-        Style::default().fg(Color::Yellow).bg(Color::DarkGray)
+        Style::default().fg(app.theme.warning).bg(app.theme.status_bar_bg)
     } else {
-        Style::default().fg(Color::White).bg(Color::DarkGray)
+        Style::default().fg(app.theme.status_bar_fg).bg(app.theme.status_bar_bg)
     };
     let status = Paragraph::new(status_text).style(status_style);
-    frame.render_widget(status, outer[1]);
+    frame.render_widget(status, outer[2]);
 
     // Render prompt overlay if active
     if let Some(ref prompt) = app.prompt {
-        render_prompt(frame, size, prompt);
+        render_prompt(frame, size, prompt, &app.theme);
     }
 }
 
-fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt) {
+fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::config::Theme) {
     let width = 50u16.min(area.width.saturating_sub(4));
     let height = 3u16;
     let x = (area.width.saturating_sub(width)) / 2;
@@ -73,24 +91,24 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt) {
             let block = Block::default()
                 .title(" New worktree (branch name) ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow));
+                .border_style(Style::default().fg(theme.prompt_border));
             let inner = block.inner(popup_area);
             frame.render_widget(block, popup_area);
 
             let text = Paragraph::new(format!("{}█", input))
-                .style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD));
+                .style(Style::default().fg(theme.fg).add_modifier(Modifier::BOLD));
             frame.render_widget(text, inner);
         }
         Prompt::ConfirmDelete { worktree_name } => {
             let block = Block::default()
                 .title(" Confirm Delete ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Red));
+                .border_style(Style::default().fg(theme.prompt_delete_border));
             let inner = block.inner(popup_area);
             frame.render_widget(block, popup_area);
 
             let text = Paragraph::new(format!("Delete '{}'? (y/N)", worktree_name))
-                .style(Style::default().fg(Color::White));
+                .style(Style::default().fg(theme.fg));
             frame.render_widget(text, inner);
         }
     }
