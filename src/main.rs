@@ -128,10 +128,11 @@ async fn run_loop(
 ) -> color_eyre::Result<()> {
     while app.running {
         terminal.draw(|frame| ui::draw(frame, app, session_manager))?;
-        app.status_message = None;
 
         if let Some(event) = events.next().await {
             if let AppEvent::Key(key) = &event {
+                // Clear status message on any keypress
+                app.status_message = None;
                 // Ctrl+C: dismiss prompt → close active session → quit
                 if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
                     && key.code == KeyCode::Char('c')
