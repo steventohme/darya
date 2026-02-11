@@ -1,5 +1,5 @@
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 use tui_term::widget::PseudoTerminal;
@@ -9,9 +9,9 @@ use crate::session::manager::SessionManager;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &SessionManager) {
     let border_style = if app.active_panel == Panel::Terminal {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(app.theme.border_active)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(app.theme.border_inactive)
     };
 
     // Always render the border block
@@ -35,6 +35,6 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &Sessio
 
     // No active session — show placeholder
     let placeholder = Paragraph::new("  Press Enter on a worktree to start a Claude Code session")
-        .style(Style::default().fg(Color::DarkGray));
+        .style(Style::default().fg(app.theme.fg_dim));
     frame.render_widget(placeholder, inner);
 }
