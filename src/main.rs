@@ -144,7 +144,10 @@ async fn run_loop(
                         Ok(()) => {
                             app.prompt = None;
                             if let Ok(worktrees) = wt_manager.list() {
+                                // Select the newly created worktree (last in list)
+                                let new_idx = worktrees.len().saturating_sub(1);
                                 app.refresh_worktrees(worktrees);
+                                app.selected_worktree = new_idx;
                             }
                             app.status_message =
                                 Some(format!("Created worktree '{}'", branch_name));
@@ -155,9 +158,8 @@ async fn run_loop(
                         }
                     }
                 }
-
                 // Handle worktree deletion
-                if app.wants_delete_worktree(key) {
+                else if app.wants_delete_worktree(key) {
                     if let Some(wt) = app.worktrees.get(app.selected_worktree).cloned() {
                         // Clean up session if it exists
                         if let Some(session_id) = app.session_ids.remove(&wt.path) {
@@ -183,9 +185,8 @@ async fn run_loop(
                         }
                     }
                 }
-
                 // Handle session spawning on Enter in sidebar
-                if app.needs_session_spawn(key) {
+                else if app.needs_session_spawn(key) {
                     if let Some(wt_path) = app.selected_worktree_path().cloned() {
                         if !app.session_ids.contains_key(&wt_path) {
                             let (rows, cols) = pty_size(terminal);
