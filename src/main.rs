@@ -118,6 +118,7 @@ async fn run_loop(
                     } else if let Some(session_id) = app.active_session_id.take() {
                         session_manager.remove(&session_id);
                         app.session_ids.retain(|_, v| v != &session_id);
+                        app.attention_sessions.remove(&session_id);
                         app.input_mode = InputMode::Navigation;
                         app.status_message = Some("Session closed".to_string());
                     } else {
@@ -149,6 +150,7 @@ async fn run_loop(
                         // Clean up session if it exists
                         if let Some(session_id) = app.session_ids.remove(&wt.path) {
                             session_manager.remove(&session_id);
+                            app.attention_sessions.remove(&session_id);
                             if app.active_session_id.as_deref() == Some(&session_id) {
                                 app.active_session_id = None;
                             }
@@ -190,6 +192,7 @@ async fn run_loop(
                         } else {
                             // Session already exists, just switch to it
                             if let Some(id) = app.session_ids.get(&wt_path).cloned() {
+                                app.attention_sessions.remove(&id);
                                 app.active_session_id = Some(id);
                                 app.active_panel = Panel::Terminal;
                                 app.input_mode = InputMode::Terminal;

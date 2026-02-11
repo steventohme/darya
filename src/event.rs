@@ -11,6 +11,7 @@ pub enum AppEvent {
     Key(KeyEvent),
     Resize(u16, u16),
     PtyOutput { session_id: String },
+    SessionBell { session_id: String },
     Tick,
 }
 

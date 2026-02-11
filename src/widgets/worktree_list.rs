@@ -12,7 +12,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
         .iter()
         .enumerate()
         .map(|(i, wt)| {
-            let has_session = app.session_ids.contains_key(&wt.path);
+            let session_id = app.session_ids.get(&wt.path);
+            let has_session = session_id.is_some();
+            let needs_attention = session_id
+                .map(|id| app.attention_sessions.contains(id))
+                .unwrap_or(false);
             let indicator = if has_session { "●" } else { "○" };
 
             let branch_str = wt
@@ -31,24 +35,46 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
                 " ".to_string()
             };
 
-            let line = Line::from(vec![
-                Span::styled(
-                    format!("{} {} ", hotkey, indicator),
-                    Style::default().fg(if has_session {
-                        app.theme.session_active
-                    } else {
-                        app.theme.session_inactive
-                    }),
-                ),
-                Span::styled(
-                    format!("{}{}", wt.name, main_marker),
-                    Style::default().fg(app.theme.fg),
-                ),
-                Span::styled(
-                    format!("  {}", branch_str),
-                    Style::default().fg(app.theme.fg_dim),
-                ),
-            ]);
+            let indicator_color = if needs_attention {
+                app.theme.session_attention
+            } else if has_session {
+                app.theme.session_active
+            } else {
+                app.theme.session_inactive
+            };
+
+            let line = if needs_attention {
+                let attn = app.theme.session_attention;
+                Line::from(vec![
+                    Span::styled(
+                        format!("{} {} ", hotkey, indicator),
+                        Style::default().fg(attn).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!("{}{}", wt.name, main_marker),
+                        Style::default().fg(attn).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!("  {}", branch_str),
+                        Style::default().fg(attn),
+                    ),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::styled(
+                        format!("{} {} ", hotkey, indicator),
+                        Style::default().fg(indicator_color),
+                    ),
+                    Span::styled(
+                        format!("{}{}", wt.name, main_marker),
+                        Style::default().fg(app.theme.fg),
+                    ),
+                    Span::styled(
+                        format!("  {}", branch_str),
+                        Style::default().fg(app.theme.fg_dim),
+                    ),
+                ])
+            };
             ListItem::new(line)
         })
         .collect();

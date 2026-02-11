@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -40,6 +40,8 @@ pub struct App {
     pub active_session_id: Option<String>,
     /// Active prompt overlay (if any)
     pub prompt: Option<Prompt>,
+    /// Sessions that have received a bell (needs attention)
+    pub attention_sessions: HashSet<String>,
     /// Status message to show briefly
     pub status_message: Option<String>,
     pub theme: Theme,
@@ -55,6 +57,7 @@ impl App {
             selected_worktree: 0,
             session_ids: HashMap::new(),
             active_session_id: None,
+            attention_sessions: HashSet::new(),
             prompt: None,
             status_message: None,
             theme,
@@ -66,6 +69,14 @@ impl App {
             AppEvent::Key(key) => self.handle_key(*key),
             AppEvent::Resize(_w, _h) => {}
             AppEvent::PtyOutput { .. } => {}
+            AppEvent::SessionBell { session_id } => {
+                // Only mark as needing attention if it's not the currently viewed session in terminal mode
+                if !(self.active_session_id.as_deref() == Some(session_id)
+                    && self.input_mode == InputMode::Terminal)
+                {
+                    self.attention_sessions.insert(session_id.clone());
+                }
+            }
             AppEvent::Tick => {}
         }
     }
@@ -185,7 +196,8 @@ impl App {
                 self.active_panel = Panel::Sidebar;
             }
             KeyCode::Char('i') | KeyCode::Enter => {
-                if self.active_session_id.is_some() {
+                if let Some(ref id) = self.active_session_id {
+                    self.attention_sessions.remove(id);
                     self.input_mode = InputMode::Terminal;
                 }
             }
@@ -217,6 +229,10 @@ impl App {
     fn switch_to_selected_session(&mut self) {
         if let Some(wt) = self.worktrees.get(self.selected_worktree) {
             self.active_session_id = self.session_ids.get(&wt.path).cloned();
+            // Clear attention when switching to a session
+            if let Some(ref id) = self.active_session_id {
+                self.attention_sessions.remove(id);
+            }
         }
     }
 

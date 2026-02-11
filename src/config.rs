@@ -25,6 +25,7 @@ pub struct Theme {
     pub status_bar_bg: Color,
     pub prompt_border: Color,
     pub prompt_delete_border: Color,
+    pub session_attention: Color,
     pub warning: Color,
 }
 
@@ -44,6 +45,7 @@ impl Theme {
             status_bar_bg: Color::Rgb(0xE0, 0x7A, 0x2A),
             prompt_border: Color::Rgb(0xE0, 0x7A, 0x2A),
             prompt_delete_border: Color::Rgb(0xCC, 0x55, 0x55),
+            session_attention: Color::Rgb(0x00, 0xDD, 0x00),
             warning: Color::Rgb(0xE0, 0xA0, 0x3A),
         }
     }
@@ -63,6 +65,7 @@ impl Theme {
             status_bar_bg: Color::Rgb(0xD0, 0x6B, 0x1A),
             prompt_border: Color::Rgb(0xD0, 0x6B, 0x1A),
             prompt_delete_border: Color::Rgb(0xCC, 0x44, 0x44),
+            session_attention: Color::Rgb(0x00, 0x99, 0x00),
             warning: Color::Rgb(0xC0, 0x8A, 0x20),
         }
     }
@@ -90,6 +93,7 @@ struct ThemeToml {
     status_bar_bg: Option<String>,
     prompt_border: Option<String>,
     prompt_delete_border: Option<String>,
+    session_attention: Option<String>,
     warning: Option<String>,
 }
 
@@ -157,6 +161,7 @@ pub fn load_theme() -> Theme {
         apply!(status_bar_bg);
         apply!(prompt_border);
         apply!(prompt_delete_border);
+        apply!(session_attention);
         apply!(warning);
     }
 

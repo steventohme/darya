@@ -75,6 +75,12 @@ impl PtySession {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
+                        // Scan for BEL character (0x07) before processing
+                        if buf[..n].contains(&0x07) {
+                            let _ = event_tx.send(AppEvent::SessionBell {
+                                session_id: session_id.clone(),
+                            });
+                        }
                         if let Ok(mut p) = parser_clone.write() {
                             p.process(&buf[..n]);
                         }
