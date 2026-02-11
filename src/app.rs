@@ -48,6 +48,10 @@ pub struct App {
     pub status_message: Option<String>,
     pub theme: Theme,
     pub terminal_start_bottom: bool,
+    /// Per-session scrollback offset (lines scrolled back from live view)
+    pub scroll_offsets: HashMap<String, usize>,
+    /// Height of the terminal panel area, used for page-scroll sizing
+    pub terminal_height: u16,
 }
 
 impl App {
@@ -66,6 +70,8 @@ impl App {
             status_message: None,
             theme,
             terminal_start_bottom,
+            scroll_offsets: HashMap::new(),
+            terminal_height: 24,
         }
     }
 
@@ -202,6 +208,7 @@ impl App {
                     self.attention_sessions.remove(id);
                     if !self.exited_sessions.contains(id) {
                         self.input_mode = InputMode::Terminal;
+                        self.reset_scroll();
                     }
                 }
             }
@@ -220,8 +227,15 @@ impl App {
                     self.attention_sessions.remove(id);
                     if !self.exited_sessions.contains(id) {
                         self.input_mode = InputMode::Terminal;
+                        self.reset_scroll();
                     }
                 }
+            }
+            KeyCode::PageUp => {
+                self.scroll_up(self.terminal_height.saturating_sub(2) as usize);
+            }
+            KeyCode::PageDown => {
+                self.scroll_down(self.terminal_height.saturating_sub(2) as usize);
             }
             KeyCode::Char(c @ '1'..='9') => {
                 self.jump_to_worktree((c as usize) - ('1' as usize));
@@ -256,6 +270,37 @@ impl App {
                 self.attention_sessions.remove(id);
             }
         }
+    }
+
+    pub fn scroll_up(&mut self, lines: usize) {
+        if let Some(ref id) = self.active_session_id {
+            let offset = self.scroll_offsets.entry(id.clone()).or_insert(0);
+            *offset = offset.saturating_add(lines).min(1000);
+        }
+    }
+
+    pub fn scroll_down(&mut self, lines: usize) {
+        if let Some(ref id) = self.active_session_id {
+            let offset = self.scroll_offsets.entry(id.clone()).or_insert(0);
+            *offset = offset.saturating_sub(lines);
+            if *offset == 0 {
+                self.scroll_offsets.remove(id);
+            }
+        }
+    }
+
+    pub fn reset_scroll(&mut self) {
+        if let Some(ref id) = self.active_session_id {
+            self.scroll_offsets.remove(id);
+        }
+    }
+
+    pub fn active_scroll_offset(&self) -> usize {
+        self.active_session_id
+            .as_ref()
+            .and_then(|id| self.scroll_offsets.get(id))
+            .copied()
+            .unwrap_or(0)
     }
 
     pub fn selected_worktree_path(&self) -> Option<&PathBuf> {

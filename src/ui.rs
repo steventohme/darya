@@ -87,9 +87,14 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             .map(|id| app.exited_sessions.contains(id))
             .unwrap_or(false);
         let restart_hint = if has_exited_selected { "  r:restart" } else { "" };
+        let scroll_hint = if app.active_scroll_offset() > 0 {
+            "  [scrolled] PgUp/PgDn:scroll"
+        } else {
+            ""
+        };
         format!(
-            " [{}] [{}]  q:quit  Tab:switch  j/k:navigate  a:add  d:delete  Enter:session{}",
-            mode_str, panel_str, restart_hint
+            " [{}] [{}]  q:quit  Tab:switch  j/k:navigate  a:add  d:delete  Enter:session{}{}",
+            mode_str, panel_str, restart_hint, scroll_hint
         )
     };
     let status_style = if app.status_message.is_some() {

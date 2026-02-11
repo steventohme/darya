@@ -87,6 +87,8 @@ async fn main() -> color_eyre::Result<()> {
 
     // Create app with loaded theme
     let mut app = App::new(worktrees, theme, terminal_start_bottom);
+    let (pty_rows, _pty_cols) = pty_size(&terminal);
+    app.terminal_height = pty_rows;
     let (mut events, event_tx) = create_event_handler();
     let mut session_manager = SessionManager::new(event_tx);
 
@@ -267,9 +269,17 @@ async fn run_loop(
                 }
             }
 
+            // Reset scroll when new output arrives for the active session
+            if let AppEvent::PtyOutput { ref session_id } = event {
+                if app.active_session_id.as_deref() == Some(session_id.as_str()) {
+                    app.scroll_offsets.remove(session_id);
+                }
+            }
+
             // Handle resize
             if let AppEvent::Resize(w, h) = &event {
                 let rect = ui::compute_pty_rect(Rect::new(0, 0, *w, *h));
+                app.terminal_height = rect.height.max(1);
                 session_manager.resize_all(rect.height.max(1), rect.width.max(1));
             }
 

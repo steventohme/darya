@@ -25,7 +25,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &Sessio
 
     if let Some(ref session_id) = app.active_session_id {
         if let Some(session) = session_manager.get(session_id) {
-            if let Ok(parser) = session.parser.read() {
+            if let Ok(mut parser) = session.parser.write() {
+                let offset = app.active_scroll_offset();
+                parser.screen_mut().set_scrollback(offset);
                 let pseudo_term = PseudoTerminal::new(parser.screen());
                 frame.render_widget(pseudo_term, inner);
 
@@ -86,6 +88,19 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &Sessio
                             }
                         }
                     }
+                }
+
+                // Show scroll indicator when scrolled back
+                if offset > 0 && inner.height > 0 {
+                    let indicator_area = Rect::new(inner.x, inner.y, inner.width, 1);
+                    let indicator = Paragraph::new(" ↑ scrollback (PgDn to return) ")
+                        .alignment(Alignment::Right)
+                        .style(
+                            Style::default()
+                                .fg(app.theme.fg_dim)
+                                .bg(app.theme.highlight_bg),
+                        );
+                    frame.render_widget(indicator, indicator_area);
                 }
 
                 // Show overlay bar if session has exited
