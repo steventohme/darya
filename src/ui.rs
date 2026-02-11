@@ -8,9 +8,8 @@ use crate::session::manager::SessionManager;
 use crate::widgets;
 
 /// Compute the inner Rect where the terminal PTY is rendered.
-/// Finds whichever panel (left or right) has the Terminal view and returns its inner rect.
-/// If neither panel has Terminal, returns a fallback based on the right panel.
-pub fn compute_pty_rect(size: Rect, left_view: ViewKind, right_view: ViewKind) -> Rect {
+/// Terminal is always in the right (main) panel.
+pub fn compute_pty_rect(size: Rect) -> Rect {
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -25,19 +24,10 @@ pub fn compute_pty_rect(size: Rect, left_view: ViewKind, right_view: ViewKind) -
         .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
         .split(outer[1]);
 
-    let chunk = if left_view == ViewKind::Terminal {
-        main_chunks[0]
-    } else if right_view == ViewKind::Terminal {
-        main_chunks[1]
-    } else {
-        // Terminal not visible — use right panel as fallback for sizing
-        main_chunks[1]
-    };
-
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Thick);
-    block.inner(chunk)
+    block.inner(main_chunks[1])
 }
 
 fn render_view(
@@ -90,13 +80,13 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
         .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
         .split(outer[1]);
 
-    // Left panel
+    // Left panel (sidebar)
     let left_focused = app.panel_focus == PanelFocus::Left;
-    render_view(frame, main_chunks[0], app.left_panel.view, app, session_manager, left_focused);
+    render_view(frame, main_chunks[0], app.sidebar_view.to_view_kind(), app, session_manager, left_focused);
 
-    // Right panel
+    // Right panel (main)
     let right_focused = app.panel_focus == PanelFocus::Right;
-    render_view(frame, main_chunks[1], app.right_panel.view, app, session_manager, right_focused);
+    render_view(frame, main_chunks[1], app.main_view.to_view_kind(), app, session_manager, right_focused);
 
     // Status bar
     let status_text = if let Some(ref msg) = app.status_message {

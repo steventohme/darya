@@ -5,9 +5,24 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{App, ViewKind};
+use crate::config::KeybindingsConfig;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
-    let (title, bindings) = match app.focused_view() {
+    let kb = &app.keybindings;
+    let kb_worktrees = KeybindingsConfig::format(&kb.worktrees);
+    let kb_terminal = KeybindingsConfig::format(&kb.terminal);
+    let kb_files = KeybindingsConfig::format(&kb.files);
+    let kb_editor = KeybindingsConfig::format(&kb.editor);
+    let kb_search = KeybindingsConfig::format(&kb.search);
+    let kb_fuzzy = KeybindingsConfig::format(&kb.fuzzy_finder);
+    let kb_proj_search = KeybindingsConfig::format(&kb.project_search);
+
+    let view_bindings = format!(
+        "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search",
+        kb_worktrees, kb_terminal, kb_files, kb_editor, kb_search
+    );
+
+    let (title, bindings): (&str, Vec<(&str, &str)>) = match app.focused_view() {
         ViewKind::Worktrees => (
             "Navigation — Worktrees",
             vec![
@@ -18,9 +33,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 ("d", "Delete worktree"),
                 ("r", "Restart exited session"),
                 ("Tab", "Switch panel"),
-                ("Ctrl+1..5", "Switch view"),
-                ("Ctrl+P", "Fuzzy file finder"),
-                ("Ctrl+F", "Project search"),
+                (&kb_fuzzy, "Fuzzy file finder"),
+                (&kb_proj_search, "Project search"),
                 ("q", "Quit"),
                 ("Ctrl+C", "Close session / Quit"),
             ],
@@ -32,9 +46,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 ("PgUp/PgDn", "Scroll output"),
                 ("1-9, 0", "Jump to worktree"),
                 ("Tab", "Switch panel"),
-                ("Ctrl+1..5", "Switch view"),
-                ("Ctrl+P", "Fuzzy file finder"),
-                ("Ctrl+F", "Project search"),
+                (&kb_fuzzy, "Fuzzy file finder"),
+                (&kb_proj_search, "Project search"),
                 ("q", "Quit"),
                 ("Ctrl+C", "Close session / Quit"),
             ],
@@ -48,9 +61,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 ("Backspace", "Go up one directory"),
                 ("1-9, 0", "Jump to worktree"),
                 ("Tab", "Switch panel"),
-                ("Ctrl+1..5", "Switch view"),
-                ("Ctrl+P", "Fuzzy file finder"),
-                ("Ctrl+F", "Project search"),
+                (&kb_fuzzy, "Fuzzy file finder"),
+                (&kb_proj_search, "Project search"),
                 ("q", "Quit"),
             ],
         ),
@@ -62,9 +74,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 ("Ctrl+S", "Save file"),
                 ("j/k", "Navigate lines"),
                 ("Tab", "Switch panel"),
-                ("Ctrl+1..5", "Switch view"),
-                ("Ctrl+P", "Fuzzy file finder"),
-                ("Ctrl+F", "Project search"),
+                (&kb_fuzzy, "Fuzzy file finder"),
+                (&kb_proj_search, "Project search"),
                 ("q", "Quit"),
             ],
         ),
@@ -74,9 +85,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 ("j/k, ↑/↓", "Navigate results"),
                 ("Enter", "Open file at match"),
                 ("Tab", "Switch panel"),
-                ("Ctrl+1..5", "Switch view"),
-                ("Ctrl+P", "Fuzzy file finder"),
-                ("Ctrl+F", "New search"),
+                (&kb_fuzzy, "Fuzzy file finder"),
+                (&kb_proj_search, "New search"),
                 ("q", "Quit"),
                 ("Ctrl+C", "Close session / Quit"),
             ],
@@ -96,6 +106,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Style::default().fg(app.theme.fg_dim),
     )));
 
+    lines.push(Line::from(Span::styled(
+        format!(" {}", view_bindings),
+        Style::default().fg(app.theme.fg_dim),
+    )));
+    lines.push(Line::from(""));
+
     for (key, desc) in &bindings {
         lines.push(Line::from(vec![
             Span::styled(
@@ -109,7 +125,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let content_height = lines.len() as u16;
-    let width = 40u16.min(area.width.saturating_sub(4));
+    let width = 60u16.min(area.width.saturating_sub(4));
     let height = (content_height + 2).min(area.height.saturating_sub(2)); // +2 for border
     let x = (area.width.saturating_sub(width)) / 2;
     let y = (area.height.saturating_sub(height)) / 2;

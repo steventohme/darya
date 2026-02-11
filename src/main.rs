@@ -24,6 +24,7 @@ use ratatui::layout::Rect;
 use ratatui::Terminal;
 
 use app::{App, InputMode};
+use config::KeybindingsConfig;
 use event::{create_event_handler, AppEvent};
 use session::manager::SessionManager;
 use worktree::manager::WorktreeManager;
@@ -42,9 +43,9 @@ fn find_git_root() -> color_eyre::Result<PathBuf> {
 }
 
 /// Calculate the terminal area available for the PTY (excluding borders and sidebar).
-fn pty_size(terminal: &Terminal<CrosstermBackend<io::Stdout>>, app: &App) -> (u16, u16) {
+fn pty_size(terminal: &Terminal<CrosstermBackend<io::Stdout>>) -> (u16, u16) {
     let size = terminal.size().unwrap_or_default();
-    let rect = ui::compute_pty_rect(size.into(), app.left_panel.view, app.right_panel.view);
+    let rect = ui::compute_pty_rect(size.into());
     (rect.height.max(1), rect.width.max(1))
 }
 
@@ -94,9 +95,10 @@ async fn main() -> color_eyre::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Create app with loaded theme
-    let mut app = App::new(worktrees, theme, terminal_start_bottom);
-    let (pty_rows, _pty_cols) = pty_size(&terminal, &app);
+    // Create app with loaded theme and keybindings
+    let keybindings = app_config.keybindings;
+    let mut app = App::new(worktrees, theme, terminal_start_bottom, keybindings);
+    let (pty_rows, _pty_cols) = pty_size(&terminal);
     app.terminal_height = pty_rows;
     let (mut events, event_tx) = create_event_handler();
     let mut session_manager = SessionManager::new(event_tx);
@@ -160,10 +162,8 @@ async fn run_loop(
                     }
                 }
 
-                // Ctrl+P: open fuzzy file finder
-                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
-                    && key.code == KeyCode::Char('p')
-                {
+                // Fuzzy file finder keybinding
+                if KeybindingsConfig::matches(&app.keybindings.fuzzy_finder, key.modifiers, key.code) {
                     if app.fuzzy_finder.is_none() {
                         app.prompt = None; // dismiss any active prompt
                         let root = app.file_explorer.root.clone();
@@ -172,10 +172,8 @@ async fn run_loop(
                     }
                 }
 
-                // Ctrl+F: open project search prompt
-                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
-                    && key.code == KeyCode::Char('f')
-                {
+                // Project search keybinding
+                if KeybindingsConfig::matches(&app.keybindings.project_search, key.modifiers, key.code) {
                     if app.prompt.is_none() && app.fuzzy_finder.is_none() {
                         app.prompt = Some(app::Prompt::SearchInput {
                             input: String::new(),
@@ -236,7 +234,7 @@ async fn run_loop(
                 else if app.needs_session_spawn(key) {
                     if let Some(wt_path) = app.selected_worktree_path().cloned() {
                         if !app.session_ids.contains_key(&wt_path) {
-                            let (rows, cols) = pty_size(terminal, app);
+                            let (rows, cols) = pty_size(terminal);
                             match session_manager.spawn_session(wt_path.clone(), rows, cols, app.theme.mode) {
                                 Ok(id) => {
                                     app.session_ids.insert(wt_path, id.clone());
@@ -272,7 +270,7 @@ async fn run_loop(
                                 app.active_session_id = None;
                             }
                         }
-                        let (rows, cols) = pty_size(terminal, app);
+                        let (rows, cols) = pty_size(terminal);
                         match session_manager.spawn_session(
                             wt_path.clone(),
                             rows,
@@ -323,8 +321,6 @@ async fn run_loop(
             if let AppEvent::Resize(w, h) = &event {
                 let rect = ui::compute_pty_rect(
                     Rect::new(0, 0, *w, *h),
-                    app.left_panel.view,
-                    app.right_panel.view,
                 );
                 app.terminal_height = rect.height.max(1);
                 session_manager.resize_all(rect.height.max(1), rect.width.max(1));

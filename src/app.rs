@@ -7,7 +7,7 @@ use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Index2, L
 const IGNORED_NAMES: &[&str] = &["target", "node_modules", "__pycache__"];
 const MAX_FILE_SIZE: u64 = 1_048_576; // 1MB
 
-use crate::config::Theme;
+use crate::config::{KeybindingsConfig, Theme};
 use crate::event::AppEvent;
 use crate::worktree::types::Worktree;
 
@@ -33,8 +33,36 @@ pub enum ViewKind {
     Search,
 }
 
-pub struct PanelState {
-    pub view: ViewKind,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SidebarView {
+    Worktrees,
+    FileExplorer,
+    Search,
+}
+
+impl SidebarView {
+    pub fn to_view_kind(self) -> ViewKind {
+        match self {
+            SidebarView::Worktrees => ViewKind::Worktrees,
+            SidebarView::FileExplorer => ViewKind::FileExplorer,
+            SidebarView::Search => ViewKind::Search,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MainView {
+    Terminal,
+    Editor,
+}
+
+impl MainView {
+    pub fn to_view_kind(self) -> ViewKind {
+        match self {
+            MainView::Terminal => ViewKind::Terminal,
+            MainView::Editor => ViewKind::Editor,
+        }
+    }
 }
 
 /// Overlay prompts for user input
@@ -472,8 +500,9 @@ pub struct App {
     pub running: bool,
     pub input_mode: InputMode,
     pub panel_focus: PanelFocus,
-    pub left_panel: PanelState,
-    pub right_panel: PanelState,
+    pub sidebar_view: SidebarView,
+    pub main_view: MainView,
+    pub keybindings: KeybindingsConfig,
     pub worktrees: Vec<Worktree>,
     pub selected_worktree: usize,
     /// Maps worktree path -> session ID for worktrees with active sessions
@@ -502,7 +531,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(worktrees: Vec<Worktree>, theme: Theme, terminal_start_bottom: bool) -> Self {
+    pub fn new(worktrees: Vec<Worktree>, theme: Theme, terminal_start_bottom: bool, keybindings: KeybindingsConfig) -> Self {
         let explorer_root = worktrees
             .first()
             .map(|wt| wt.path.clone())
@@ -511,8 +540,9 @@ impl App {
             running: true,
             input_mode: InputMode::Navigation,
             panel_focus: PanelFocus::Left,
-            left_panel: PanelState { view: ViewKind::Worktrees },
-            right_panel: PanelState { view: ViewKind::Terminal },
+            sidebar_view: SidebarView::Worktrees,
+            main_view: MainView::Terminal,
+            keybindings,
             worktrees,
             selected_worktree: 0,
             session_ids: HashMap::new(),
@@ -535,41 +565,30 @@ impl App {
 
     pub fn focused_view(&self) -> ViewKind {
         match self.panel_focus {
-            PanelFocus::Left => self.left_panel.view,
-            PanelFocus::Right => self.right_panel.view,
+            PanelFocus::Left => self.sidebar_view.to_view_kind(),
+            PanelFocus::Right => self.main_view.to_view_kind(),
         }
     }
 
-    pub fn focused_panel_mut(&mut self) -> &mut PanelState {
-        match self.panel_focus {
-            PanelFocus::Left => &mut self.left_panel,
-            PanelFocus::Right => &mut self.right_panel,
-        }
+    pub fn set_sidebar_view(&mut self, view: SidebarView) {
+        self.sidebar_view = view;
+        self.panel_focus = PanelFocus::Left;
     }
 
-    pub fn set_focused_view(&mut self, view: ViewKind) {
-        self.focused_panel_mut().view = view;
+    pub fn set_main_view(&mut self, view: MainView) {
+        self.main_view = view;
+        self.panel_focus = PanelFocus::Right;
     }
 
-    /// Focus whichever panel currently shows the Terminal view.
-    /// If neither panel has Terminal, switch the non-worktrees panel to Terminal and focus it.
+    /// Set main panel to Terminal and focus it.
     pub fn focus_terminal_panel(&mut self) {
-        if self.left_panel.view == ViewKind::Terminal {
-            self.panel_focus = PanelFocus::Left;
-        } else if self.right_panel.view == ViewKind::Terminal {
-            self.panel_focus = PanelFocus::Right;
-        } else {
-            // Neither panel shows Terminal — put it on the right panel
-            self.right_panel.view = ViewKind::Terminal;
-            self.panel_focus = PanelFocus::Right;
-        }
+        self.main_view = MainView::Terminal;
+        self.panel_focus = PanelFocus::Right;
     }
 
-    pub fn open_editor_in_other_panel(&mut self) {
-        match self.panel_focus {
-            PanelFocus::Left => self.right_panel.view = ViewKind::Editor,
-            PanelFocus::Right => self.left_panel.view = ViewKind::Editor,
-        }
+    /// Set main panel to Editor (don't change focus — caller is in sidebar).
+    pub fn open_editor_in_main_panel(&mut self) {
+        self.main_view = MainView::Editor;
     }
 
     pub fn toggle_focus(&mut self) {
@@ -577,6 +596,19 @@ impl App {
             PanelFocus::Left => PanelFocus::Right,
             PanelFocus::Right => PanelFocus::Left,
         };
+    }
+
+    /// If we just focused the main panel showing Terminal with an active non-exited session, enter terminal mode.
+    fn enter_terminal_if_focused(&mut self) {
+        if self.panel_focus == PanelFocus::Right && self.main_view == MainView::Terminal {
+            if let Some(ref id) = self.active_session_id {
+                self.attention_sessions.remove(id);
+                if !self.exited_sessions.contains(id) {
+                    self.input_mode = InputMode::Terminal;
+                    self.reset_scroll();
+                }
+            }
+        }
     }
 
     pub fn handle_event(&mut self, event: &AppEvent) {
@@ -611,9 +643,9 @@ impl App {
             return;
         }
 
-        // Ctrl+P and Ctrl+F are handled in main.rs event loop
-        if key.modifiers.contains(KeyModifiers::CONTROL)
-            && matches!(key.code, KeyCode::Char('p') | KeyCode::Char('f'))
+        // Fuzzy finder and project search keybindings are handled in main.rs event loop
+        if KeybindingsConfig::matches(&self.keybindings.fuzzy_finder, key.modifiers, key.code)
+            || KeybindingsConfig::matches(&self.keybindings.project_search, key.modifiers, key.code)
         {
             return;
         }
@@ -671,7 +703,8 @@ impl App {
                         let search_state = SearchViewState::new(&query, &root);
                         self.search = Some(search_state);
                         self.prompt = None;
-                        self.set_focused_view(ViewKind::Search);
+                        self.sidebar_view = SidebarView::Search;
+                        self.panel_focus = PanelFocus::Left;
                     }
                 }
                 KeyCode::Esc => {
@@ -705,7 +738,8 @@ impl App {
                             Ok(state) => {
                                 let name = state.file_name().to_string();
                                 self.editor = Some(state);
-                                self.set_focused_view(ViewKind::Editor);
+                                self.main_view = MainView::Editor;
+                                self.panel_focus = PanelFocus::Right;
                                 self.status_message = Some(format!("Opened {}", name));
                             }
                             Err(e) => {
@@ -742,16 +776,22 @@ impl App {
     }
 
     fn handle_nav_key(&mut self, key: KeyEvent) {
-        // Ctrl+1/2/3: switch focused panel's view
-        if key.modifiers.contains(KeyModifiers::CONTROL) {
-            match key.code {
-                KeyCode::Char('1') => { self.set_focused_view(ViewKind::Worktrees); return; }
-                KeyCode::Char('2') => { self.set_focused_view(ViewKind::Terminal); return; }
-                KeyCode::Char('3') => { self.set_focused_view(ViewKind::FileExplorer); return; }
-                KeyCode::Char('4') => { self.set_focused_view(ViewKind::Editor); return; }
-                KeyCode::Char('5') => { self.set_focused_view(ViewKind::Search); return; }
-                _ => {}
-            }
+        // Panel-aware view switching via configurable keybindings
+        let kb = &self.keybindings;
+        if KeybindingsConfig::matches(&kb.worktrees, key.modifiers, key.code) {
+            self.set_sidebar_view(SidebarView::Worktrees); return;
+        }
+        if KeybindingsConfig::matches(&kb.terminal, key.modifiers, key.code) {
+            self.set_main_view(MainView::Terminal); return;
+        }
+        if KeybindingsConfig::matches(&kb.files, key.modifiers, key.code) {
+            self.set_sidebar_view(SidebarView::FileExplorer); return;
+        }
+        if KeybindingsConfig::matches(&kb.editor, key.modifiers, key.code) {
+            self.set_main_view(MainView::Editor); return;
+        }
+        if KeybindingsConfig::matches(&kb.search, key.modifiers, key.code) {
+            self.set_sidebar_view(SidebarView::Search); return;
         }
 
         if key.code == KeyCode::Char('?') {
@@ -820,16 +860,7 @@ impl App {
             }
             KeyCode::Tab => {
                 self.toggle_focus();
-                // If we just focused a Terminal view with active non-exited session, enter terminal mode
-                if self.focused_view() == ViewKind::Terminal {
-                    if let Some(ref id) = self.active_session_id {
-                        self.attention_sessions.remove(id);
-                        if !self.exited_sessions.contains(id) {
-                            self.input_mode = InputMode::Terminal;
-                            self.reset_scroll();
-                        }
-                    }
-                }
+                self.enter_terminal_if_focused();
             }
             _ => {}
         }
@@ -885,7 +916,7 @@ impl App {
                         Ok(state) => {
                             let name = state.file_name().to_string();
                             self.editor = Some(state);
-                            self.open_editor_in_other_panel();
+                            self.open_editor_in_main_panel();
                             self.status_message = Some(format!("Opened {}", name));
                         }
                         Err(e) => {
@@ -898,15 +929,7 @@ impl App {
             KeyCode::Backspace => self.file_explorer.go_up_root(),
             KeyCode::Tab => {
                 self.toggle_focus();
-                if self.focused_view() == ViewKind::Terminal {
-                    if let Some(ref id) = self.active_session_id {
-                        self.attention_sessions.remove(id);
-                        if !self.exited_sessions.contains(id) {
-                            self.input_mode = InputMode::Terminal;
-                            self.reset_scroll();
-                        }
-                    }
-                }
+                self.enter_terminal_if_focused();
             }
             KeyCode::Char(c @ '1'..='9') => {
                 self.jump_to_worktree((c as usize) - ('1' as usize));
@@ -962,15 +985,7 @@ impl App {
             KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
                 self.toggle_focus();
-                if self.focused_view() == ViewKind::Terminal {
-                    if let Some(ref id) = self.active_session_id {
-                        self.attention_sessions.remove(id);
-                        if !self.exited_sessions.contains(id) {
-                            self.input_mode = InputMode::Terminal;
-                            self.reset_scroll();
-                        }
-                    }
-                }
+                self.enter_terminal_if_focused();
             }
             KeyCode::Char(c @ '1'..='9') => {
                 self.jump_to_worktree((c as usize) - ('1' as usize));
@@ -1010,7 +1025,7 @@ impl App {
                                 state.editor_state.cursor = Index2::new(line, 0);
                                 let name = state.file_name().to_string();
                                 self.editor = Some(state);
-                                self.open_editor_in_other_panel();
+                                self.open_editor_in_main_panel();
                                 self.status_message = Some(format!("Opened {}", name));
                             }
                             Err(e) => {
@@ -1022,15 +1037,7 @@ impl App {
             }
             KeyCode::Tab => {
                 self.toggle_focus();
-                if self.focused_view() == ViewKind::Terminal {
-                    if let Some(ref id) = self.active_session_id {
-                        self.attention_sessions.remove(id);
-                        if !self.exited_sessions.contains(id) {
-                            self.input_mode = InputMode::Terminal;
-                            self.reset_scroll();
-                        }
-                    }
-                }
+                self.enter_terminal_if_focused();
             }
             KeyCode::Char(c @ '1'..='9') => {
                 self.jump_to_worktree((c as usize) - ('1' as usize));
@@ -1114,7 +1121,8 @@ impl App {
             && !self.show_help
             && key.code == KeyCode::Enter
             && self.input_mode == InputMode::Navigation
-            && matches!(self.focused_view(), ViewKind::Worktrees | ViewKind::Terminal)
+            && ((self.sidebar_view == SidebarView::Worktrees && self.panel_focus == PanelFocus::Left)
+                || (self.main_view == MainView::Terminal && self.panel_focus == PanelFocus::Right))
     }
 
     /// Check if user confirmed worktree creation. Returns the branch name.

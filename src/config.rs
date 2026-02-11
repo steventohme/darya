@@ -1,3 +1,4 @@
+use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::style::Color;
 use serde::Deserialize;
 
@@ -112,19 +113,122 @@ struct WorktreeToml {
 }
 
 #[derive(Debug, Deserialize, Default)]
+struct KeybindingsToml {
+    worktrees: Option<String>,
+    terminal: Option<String>,
+    files: Option<String>,
+    editor: Option<String>,
+    search: Option<String>,
+    fuzzy_finder: Option<String>,
+    project_search: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct KeybindingsConfig {
+    pub worktrees: (KeyModifiers, KeyCode),
+    pub terminal: (KeyModifiers, KeyCode),
+    pub files: (KeyModifiers, KeyCode),
+    pub editor: (KeyModifiers, KeyCode),
+    pub search: (KeyModifiers, KeyCode),
+    pub fuzzy_finder: (KeyModifiers, KeyCode),
+    pub project_search: (KeyModifiers, KeyCode),
+}
+
+impl Default for KeybindingsConfig {
+    fn default() -> Self {
+        Self {
+            worktrees: (KeyModifiers::CONTROL, KeyCode::Char('1')),
+            terminal: (KeyModifiers::CONTROL, KeyCode::Char('2')),
+            files: (KeyModifiers::CONTROL, KeyCode::Char('3')),
+            editor: (KeyModifiers::CONTROL, KeyCode::Char('4')),
+            search: (KeyModifiers::CONTROL, KeyCode::Char('5')),
+            fuzzy_finder: (KeyModifiers::CONTROL, KeyCode::Char('p')),
+            project_search: (KeyModifiers::CONTROL, KeyCode::Char('f')),
+        }
+    }
+}
+
+impl KeybindingsConfig {
+    /// Format a keybinding as a human-readable string (e.g. "Ctrl+1").
+    pub fn format(binding: &(KeyModifiers, KeyCode)) -> String {
+        let mut result = String::new();
+        if binding.0.contains(KeyModifiers::CONTROL) {
+            result.push_str("Ctrl+");
+        }
+        if binding.0.contains(KeyModifiers::ALT) {
+            result.push_str("Alt+");
+        }
+        if binding.0.contains(KeyModifiers::SHIFT) {
+            result.push_str("Shift+");
+        }
+        match binding.1 {
+            KeyCode::Char(c) => {
+                for uc in c.to_uppercase() {
+                    result.push(uc);
+                }
+            }
+            KeyCode::F(n) => result.push_str(&format!("F{}", n)),
+            KeyCode::Enter => result.push_str("Enter"),
+            KeyCode::Tab => result.push_str("Tab"),
+            KeyCode::Esc => result.push_str("Esc"),
+            _ => result.push('?'),
+        }
+        result
+    }
+
+    /// Check if a key event matches a binding.
+    pub fn matches(binding: &(KeyModifiers, KeyCode), modifiers: KeyModifiers, code: KeyCode) -> bool {
+        modifiers.contains(binding.0) && code == binding.1
+    }
+}
+
+/// Parse a keybinding string like "ctrl+1" or "ctrl+p" into (KeyModifiers, KeyCode).
+fn parse_keybinding(s: &str) -> Option<(KeyModifiers, KeyCode)> {
+    let lowered = s.trim().to_lowercase();
+    let parts: Vec<&str> = lowered.split('+').map(|p| p.trim()).collect();
+    if parts.is_empty() {
+        return None;
+    }
+    let mut modifiers = KeyModifiers::NONE;
+    for &part in &parts[..parts.len() - 1] {
+        match part {
+            "ctrl" | "control" => modifiers |= KeyModifiers::CONTROL,
+            "alt" => modifiers |= KeyModifiers::ALT,
+            "shift" => modifiers |= KeyModifiers::SHIFT,
+            _ => return None,
+        }
+    }
+    let key_str = parts.last()?;
+    let code = match *key_str {
+        "enter" => KeyCode::Enter,
+        "tab" => KeyCode::Tab,
+        "esc" | "escape" => KeyCode::Esc,
+        s if s.len() == 1 => KeyCode::Char(s.chars().next()?),
+        s if s.starts_with('f') => {
+            let n: u8 = s[1..].parse().ok()?;
+            KeyCode::F(n)
+        }
+        _ => return None,
+    };
+    Some((modifiers, code))
+}
+
+#[derive(Debug, Deserialize, Default)]
 struct ConfigToml {
     theme: Option<ThemeToml>,
     terminal: Option<TerminalToml>,
     worktree: Option<WorktreeToml>,
+    keybindings: Option<KeybindingsToml>,
 }
 
 pub const DEFAULT_WORKTREE_DIR_FORMAT: &str = "{repo}-{branch}";
 
-/// Loaded application config (theme + terminal settings).
+/// Loaded application config (theme + terminal + keybinding settings).
 pub struct AppConfig {
     pub theme: Theme,
     pub terminal_start_bottom: bool,
     pub worktree_dir_format: String,
+    pub keybindings: KeybindingsConfig,
 }
 
 /// Parse a hex color string like "#33FF33" or "33FF33" into a ratatui Color.
@@ -144,8 +248,9 @@ pub fn load_config() -> AppConfig {
     let mut theme = Theme::default();
     let mut terminal_start_bottom = true;
     let mut worktree_dir_format = DEFAULT_WORKTREE_DIR_FORMAT.to_string();
+    let mut keybindings = KeybindingsConfig::default();
 
-    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone() };
+    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone(), keybindings: KeybindingsConfig::default() };
 
     let Some(home) = dirs_path() else {
         return defaults();
@@ -207,7 +312,26 @@ pub fn load_config() -> AppConfig {
         }
     }
 
-    AppConfig { theme, terminal_start_bottom, worktree_dir_format }
+    if let Some(ref kb) = config.keybindings {
+        macro_rules! apply_kb {
+            ($field:ident) => {
+                if let Some(ref val) = kb.$field {
+                    if let Some(binding) = parse_keybinding(val) {
+                        keybindings.$field = binding;
+                    }
+                }
+            };
+        }
+        apply_kb!(worktrees);
+        apply_kb!(terminal);
+        apply_kb!(files);
+        apply_kb!(editor);
+        apply_kb!(search);
+        apply_kb!(fuzzy_finder);
+        apply_kb!(project_search);
+    }
+
+    AppConfig { theme, terminal_start_bottom, worktree_dir_format, keybindings }
 }
 
 fn dirs_path() -> Option<std::path::PathBuf> {
