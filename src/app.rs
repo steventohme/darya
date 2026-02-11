@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+const IGNORED_NAMES: &[&str] = &["target", "node_modules", "__pycache__"];
+
 use crate::config::Theme;
 use crate::event::AppEvent;
 use crate::worktree::types::Worktree;
@@ -39,6 +41,167 @@ pub enum Prompt {
     ConfirmDelete { worktree_name: String },
 }
 
+pub struct FileEntry {
+    pub path: PathBuf,
+    pub name: String,
+    pub is_dir: bool,
+    pub depth: usize,
+}
+
+pub struct FileExplorerState {
+    pub entries: Vec<FileEntry>,
+    pub selected: usize,
+    pub expanded: HashSet<PathBuf>,
+    pub root: PathBuf,
+}
+
+impl FileExplorerState {
+    pub fn new(root: PathBuf) -> Self {
+        let mut state = Self {
+            entries: Vec::new(),
+            selected: 0,
+            expanded: HashSet::new(),
+            root,
+        };
+        state.refresh();
+        state
+    }
+
+    pub fn refresh(&mut self) {
+        self.entries.clear();
+        let root = self.root.clone();
+        self.build_entries(&root, 0);
+        if !self.entries.is_empty() && self.selected >= self.entries.len() {
+            self.selected = self.entries.len() - 1;
+        }
+    }
+
+    fn build_entries(&mut self, dir: &PathBuf, depth: usize) {
+        let Ok(read_dir) = std::fs::read_dir(dir) else {
+            return;
+        };
+
+        let mut dirs: Vec<(String, PathBuf)> = Vec::new();
+        let mut files: Vec<(String, PathBuf)> = Vec::new();
+
+        for entry in read_dir.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || IGNORED_NAMES.contains(&name.as_str()) {
+                continue;
+            }
+            let path = entry.path();
+            if path.is_dir() {
+                dirs.push((name, path));
+            } else {
+                files.push((name, path));
+            }
+        }
+
+        dirs.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+        files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+
+        for (name, path) in dirs {
+            let is_expanded = self.expanded.contains(&path);
+            self.entries.push(FileEntry {
+                path: path.clone(),
+                name,
+                is_dir: true,
+                depth,
+            });
+            if is_expanded {
+                self.build_entries(&path, depth + 1);
+            }
+        }
+
+        for (name, path) in files {
+            self.entries.push(FileEntry {
+                path,
+                name,
+                is_dir: false,
+                depth,
+            });
+        }
+    }
+
+    pub fn move_up(&mut self) {
+        if self.entries.is_empty() {
+            return;
+        }
+        self.selected = if self.selected == 0 {
+            self.entries.len() - 1
+        } else {
+            self.selected - 1
+        };
+    }
+
+    pub fn move_down(&mut self) {
+        if self.entries.is_empty() {
+            return;
+        }
+        self.selected = (self.selected + 1) % self.entries.len();
+    }
+
+    /// Enter on selected entry: toggle dir expand/collapse, return Some(path) for files.
+    pub fn enter(&mut self) -> Option<PathBuf> {
+        let entry = self.entries.get(self.selected)?;
+        if entry.is_dir {
+            let path = entry.path.clone();
+            if self.expanded.contains(&path) {
+                self.expanded.remove(&path);
+            } else {
+                self.expanded.insert(path);
+            }
+            self.refresh();
+            None
+        } else {
+            Some(entry.path.clone())
+        }
+    }
+
+    /// Collapse current dir or jump to parent entry.
+    pub fn collapse_or_parent(&mut self) {
+        if let Some(entry) = self.entries.get(self.selected) {
+            // If it's an expanded dir, collapse it
+            if entry.is_dir && self.expanded.contains(&entry.path) {
+                let path = entry.path.clone();
+                self.expanded.remove(&path);
+                self.refresh();
+                return;
+            }
+            // Otherwise jump to parent dir entry
+            let current_depth = entry.depth;
+            if current_depth > 0 {
+                for i in (0..self.selected).rev() {
+                    if self.entries[i].is_dir && self.entries[i].depth < current_depth {
+                        self.selected = i;
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Navigate root to parent directory.
+    pub fn go_up_root(&mut self) {
+        if let Some(parent) = self.root.parent() {
+            self.root = parent.to_path_buf();
+            self.expanded.clear();
+            self.selected = 0;
+            self.refresh();
+        }
+    }
+
+    /// Set root to a new path (e.g. when switching worktrees).
+    pub fn set_root(&mut self, path: PathBuf) {
+        if self.root != path {
+            self.root = path;
+            self.expanded.clear();
+            self.selected = 0;
+            self.refresh();
+        }
+    }
+}
+
 pub struct App {
     pub running: bool,
     pub input_mode: InputMode,
@@ -66,10 +229,15 @@ pub struct App {
     pub scroll_offsets: HashMap<String, usize>,
     /// Height of the terminal panel area, used for page-scroll sizing
     pub terminal_height: u16,
+    pub file_explorer: FileExplorerState,
 }
 
 impl App {
     pub fn new(worktrees: Vec<Worktree>, theme: Theme, terminal_start_bottom: bool) -> Self {
+        let explorer_root = worktrees
+            .first()
+            .map(|wt| wt.path.clone())
+            .unwrap_or_else(|| PathBuf::from("."));
         Self {
             running: true,
             input_mode: InputMode::Navigation,
@@ -89,6 +257,7 @@ impl App {
             terminal_start_bottom,
             scroll_offsets: HashMap::new(),
             terminal_height: 24,
+            file_explorer: FileExplorerState::new(explorer_root),
         }
     }
 
@@ -336,8 +505,26 @@ impl App {
     fn handle_file_explorer_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') => self.running = false,
+            KeyCode::Char('j') | KeyCode::Down => self.file_explorer.move_down(),
+            KeyCode::Char('k') | KeyCode::Up => self.file_explorer.move_up(),
+            KeyCode::Enter | KeyCode::Char('l') => {
+                if let Some(path) = self.file_explorer.enter() {
+                    self.status_message = Some(path.display().to_string());
+                }
+            }
+            KeyCode::Char('h') => self.file_explorer.collapse_or_parent(),
+            KeyCode::Backspace => self.file_explorer.go_up_root(),
             KeyCode::Tab => {
                 self.toggle_focus();
+                if self.focused_view() == ViewKind::Terminal {
+                    if let Some(ref id) = self.active_session_id {
+                        self.attention_sessions.remove(id);
+                        if !self.exited_sessions.contains(id) {
+                            self.input_mode = InputMode::Terminal;
+                            self.reset_scroll();
+                        }
+                    }
+                }
             }
             KeyCode::Char(c @ '1'..='9') => {
                 self.jump_to_worktree((c as usize) - ('1' as usize));
@@ -363,6 +550,7 @@ impl App {
             if let Some(ref id) = self.active_session_id {
                 self.attention_sessions.remove(id);
             }
+            self.file_explorer.set_root(wt.path.clone());
         }
     }
 
@@ -449,6 +637,10 @@ impl App {
             self.selected_worktree = 0;
         } else if self.selected_worktree >= self.worktrees.len() {
             self.selected_worktree = self.worktrees.len() - 1;
+        }
+        // Sync file explorer root with current worktree
+        if let Some(wt) = self.worktrees.get(self.selected_worktree) {
+            self.file_explorer.set_root(wt.path.clone());
         }
     }
 }

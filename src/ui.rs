@@ -1,4 +1,4 @@
-use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
@@ -51,29 +51,8 @@ fn render_view(
     match view {
         ViewKind::Worktrees => widgets::worktree_list::render(frame, area, app, is_focused),
         ViewKind::Terminal => widgets::terminal_panel::render(frame, area, app, session_manager, is_focused),
-        ViewKind::FileExplorer => render_file_explorer_placeholder(frame, area, app, is_focused),
+        ViewKind::FileExplorer => widgets::file_explorer::render(frame, area, app, is_focused),
     }
-}
-
-fn render_file_explorer_placeholder(frame: &mut Frame, area: Rect, app: &App, is_focused: bool) {
-    let border_style = if is_focused {
-        Style::default().fg(app.theme.border_active)
-    } else {
-        Style::default().fg(app.theme.border_inactive)
-    };
-
-    let block = Block::default()
-        .title(" Files ")
-        .borders(Borders::ALL)
-        .border_type(BorderType::Thick)
-        .border_style(border_style);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let placeholder = Paragraph::new("  File explorer (coming soon)")
-        .alignment(Alignment::Left)
-        .style(Style::default().fg(app.theme.fg_dim));
-    frame.render_widget(placeholder, inner);
 }
 
 pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) {

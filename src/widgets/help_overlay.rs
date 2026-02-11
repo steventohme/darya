@@ -38,6 +38,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         ViewKind::FileExplorer => (
             "Navigation — Files",
             vec![
+                ("j/k, ↑/↓", "Navigate files"),
+                ("Enter, l", "Expand dir / select file"),
+                ("h", "Collapse dir / go to parent"),
+                ("Backspace", "Go up one directory"),
                 ("1-9, 0", "Jump to worktree"),
                 ("Tab", "Switch panel"),
                 ("Ctrl+1/2/3", "Switch view"),
