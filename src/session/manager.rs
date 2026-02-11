@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tokio::sync::mpsc;
 
 use super::pty_session::PtySession;
+use crate::config::ThemeMode;
 use crate::error::Result;
 use crate::event::AppEvent;
 
@@ -27,11 +28,13 @@ impl SessionManager {
         worktree_path: PathBuf,
         rows: u16,
         cols: u16,
+        theme_mode: ThemeMode,
     ) -> Result<String> {
         let session = PtySession::spawn(
             worktree_path,
             rows,
             cols,
+            theme_mode,
             self.event_tx.clone(),
         )?;
         let id = session.id.clone();

@@ -4,8 +4,15 @@ use serde::Deserialize;
 pub const TICK_RATE_MS: u64 = 50;
 pub const CLAUDE_COMMAND: &str = "claude";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeMode {
+    Dark,
+    Light,
+}
+
 #[derive(Debug, Clone)]
 pub struct Theme {
+    pub mode: ThemeMode,
     pub bg: Color,
     pub fg: Color,
     pub fg_dim: Color,
@@ -21,9 +28,10 @@ pub struct Theme {
     pub warning: Color,
 }
 
-impl Default for Theme {
-    fn default() -> Self {
+impl Theme {
+    pub fn dark() -> Self {
         Self {
+            mode: ThemeMode::Dark,
             bg: Color::Rgb(0x1A, 0x1A, 0x1A),
             fg: Color::Rgb(0xD0, 0xD0, 0xD0),
             fg_dim: Color::Rgb(0x5A, 0x5A, 0x5A),
@@ -39,11 +47,37 @@ impl Default for Theme {
             warning: Color::Rgb(0xE0, 0xA0, 0x3A),
         }
     }
+
+    pub fn light() -> Self {
+        Self {
+            mode: ThemeMode::Light,
+            bg: Color::Rgb(0xE8, 0xE3, 0xDE),
+            fg: Color::Rgb(0x2A, 0x2A, 0x2A),
+            fg_dim: Color::Rgb(0x9A, 0x90, 0x88),
+            border_active: Color::Rgb(0xD0, 0x6B, 0x1A),
+            border_inactive: Color::Rgb(0xD0, 0xC8, 0xC0),
+            highlight_bg: Color::Rgb(0xE8, 0xE0, 0xD8),
+            session_active: Color::Rgb(0xD0, 0x6B, 0x1A),
+            session_inactive: Color::Rgb(0x9A, 0x90, 0x88),
+            status_bar_fg: Color::Rgb(0xF5, 0xF0, 0xEB),
+            status_bar_bg: Color::Rgb(0xD0, 0x6B, 0x1A),
+            prompt_border: Color::Rgb(0xD0, 0x6B, 0x1A),
+            prompt_delete_border: Color::Rgb(0xCC, 0x44, 0x44),
+            warning: Color::Rgb(0xC0, 0x8A, 0x20),
+        }
+    }
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Self::dark()
+    }
 }
 
 /// Raw TOML representation — all fields optional so partial configs work.
 #[derive(Debug, Deserialize, Default)]
 struct ThemeToml {
+    mode: Option<String>,
     bg: Option<String>,
     fg: Option<String>,
     fg_dim: Option<String>,
@@ -93,6 +127,13 @@ pub fn load_theme() -> Theme {
         eprintln!("Warning: failed to parse {}", config_path.display());
         return theme;
     };
+
+    if let Some(ref t) = config.theme {
+        match t.mode.as_deref() {
+            Some("light") => theme = Theme::light(),
+            _ => {} // dark is already the default
+        }
+    }
 
     if let Some(t) = config.theme {
         macro_rules! apply {

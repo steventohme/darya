@@ -1,5 +1,5 @@
 use ratatui::layout::Rect;
-use ratatui::style::Style;
+use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 use tui_term::widget::PseudoTerminal;
@@ -25,9 +25,21 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &Sessio
     if let Some(ref session_id) = app.active_session_id {
         if let Some(session) = session_manager.get(session_id) {
             if let Ok(parser) = session.parser.read() {
-                // Render PseudoTerminal without a block (block rendered separately)
                 let pseudo_term = PseudoTerminal::new(parser.screen());
                 frame.render_widget(pseudo_term, inner);
+
+                // Post-process: replace Color::Reset backgrounds with theme bg.
+                // tui-term maps vt100::Color::Default → Color::Reset which means
+                // "use system terminal default", causing theme mismatch.
+                let buf = frame.buffer_mut();
+                for y in inner.y..inner.y + inner.height {
+                    for x in inner.x..inner.x + inner.width {
+                        let cell = &mut buf[(x, y)];
+                        if cell.bg == Color::Reset {
+                            cell.bg = app.theme.bg;
+                        }
+                    }
+                }
                 return;
             }
         }

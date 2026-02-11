@@ -6,7 +6,7 @@ use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use tokio::sync::mpsc;
 use tui_term::vt100;
 
-use crate::config::CLAUDE_COMMAND;
+use crate::config::{ThemeMode, CLAUDE_COMMAND};
 use crate::error::{DaryaError, Result};
 use crate::event::AppEvent;
 
@@ -24,6 +24,7 @@ impl PtySession {
         worktree_path: PathBuf,
         rows: u16,
         cols: u16,
+        theme_mode: ThemeMode,
         event_tx: mpsc::UnboundedSender<AppEvent>,
     ) -> Result<Self> {
         let id = uuid::Uuid::new_v4().to_string();
@@ -41,6 +42,9 @@ impl PtySession {
         // Build command: claude (in the worktree directory)
         let mut cmd = CommandBuilder::new(CLAUDE_COMMAND);
         cmd.cwd(&worktree_path);
+        if theme_mode == ThemeMode::Light {
+            cmd.env("COLORFGBG", "0;15");
+        }
 
         // Spawn child on the slave
         let slave = pair.slave;

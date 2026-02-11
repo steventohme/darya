@@ -175,7 +175,7 @@ async fn run_loop(
                     if let Some(wt_path) = app.selected_worktree_path().cloned() {
                         if !app.session_ids.contains_key(&wt_path) {
                             let (rows, cols) = pty_size(terminal);
-                            match session_manager.spawn_session(wt_path.clone(), rows, cols) {
+                            match session_manager.spawn_session(wt_path.clone(), rows, cols, app.theme.mode) {
                                 Ok(id) => {
                                     app.session_ids.insert(wt_path, id.clone());
                                     app.active_session_id = Some(id);
