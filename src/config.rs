@@ -1,4 +1,5 @@
 use ratatui::style::Color;
+use serde::Deserialize;
 
 pub const TICK_RATE_MS: u64 = 50;
 pub const CLAUDE_COMMAND: &str = "claude";
@@ -38,4 +39,39 @@ impl Default for Theme {
             warning: Color::Rgb(0xE0, 0xA0, 0x3A),
         }
     }
+}
+
+/// Raw TOML representation — all fields optional so partial configs work.
+#[derive(Debug, Deserialize, Default)]
+struct ThemeToml {
+    bg: Option<String>,
+    fg: Option<String>,
+    fg_dim: Option<String>,
+    border_active: Option<String>,
+    border_inactive: Option<String>,
+    highlight_bg: Option<String>,
+    session_active: Option<String>,
+    session_inactive: Option<String>,
+    status_bar_fg: Option<String>,
+    status_bar_bg: Option<String>,
+    prompt_border: Option<String>,
+    prompt_delete_border: Option<String>,
+    warning: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct ConfigToml {
+    theme: Option<ThemeToml>,
+}
+
+/// Parse a hex color string like "#33FF33" or "33FF33" into a ratatui Color.
+fn parse_hex_color(s: &str) -> Option<Color> {
+    let hex = s.strip_prefix('#').unwrap_or(s);
+    if hex.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some(Color::Rgb(r, g, b))
 }
