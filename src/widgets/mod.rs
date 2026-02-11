@@ -1,6 +1,8 @@
 pub mod editor;
 pub mod file_explorer;
+pub mod fuzzy_finder;
 pub mod help_overlay;
+pub mod search_results;
 pub mod status_bar;
 pub mod terminal_panel;
 pub mod worktree_list;

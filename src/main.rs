@@ -137,7 +137,9 @@ async fn run_loop(
                 if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
                     && key.code == KeyCode::Char('c')
                 {
-                    if app.prompt.is_some() {
+                    if app.fuzzy_finder.is_some() {
+                        app.fuzzy_finder = None;
+                    } else if app.prompt.is_some() {
                         app.prompt = None;
                     } else if app.input_mode == InputMode::Editor {
                         // Exit edit mode back to read-only navigation
@@ -155,6 +157,30 @@ async fn run_loop(
                         app.status_message = Some("Session closed".to_string());
                     } else {
                         app.running = false;
+                    }
+                }
+
+                // Ctrl+P: open fuzzy file finder
+                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
+                    && key.code == KeyCode::Char('p')
+                {
+                    if app.fuzzy_finder.is_none() {
+                        app.prompt = None; // dismiss any active prompt
+                        let root = app.file_explorer.root.clone();
+                        app.fuzzy_finder = Some(app::FuzzyFinderState::new(root));
+                        app.input_mode = InputMode::Navigation;
+                    }
+                }
+
+                // Ctrl+F: open project search prompt
+                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
+                    && key.code == KeyCode::Char('f')
+                {
+                    if app.prompt.is_none() && app.fuzzy_finder.is_none() {
+                        app.prompt = Some(app::Prompt::SearchInput {
+                            input: String::new(),
+                        });
+                        app.input_mode = InputMode::Navigation;
                     }
                 }
 

@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Lines as EdtuiLines};
+use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Index2, Lines as EdtuiLines};
 
 const IGNORED_NAMES: &[&str] = &["target", "node_modules", "__pycache__"];
 const MAX_FILE_SIZE: u64 = 1_048_576; // 1MB
@@ -30,6 +30,7 @@ pub enum ViewKind {
     Terminal,
     FileExplorer,
     Editor,
+    Search,
 }
 
 pub struct PanelState {
@@ -43,6 +44,8 @@ pub enum Prompt {
     CreateWorktree { input: String },
     /// Confirming worktree deletion
     ConfirmDelete { worktree_name: String },
+    /// Project search input
+    SearchInput { input: String },
 }
 
 pub struct FileEntry {
@@ -264,6 +267,207 @@ impl EditorViewState {
     }
 }
 
+pub struct FuzzyFinderState {
+    pub input: String,
+    pub all_files: Vec<String>,
+    pub root: PathBuf,
+    pub results: Vec<(String, PathBuf)>,
+    pub selected: usize,
+}
+
+impl FuzzyFinderState {
+    pub fn new(root: PathBuf) -> Self {
+        let all_files = walk_project_files(&root);
+        let mut state = Self {
+            input: String::new(),
+            results: Vec::new(),
+            root,
+            all_files,
+            selected: 0,
+        };
+        state.update_matches();
+        state
+    }
+
+    pub fn update_matches(&mut self) {
+        use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
+        use nucleo_matcher::{Config, Matcher};
+
+        if self.input.is_empty() {
+            self.results = self
+                .all_files
+                .iter()
+                .take(100)
+                .map(|f| (f.clone(), self.root.join(f)))
+                .collect();
+            self.selected = 0;
+            return;
+        }
+
+        let mut matcher = Matcher::new(Config::DEFAULT.match_paths());
+        let pattern = Pattern::parse(&self.input, CaseMatching::Smart, Normalization::Smart);
+
+        let mut scored: Vec<(u32, &str)> = self
+            .all_files
+            .iter()
+            .filter_map(|f| {
+                let mut buf = Vec::new();
+                let haystack = nucleo_matcher::Utf32Str::new(f, &mut buf);
+                pattern.score(haystack, &mut matcher).map(|s| (s, f.as_str()))
+            })
+            .collect();
+
+        scored.sort_by(|a, b| b.0.cmp(&a.0));
+
+        self.results = scored
+            .into_iter()
+            .take(100)
+            .map(|(_, f)| (f.to_string(), self.root.join(f)))
+            .collect();
+        self.selected = 0;
+    }
+
+    pub fn move_up(&mut self) {
+        if !self.results.is_empty() {
+            self.selected = if self.selected == 0 {
+                self.results.len() - 1
+            } else {
+                self.selected - 1
+            };
+        }
+    }
+
+    pub fn move_down(&mut self) {
+        if !self.results.is_empty() {
+            self.selected = (self.selected + 1) % self.results.len();
+        }
+    }
+
+    pub fn selected_path(&self) -> Option<&PathBuf> {
+        self.results.get(self.selected).map(|(_, p)| p)
+    }
+}
+
+fn walk_project_files(root: &Path) -> Vec<String> {
+    use ignore::WalkBuilder;
+
+    let mut files = Vec::new();
+    let walker = WalkBuilder::new(root)
+        .hidden(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .build();
+
+    for entry in walker.flatten() {
+        if entry.file_type().map_or(false, |ft| ft.is_file()) {
+            if let Ok(rel) = entry.path().strip_prefix(root) {
+                files.push(rel.to_string_lossy().to_string());
+            }
+        }
+    }
+    files.sort();
+    files
+}
+
+pub struct SearchResult {
+    pub file_path: PathBuf,
+    pub file_relative: String,
+    pub line_number: usize,
+    pub line_text: String,
+}
+
+pub struct SearchViewState {
+    pub query: String,
+    pub results: Vec<SearchResult>,
+    pub selected: usize,
+    pub error: Option<String>,
+}
+
+impl SearchViewState {
+    pub fn new(query: &str, root: &Path) -> Self {
+        match run_ripgrep(query, root) {
+            Ok(results) => Self {
+                query: query.to_string(),
+                results,
+                selected: 0,
+                error: None,
+            },
+            Err(e) => Self {
+                query: query.to_string(),
+                results: Vec::new(),
+                selected: 0,
+                error: Some(e),
+            },
+        }
+    }
+
+    pub fn move_up(&mut self) {
+        if !self.results.is_empty() {
+            self.selected = if self.selected == 0 {
+                self.results.len() - 1
+            } else {
+                self.selected - 1
+            };
+        }
+    }
+
+    pub fn move_down(&mut self) {
+        if !self.results.is_empty() {
+            self.selected = (self.selected + 1) % self.results.len();
+        }
+    }
+
+    pub fn selected_result(&self) -> Option<&SearchResult> {
+        self.results.get(self.selected)
+    }
+}
+
+fn run_ripgrep(query: &str, root: &Path) -> Result<Vec<SearchResult>, String> {
+    let output = std::process::Command::new("rg")
+        .args(["--line-number", "--no-heading", "--color=never", "--max-count=200", query])
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("Failed to run rg: {}. Is ripgrep installed?", e))?;
+
+    if !output.status.success() {
+        let code = output.status.code().unwrap_or(-1);
+        if code == 1 {
+            // Exit code 1 = no matches
+            return Ok(Vec::new());
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("No such file or directory") || stderr.contains("not found") {
+            return Err("ripgrep (rg) not found. Install it to use project search.".to_string());
+        }
+        // Exit code 2 = error (bad regex, etc.)
+        return Err(format!("rg error: {}", stderr.trim()));
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut results = Vec::new();
+    for line in text.lines().take(500) {
+        // Format: file:line:text
+        let mut parts = line.splitn(3, ':');
+        let file = match parts.next() {
+            Some(f) => f,
+            None => continue,
+        };
+        let line_num: usize = match parts.next().and_then(|n| n.parse().ok()) {
+            Some(n) => n,
+            None => continue,
+        };
+        let text = parts.next().unwrap_or("").to_string();
+        results.push(SearchResult {
+            file_path: root.join(file),
+            file_relative: file.to_string(),
+            line_number: line_num,
+            line_text: text,
+        });
+    }
+    Ok(results)
+}
+
 pub struct App {
     pub running: bool,
     pub input_mode: InputMode,
@@ -293,6 +497,8 @@ pub struct App {
     pub terminal_height: u16,
     pub file_explorer: FileExplorerState,
     pub editor: Option<EditorViewState>,
+    pub search: Option<SearchViewState>,
+    pub fuzzy_finder: Option<FuzzyFinderState>,
 }
 
 impl App {
@@ -322,6 +528,8 @@ impl App {
             terminal_height: 24,
             file_explorer: FileExplorerState::new(explorer_root),
             editor: None,
+            search: None,
+            fuzzy_finder: None,
         }
     }
 
@@ -403,7 +611,20 @@ impl App {
             return;
         }
 
-        // Handle prompt input first
+        // Ctrl+P and Ctrl+F are handled in main.rs event loop
+        if key.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(key.code, KeyCode::Char('p') | KeyCode::Char('f'))
+        {
+            return;
+        }
+
+        // Fuzzy finder gets exclusive keyboard focus
+        if self.fuzzy_finder.is_some() {
+            self.handle_fuzzy_finder_key(key);
+            return;
+        }
+
+        // Handle prompt input
         if self.prompt.is_some() {
             self.handle_prompt_key(key);
             return;
@@ -442,6 +663,81 @@ impl App {
                     self.prompt = None;
                 }
             },
+            Prompt::SearchInput { input } => match key.code {
+                KeyCode::Enter => {
+                    if !input.is_empty() {
+                        let query = input.clone();
+                        let root = self.file_explorer.root.clone();
+                        let search_state = SearchViewState::new(&query, &root);
+                        self.search = Some(search_state);
+                        self.prompt = None;
+                        self.set_focused_view(ViewKind::Search);
+                    }
+                }
+                KeyCode::Esc => {
+                    self.prompt = None;
+                }
+                KeyCode::Backspace => {
+                    input.pop();
+                }
+                KeyCode::Char(c) => {
+                    input.push(c);
+                }
+                _ => {}
+            },
+        }
+    }
+
+    fn handle_fuzzy_finder_key(&mut self, key: KeyEvent) {
+        // Ignore Ctrl+key combos (prevents triggering Ctrl+P from typing 'p')
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            return;
+        }
+        match key.code {
+            KeyCode::Esc => {
+                self.fuzzy_finder = None;
+            }
+            KeyCode::Enter => {
+                if let Some(ref finder) = self.fuzzy_finder {
+                    if let Some(path) = finder.selected_path().cloned() {
+                        self.fuzzy_finder = None;
+                        match EditorViewState::open(path) {
+                            Ok(state) => {
+                                let name = state.file_name().to_string();
+                                self.editor = Some(state);
+                                self.set_focused_view(ViewKind::Editor);
+                                self.status_message = Some(format!("Opened {}", name));
+                            }
+                            Err(e) => {
+                                self.status_message = Some(e);
+                            }
+                        }
+                    }
+                }
+            }
+            KeyCode::Up => {
+                if let Some(ref mut finder) = self.fuzzy_finder {
+                    finder.move_up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(ref mut finder) = self.fuzzy_finder {
+                    finder.move_down();
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(ref mut finder) = self.fuzzy_finder {
+                    finder.input.pop();
+                    finder.update_matches();
+                }
+            }
+            KeyCode::Char(c) => {
+                if let Some(ref mut finder) = self.fuzzy_finder {
+                    finder.input.push(c);
+                    finder.update_matches();
+                }
+            }
+            _ => {}
         }
     }
 
@@ -453,6 +749,7 @@ impl App {
                 KeyCode::Char('2') => { self.set_focused_view(ViewKind::Terminal); return; }
                 KeyCode::Char('3') => { self.set_focused_view(ViewKind::FileExplorer); return; }
                 KeyCode::Char('4') => { self.set_focused_view(ViewKind::Editor); return; }
+                KeyCode::Char('5') => { self.set_focused_view(ViewKind::Search); return; }
                 _ => {}
             }
         }
@@ -470,6 +767,7 @@ impl App {
             ViewKind::Terminal => self.handle_terminal_nav_key(key),
             ViewKind::FileExplorer => self.handle_file_explorer_key(key),
             ViewKind::Editor => self.handle_editor_key(key),
+            ViewKind::Search => self.handle_search_key(key),
         }
     }
 
@@ -686,6 +984,61 @@ impl App {
                 // Force back to Normal in case edtui changed mode
                 editor.editor_state.mode = EditorMode::Normal;
             }
+        }
+    }
+
+    fn handle_search_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('q') => self.running = false,
+            KeyCode::Char('j') | KeyCode::Down => {
+                if let Some(ref mut search) = self.search {
+                    search.move_down();
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if let Some(ref mut search) = self.search {
+                    search.move_up();
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(ref search) = self.search {
+                    if let Some(result) = search.selected_result() {
+                        let path = result.file_path.clone();
+                        let line = result.line_number.saturating_sub(1);
+                        match EditorViewState::open(path) {
+                            Ok(mut state) => {
+                                state.editor_state.cursor = Index2::new(line, 0);
+                                let name = state.file_name().to_string();
+                                self.editor = Some(state);
+                                self.open_editor_in_other_panel();
+                                self.status_message = Some(format!("Opened {}", name));
+                            }
+                            Err(e) => {
+                                self.status_message = Some(e);
+                            }
+                        }
+                    }
+                }
+            }
+            KeyCode::Tab => {
+                self.toggle_focus();
+                if self.focused_view() == ViewKind::Terminal {
+                    if let Some(ref id) = self.active_session_id {
+                        self.attention_sessions.remove(id);
+                        if !self.exited_sessions.contains(id) {
+                            self.input_mode = InputMode::Terminal;
+                            self.reset_scroll();
+                        }
+                    }
+                }
+            }
+            KeyCode::Char(c @ '1'..='9') => {
+                self.jump_to_worktree((c as usize) - ('1' as usize));
+            }
+            KeyCode::Char('0') => {
+                self.jump_to_worktree(9);
+            }
+            _ => {}
         }
     }
 

@@ -53,6 +53,7 @@ fn render_view(
         ViewKind::Terminal => widgets::terminal_panel::render(frame, area, app, session_manager, is_focused),
         ViewKind::FileExplorer => widgets::file_explorer::render(frame, area, app, is_focused),
         ViewKind::Editor => widgets::editor::render(frame, area, app, is_focused),
+        ViewKind::Search => widgets::search_results::render(frame, area, app, is_focused),
     }
 }
 
@@ -111,6 +112,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ViewKind::Terminal => "terminal",
             ViewKind::FileExplorer => "files",
             ViewKind::Editor => "editor",
+            ViewKind::Search => "search",
         };
         let has_exited_selected = app
             .selected_worktree_path()
@@ -124,7 +126,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ""
         };
         format!(
-            " [{}] [{}]  q:quit  Tab:switch  Ctrl+1/2/3/4:view  ?:help{}{}",
+            " [{}] [{}]  q:quit  Tab:switch  Ctrl+1..5:view  Ctrl+P:find  Ctrl+F:search  ?:help{}{}",
             mode_str, view_str, restart_hint, scroll_hint
         )
     };
@@ -144,6 +146,11 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     // Render help overlay if active
     if app.show_help {
         widgets::help_overlay::render(frame, size, app);
+    }
+
+    // Render fuzzy finder overlay if active
+    if app.fuzzy_finder.is_some() {
+        widgets::fuzzy_finder::render(frame, size, app);
     }
 }
 
@@ -183,6 +190,20 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
 
             let text = Paragraph::new(format!("Delete '{}'? (y/N)", worktree_name))
                 .style(Style::default().fg(theme.fg).bg(theme.bg));
+            frame.render_widget(text, inner);
+        }
+        Prompt::SearchInput { input } => {
+            let block = Block::default()
+                .title(" Search project (ripgrep) ")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
+                .border_style(Style::default().fg(theme.prompt_border))
+                .style(Style::default().bg(theme.bg));
+            let inner = block.inner(popup_area);
+            frame.render_widget(block, popup_area);
+
+            let text = Paragraph::new(format!("{}█", input))
+                .style(Style::default().fg(theme.fg).bg(theme.bg).add_modifier(Modifier::BOLD));
             frame.render_widget(text, inner);
         }
     }
