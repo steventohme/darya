@@ -1,5 +1,5 @@
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState};
 use ratatui::Frame;
@@ -35,18 +35,18 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled(
                     format!("{} {} ", hotkey, indicator),
                     Style::default().fg(if has_session {
-                        Color::Green
+                        app.theme.session_active
                     } else {
-                        Color::DarkGray
+                        app.theme.session_inactive
                     }),
                 ),
                 Span::styled(
                     format!("{}{}", wt.name, main_marker),
-                    Style::default().fg(Color::White),
+                    Style::default().fg(app.theme.fg),
                 ),
                 Span::styled(
                     format!("  {}", branch_str),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(app.theme.fg_dim),
                 ),
             ]);
             ListItem::new(line)
@@ -54,9 +54,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
         .collect();
 
     let border_style = if app.active_panel == crate::app::Panel::Sidebar {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(app.theme.border_active)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(app.theme.border_inactive)
     };
 
     let list = List::new(items)
@@ -68,7 +68,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App) {
         )
         .highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
+                .bg(app.theme.highlight_bg)
                 .add_modifier(Modifier::BOLD),
         )
         .highlight_symbol("▶ ");
