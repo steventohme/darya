@@ -73,8 +73,9 @@ async fn main() -> color_eyre::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Create app, event handler, and session manager
-    let mut app = App::new(worktrees);
+    // Load config and create app
+    let theme = config::load_theme();
+    let mut app = App::new(worktrees, theme);
     let (mut events, event_tx) = create_event_handler();
     let mut session_manager = SessionManager::new(event_tx);
 
