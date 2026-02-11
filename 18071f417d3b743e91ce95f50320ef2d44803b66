@@ -1,0 +1,25 @@
+src/app.rs
+  8d94e7e39ed977d8 74
+src/main.rs
+  8d94e7e39ed977d8 112-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.1",
+  "base_commit_sha": "18071f417d3b743e91ce95f50320ef2d44803b66",
+  "prompts": {
+    "8d94e7e39ed977d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb60841f-dc84-419d-9713-bf797ffcd289",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 32,
+      "total_deletions": 21,
+      "accepted_lines": 17,
+      "overriden_lines": 0
+    }
+  }
+}
