@@ -109,6 +109,22 @@ async fn run_loop(
 
         if let Some(event) = events.next().await {
             if let AppEvent::Key(key) = &event {
+                // Ctrl+C: dismiss prompt → close active session → quit
+                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
+                    && key.code == KeyCode::Char('c')
+                {
+                    if app.prompt.is_some() {
+                        app.prompt = None;
+                    } else if let Some(session_id) = app.active_session_id.take() {
+                        session_manager.remove(&session_id);
+                        app.session_ids.retain(|_, v| v != &session_id);
+                        app.input_mode = InputMode::Navigation;
+                        app.status_message = Some("Session closed".to_string());
+                    } else {
+                        app.running = false;
+                    }
+                }
+
                 // Handle worktree creation
                 if let Some(branch_name) = app.wants_create_worktree(key) {
                     match wt_manager.add(&branch_name, &branch_name) {

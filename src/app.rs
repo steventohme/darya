@@ -71,13 +71,8 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
-        // Ctrl+c always quits (unless in a prompt)
+        // Ctrl+C is handled entirely in the main event loop
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-            if self.prompt.is_some() {
-                self.prompt = None;
-                return;
-            }
-            self.running = false;
             return;
         }
 
