@@ -1,0 +1,97 @@
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::Frame;
+
+use crate::app::{App, InputMode, Panel, Prompt};
+use crate::session::manager::SessionManager;
+use crate::widgets;
+
+pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) {
+    let size = frame.area();
+
+    // Full layout: content area + status bar
+    let outer = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(size);
+
+    // Main layout: sidebar | terminal
+    let main_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+        .split(outer[0]);
+
+    // Sidebar
+    widgets::worktree_list::render(frame, main_chunks[0], app);
+
+    // Terminal panel
+    widgets::terminal_panel::render(frame, main_chunks[1], app, session_manager);
+
+    // Status bar
+    let status_text = if let Some(ref msg) = app.status_message {
+        format!(" {} ", msg)
+    } else {
+        let mode_str = match app.input_mode {
+            InputMode::Navigation => "NAV",
+            InputMode::Terminal => "TERM",
+        };
+        let panel_str = match app.active_panel {
+            Panel::Sidebar => "sidebar",
+            Panel::Terminal => "terminal",
+        };
+        format!(
+            " [{}] [{}]  q:quit  Tab:switch  j/k:navigate  a:add  d:delete  Enter:session  Esc:back",
+            mode_str, panel_str
+        )
+    };
+    let status_style = if app.status_message.is_some() {
+        Style::default().fg(Color::Yellow).bg(Color::DarkGray)
+    } else {
+        Style::default().fg(Color::White).bg(Color::DarkGray)
+    };
+    let status = Paragraph::new(status_text).style(status_style);
+    frame.render_widget(status, outer[1]);
+
+    // Render prompt overlay if active
+    if let Some(ref prompt) = app.prompt {
+        render_prompt(frame, size, prompt);
+    }
+}
+
+fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt) {
+    let width = 50u16.min(area.width.saturating_sub(4));
+    let height = 3u16;
+    let x = (area.width.saturating_sub(width)) / 2;
+    let y = (area.height.saturating_sub(height)) / 2;
+    let popup_area = Rect::new(x, y, width, height);
+
+    frame.render_widget(Clear, popup_area);
+
+    match prompt {
+        Prompt::CreateWorktree { input } => {
+            let block = Block::default()
+                .title(" New worktree (branch name) ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow));
+            let inner = block.inner(popup_area);
+            frame.render_widget(block, popup_area);
+
+            let text = Paragraph::new(format!("{}█", input))
+                .style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD));
+            frame.render_widget(text, inner);
+        }
+        Prompt::ConfirmDelete { worktree_name } => {
+            let block = Block::default()
+                .title(" Confirm Delete ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Red));
+            let inner = block.inner(popup_area);
+            frame.render_widget(block, popup_area);
+
+            let text = Paragraph::new(format!("Delete '{}'? (y/N)", worktree_name))
+                .style(Style::default().fg(Color::White));
+            frame.render_widget(text, inner);
+        }
+    }
+}

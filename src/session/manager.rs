@@ -1,0 +1,59 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use tokio::sync::mpsc;
+
+use super::pty_session::PtySession;
+use crate::error::Result;
+use crate::event::AppEvent;
+
+pub struct SessionManager {
+    sessions: HashMap<String, PtySession>,
+    event_tx: mpsc::UnboundedSender<AppEvent>,
+}
+
+impl SessionManager {
+    pub fn new(event_tx: mpsc::UnboundedSender<AppEvent>) -> Self {
+        Self {
+            sessions: HashMap::new(),
+            event_tx,
+        }
+    }
+
+    /// Spawn a new Claude Code session for the given worktree path.
+    /// Returns the session ID.
+    pub fn spawn_session(
+        &mut self,
+        worktree_path: PathBuf,
+        rows: u16,
+        cols: u16,
+    ) -> Result<String> {
+        let session = PtySession::spawn(
+            worktree_path,
+            rows,
+            cols,
+            self.event_tx.clone(),
+        )?;
+        let id = session.id.clone();
+        self.sessions.insert(id.clone(), session);
+        Ok(id)
+    }
+
+    pub fn get(&self, id: &str) -> Option<&PtySession> {
+        self.sessions.get(id)
+    }
+
+    pub fn get_mut(&mut self, id: &str) -> Option<&mut PtySession> {
+        self.sessions.get_mut(id)
+    }
+
+    pub fn remove(&mut self, id: &str) -> Option<PtySession> {
+        self.sessions.remove(id)
+    }
+
+    pub fn resize_all(&mut self, rows: u16, cols: u16) {
+        for session in self.sessions.values_mut() {
+            let _ = session.resize(rows, cols);
+        }
+    }
+}
