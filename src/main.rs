@@ -215,8 +215,8 @@ async fn run_loop(
 
                 // Forward keys to PTY in terminal mode
                 if app.input_mode == InputMode::Terminal && app.prompt.is_none() {
-                    // Don't forward Esc — it exits terminal mode
-                    if key.code != KeyCode::Esc {
+                    // Don't forward Tab — it switches to sidebar
+                    if key.code != KeyCode::Tab {
                         if let Some(ref session_id) = app.active_session_id {
                             if let Some(bytes) = key_event_to_bytes(key) {
                                 if let Some(session) = session_manager.get_mut(session_id) {

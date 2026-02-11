@@ -186,6 +186,12 @@ impl App {
             }
             KeyCode::Tab => {
                 self.active_panel = Panel::Terminal;
+                if self.active_session_id.is_some() {
+                    if let Some(ref id) = self.active_session_id {
+                        self.attention_sessions.remove(id);
+                    }
+                    self.input_mode = InputMode::Terminal;
+                }
             }
             _ => {}
         }
@@ -214,11 +220,11 @@ impl App {
     }
 
     fn handle_terminal_key(&mut self, key: KeyEvent) {
-        // Esc exits terminal mode back to navigation
-        if key.code == KeyCode::Esc {
+        if key.code == KeyCode::Tab {
             self.input_mode = InputMode::Navigation;
+            self.active_panel = Panel::Sidebar;
         }
-        // In terminal mode, keys get forwarded to PTY (handled in main loop)
+        // All other keys get forwarded to PTY (handled in main loop)
     }
 
     fn jump_to_worktree(&mut self, index: usize) {
