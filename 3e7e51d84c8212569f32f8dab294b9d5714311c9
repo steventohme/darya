@@ -1,0 +1,31 @@
+src/config.rs
+  8d94e7e39ed977d8 7-12,15,32,34,50-66,68-73,80,131-137
+src/widgets/terminal_panel.rs
+  8d94e7e39ed977d8 2,30-42
+src/session/manager.rs
+  8d94e7e39ed977d8 7,31,37
+src/main.rs
+  8d94e7e39ed977d8 178
+src/session/pty_session.rs
+  8d94e7e39ed977d8 9,27,45-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.1",
+  "base_commit_sha": "3e7e51d84c8212569f32f8dab294b9d5714311c9",
+  "prompts": {
+    "8d94e7e39ed977d8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "eb60841f-dc84-419d-9713-bf797ffcd289",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 76,
+      "total_deletions": 16,
+      "accepted_lines": 66,
+      "overriden_lines": 0
+    }
+  }
+}
