@@ -75,3 +75,53 @@ fn parse_hex_color(s: &str) -> Option<Color> {
     let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
     Some(Color::Rgb(r, g, b))
 }
+
+/// Load theme from `~/.config/darya/config.toml`, falling back to defaults.
+pub fn load_theme() -> Theme {
+    let mut theme = Theme::default();
+
+    let Some(home) = dirs_path() else {
+        return theme;
+    };
+
+    let config_path = home.join(".config").join("darya").join("config.toml");
+    let Ok(contents) = std::fs::read_to_string(&config_path) else {
+        return theme;
+    };
+
+    let Ok(config) = toml::from_str::<ConfigToml>(&contents) else {
+        eprintln!("Warning: failed to parse {}", config_path.display());
+        return theme;
+    };
+
+    if let Some(t) = config.theme {
+        macro_rules! apply {
+            ($field:ident) => {
+                if let Some(ref val) = t.$field {
+                    if let Some(color) = parse_hex_color(val) {
+                        theme.$field = color;
+                    }
+                }
+            };
+        }
+        apply!(bg);
+        apply!(fg);
+        apply!(fg_dim);
+        apply!(border_active);
+        apply!(border_inactive);
+        apply!(highlight_bg);
+        apply!(session_active);
+        apply!(session_inactive);
+        apply!(status_bar_fg);
+        apply!(status_bar_bg);
+        apply!(prompt_border);
+        apply!(prompt_delete_border);
+        apply!(warning);
+    }
+
+    theme
+}
+
+fn dirs_path() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(std::path::PathBuf::from)
+}
