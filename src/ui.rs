@@ -93,7 +93,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ""
         };
         format!(
-            " [{}] [{}]  q:quit  Tab:switch  j/k:navigate  a:add  d:delete  Enter:session{}{}",
+            " [{}] [{}]  q:quit  Tab:switch  j/k:navigate  a:add  d:delete  Enter:session  ?:help{}{}",
             mode_str, panel_str, restart_hint, scroll_hint
         )
     };
@@ -108,6 +108,11 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     // Render prompt overlay if active
     if let Some(ref prompt) = app.prompt {
         render_prompt(frame, size, prompt, &app.theme);
+    }
+
+    // Render help overlay if active
+    if app.show_help {
+        widgets::help_overlay::render(frame, size, app);
     }
 }
 

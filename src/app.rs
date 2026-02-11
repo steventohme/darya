@@ -46,6 +46,7 @@ pub struct App {
     pub exited_sessions: HashSet<String>,
     /// Status message to show briefly
     pub status_message: Option<String>,
+    pub show_help: bool,
     pub theme: Theme,
     pub terminal_start_bottom: bool,
     /// Per-session scrollback offset (lines scrolled back from live view)
@@ -68,6 +69,7 @@ impl App {
             exited_sessions: HashSet::new(),
             prompt: None,
             status_message: None,
+            show_help: false,
             theme,
             terminal_start_bottom,
             scroll_offsets: HashMap::new(),
@@ -149,6 +151,14 @@ impl App {
     }
 
     fn handle_nav_key(&mut self, key: KeyEvent) {
+        if key.code == KeyCode::Char('?') {
+            self.show_help = !self.show_help;
+            return;
+        }
+        if self.show_help {
+            self.show_help = false;
+            return;
+        }
         match self.active_panel {
             Panel::Sidebar => self.handle_sidebar_key(key),
             Panel::Terminal => self.handle_terminal_panel_nav_key(key),
@@ -310,6 +320,7 @@ impl App {
     pub fn needs_session_restart(&self, key: &KeyEvent) -> bool {
         if key.code != KeyCode::Char('r')
             || self.prompt.is_some()
+            || self.show_help
             || self.input_mode != InputMode::Navigation
         {
             return false;
@@ -322,6 +333,7 @@ impl App {
 
     pub fn needs_session_spawn(&self, key: &KeyEvent) -> bool {
         self.prompt.is_none()
+            && !self.show_help
             && key.code == KeyCode::Enter
             && self.input_mode == InputMode::Navigation
     }
