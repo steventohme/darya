@@ -585,3 +585,94 @@ fn q_quits_from_diff_view() {
     app.handle_event(&key(KeyCode::Char('q')));
     assert!(!app.running);
 }
+
+// ── Activity Animation ──────────────────────────────────────
+
+#[test]
+fn pty_output_activates_animation_after_tick() {
+    let mut app = make_app_with_session(2);
+    let sid = app.active_session_id.clone().unwrap();
+    assert!(!app.activity.is_active(&sid));
+    // Output + tick (no recent input) → active
+    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::Tick);
+    assert!(app.activity.is_active(&sid));
+}
+
+#[test]
+fn output_suppressed_after_user_input() {
+    let mut app = make_app_with_session(2);
+    let sid = app.active_session_id.clone().unwrap();
+    // Simulate user typing: mark_input then echo arrives as PtyOutput
+    app.activity.mark_input(&sid);
+    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::Tick);
+    // Should NOT activate — the output was just an echo
+    assert!(!app.activity.is_active(&sid));
+}
+
+#[test]
+fn tick_advances_animation_position() {
+    let mut app = make_app_with_session(2);
+    let sid = app.active_session_id.clone().unwrap();
+    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::Tick);
+    let pos_before = app.activity.position(&sid);
+    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::Tick);
+    let pos_after = app.activity.position(&sid);
+    assert_ne!(pos_before, pos_after);
+}
+
+#[test]
+fn animation_bounce_cycle() {
+    let mut app = make_app_with_session(2);
+    let sid = app.active_session_id.clone().unwrap();
+    // Initial output to start animation
+    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::Tick);
+
+    // Collect positions over a full 8-tick bounce cycle
+    let mut positions = Vec::new();
+    for _ in 0..8 {
+        positions.push(app.activity.position(&sid));
+        // Re-output each tick to keep active
+        app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+        app.handle_event(&AppEvent::Tick);
+    }
+    assert_eq!(positions, vec![0, 1, 2, 3, 4, 3, 2, 1]);
+}
+
+#[test]
+fn session_exited_cleans_up_animation() {
+    let mut app = make_app_with_session(2);
+    let sid = app.active_session_id.clone().unwrap();
+    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::Tick);
+    assert!(app.activity.is_active(&sid));
+    app.handle_event(&AppEvent::SessionExited { session_id: sid.clone() });
+    assert!(!app.activity.is_active(&sid));
+}
+
+#[test]
+fn animation_independent_per_session() {
+    let mut app = make_app_with_session(3);
+    // Add a second session for the second worktree
+    let wt2_path = app.worktrees[1].path.clone();
+    let sid2 = "test-session-2".to_string();
+    app.session_ids.insert(wt2_path, sid2.clone());
+
+    let sid1 = app.active_session_id.clone().unwrap();
+
+    // Only activate session 1
+    app.handle_event(&AppEvent::PtyOutput { session_id: sid1.clone() });
+    app.handle_event(&AppEvent::Tick);
+    assert!(app.activity.is_active(&sid1));
+    assert!(!app.activity.is_active(&sid2));
+
+    // Now activate session 2 too
+    app.handle_event(&AppEvent::PtyOutput { session_id: sid2.clone() });
+    app.handle_event(&AppEvent::Tick);
+    assert!(app.activity.is_active(&sid1));
+    assert!(app.activity.is_active(&sid2));
+}

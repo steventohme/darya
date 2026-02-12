@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Index2, Lines as EdtuiLines};
@@ -772,6 +773,105 @@ pub fn parse_diff_lines(text: &str) -> Vec<DiffLine> {
     lines
 }
 
+// ── Activity Animation ──────────────────────────────────────
+
+/// Tracks bouncing-block animation for worktrees with active PTY output.
+/// Uses input suppression so typing echoes don't trigger it — any output
+/// that arrives without recent user input (i.e. Claude working) activates.
+pub struct ActivityAnimation {
+    /// Whether each session had output this tick
+    had_output: HashSet<String>,
+    /// Last time output was confirmed without recent user input
+    last_active: HashMap<String, Instant>,
+    /// Last time user input was sent to each session's PTY
+    last_input: HashMap<String, Instant>,
+    /// Current animation frame per session (0..7 = 8-frame bounce cycle)
+    frame: HashMap<String, usize>,
+}
+
+/// How long after last confirmed activity before animation stops (ms)
+const ACTIVITY_TIMEOUT_MS: u128 = 500;
+
+/// How long after user input to suppress animation (ms) — filters out echoes
+const INPUT_SUPPRESSION_MS: u128 = 300;
+
+/// Bounce pattern: positions 0,1,2,3,4,3,2,1 over 8 frames
+const BOUNCE_POSITIONS: [usize; 8] = [0, 1, 2, 3, 4, 3, 2, 1];
+
+impl ActivityAnimation {
+    pub fn new() -> Self {
+        Self {
+            had_output: HashSet::new(),
+            last_active: HashMap::new(),
+            last_input: HashMap::new(),
+            frame: HashMap::new(),
+        }
+    }
+
+    /// Record a PtyOutput event for a session.
+    pub fn mark_active(&mut self, session_id: &str) {
+        self.had_output.insert(session_id.to_string());
+    }
+
+    /// Record that user input was just sent to a session's PTY.
+    /// Suppresses animation briefly to filter out echoed keystrokes.
+    pub fn mark_input(&mut self, session_id: &str) {
+        self.last_input.insert(session_id.to_string(), Instant::now());
+    }
+
+    /// Advance animation frames. Called on each Tick (50ms).
+    pub fn tick(&mut self) {
+        let now = Instant::now();
+
+        // Expire old activity
+        self.last_active.retain(|_, t| now.duration_since(*t).as_millis() < ACTIVITY_TIMEOUT_MS);
+
+        // Advance frames for existing active sessions, remove expired
+        let active_ids: HashSet<&String> = self.last_active.keys().collect();
+        self.frame.retain(|id, _| active_ids.contains(id));
+        for (_, frame) in self.frame.iter_mut() {
+            *frame = (*frame + 1) % 8;
+        }
+
+        // Process sessions that had output this tick
+        for id in self.had_output.drain() {
+            // Check if user recently typed into this session
+            let suppressed = self.last_input.get(&id)
+                .map(|t| now.duration_since(*t).as_millis() < INPUT_SUPPRESSION_MS)
+                .unwrap_or(false);
+
+            if !suppressed {
+                self.last_active.insert(id.clone(), now);
+                self.frame.entry(id).or_insert(0);
+            }
+        }
+
+        // Clean up stale input timestamps
+        self.last_input.retain(|_, t| now.duration_since(*t).as_millis() < INPUT_SUPPRESSION_MS * 2);
+    }
+
+    /// Whether this session has an active animation.
+    pub fn is_active(&self, session_id: &str) -> bool {
+        self.last_active.contains_key(session_id)
+    }
+
+    /// Current bounce position (0..4) for the block character.
+    pub fn position(&self, session_id: &str) -> usize {
+        self.frame
+            .get(session_id)
+            .map(|&f| BOUNCE_POSITIONS[f])
+            .unwrap_or(0)
+    }
+
+    /// Clean up state when a session is removed entirely.
+    pub fn remove_session(&mut self, session_id: &str) {
+        self.had_output.remove(session_id);
+        self.last_active.remove(session_id);
+        self.last_input.remove(session_id);
+        self.frame.remove(session_id);
+    }
+}
+
 pub struct App {
     pub running: bool,
     pub input_mode: InputMode,
@@ -806,6 +906,7 @@ pub struct App {
     pub fuzzy_finder: Option<FuzzyFinderState>,
     pub git_status: Option<GitStatusState>,
     pub diff_view: Option<DiffViewState>,
+    pub activity: ActivityAnimation,
 }
 
 impl App {
@@ -840,6 +941,7 @@ impl App {
             fuzzy_finder: None,
             git_status: None,
             diff_view: None,
+            activity: ActivityAnimation::new(),
         }
     }
 
@@ -895,7 +997,9 @@ impl App {
         match event {
             AppEvent::Key(key) => self.handle_key(*key),
             AppEvent::Resize(_w, _h) => {}
-            AppEvent::PtyOutput { .. } => {}
+            AppEvent::PtyOutput { session_id } => {
+                self.activity.mark_active(session_id);
+            }
             AppEvent::SessionBell { session_id } => {
                 // Only mark as needing attention if it's not the currently viewed session in terminal mode
                 if !(self.active_session_id.as_deref() == Some(session_id)
@@ -906,6 +1010,7 @@ impl App {
             }
             AppEvent::SessionExited { session_id } => {
                 self.exited_sessions.insert(session_id.clone());
+                self.activity.remove_session(session_id);
                 // If user is in terminal mode on this session, kick to nav mode
                 if self.active_session_id.as_deref() == Some(session_id)
                     && self.input_mode == InputMode::Terminal
@@ -913,7 +1018,9 @@ impl App {
                     self.input_mode = InputMode::Navigation;
                 }
             }
-            AppEvent::Tick => {}
+            AppEvent::Tick => {
+                self.activity.tick();
+            }
         }
     }
 
@@ -1529,5 +1636,43 @@ impl App {
         if let Some(wt) = self.worktrees.get(self.selected_worktree) {
             self.file_explorer.set_root(wt.path.clone());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn activity_animation_timeout() {
+        let mut anim = ActivityAnimation::new();
+        anim.mark_active("s1");
+        anim.tick();
+        assert!(anim.is_active("s1"));
+
+        // Wait longer than ACTIVITY_TIMEOUT_MS (500ms)
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        anim.tick();
+        assert!(!anim.is_active("s1"));
+    }
+
+    #[test]
+    fn input_suppression_prevents_activation() {
+        let mut anim = ActivityAnimation::new();
+        anim.mark_input("s1");
+        anim.mark_active("s1");
+        anim.tick();
+        assert!(!anim.is_active("s1"));
+    }
+
+    #[test]
+    fn output_activates_after_suppression_expires() {
+        let mut anim = ActivityAnimation::new();
+        anim.mark_input("s1");
+        // Wait for suppression to expire (300ms)
+        std::thread::sleep(std::time::Duration::from_millis(350));
+        anim.mark_active("s1");
+        anim.tick();
+        assert!(anim.is_active("s1"));
     }
 }

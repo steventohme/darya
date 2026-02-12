@@ -1,10 +1,37 @@
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState};
 use ratatui::Frame;
 
 use crate::app::App;
+use crate::config::Theme;
+
+/// Build 5 styled spans for the bouncing-block animation.
+/// `pos` is the bounce position (0..4), representing where the bright block is.
+fn build_animation_spans(pos: usize, theme: &Theme) -> Vec<Span<'static>> {
+    let bright = theme.session_active;
+    // Half-brightness trail derived from the session_active color
+    let trail = match bright {
+        Color::Rgb(r, g, b) => Color::Rgb(r / 2, g / 2, b / 2),
+        _ => theme.fg_dim,
+    };
+    let bg_char_style = Style::default().fg(theme.fg_dim);
+    let bright_style = Style::default().fg(bright);
+    let trail_style = Style::default().fg(trail);
+
+    (0..5)
+        .map(|i| {
+            if i == pos {
+                Span::styled("\u{2588}", bright_style) // █
+            } else if i == pos.wrapping_sub(1) || i == pos + 1 {
+                Span::styled("\u{2593}", trail_style) // ▓
+            } else {
+                Span::styled("\u{2591}", bg_char_style) // ░
+            }
+        })
+        .collect()
+}
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
     // Derive repo name from the main worktree's directory name
@@ -28,12 +55,16 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
             let needs_attention = session_id
                 .map(|id| app.attention_sessions.contains(id))
                 .unwrap_or(false);
+            let is_animating = !is_exited
+                && session_id
+                    .map(|id| app.activity.is_active(id))
+                    .unwrap_or(false);
             let indicator = if is_exited {
-                "✕"
+                "\u{2715}"
             } else if has_session {
-                "●"
+                "\u{25CF}"
             } else {
-                "○"
+                "\u{25CB}"
             };
 
             let branch_str = wt
@@ -62,9 +93,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                 app.theme.session_inactive
             };
 
-            let line = if is_exited {
+            let mut spans = if is_exited {
                 let exited_color = app.theme.session_exited;
-                Line::from(vec![
+                vec![
                     Span::styled(
                         format!("{} {} ", hotkey, indicator),
                         Style::default().fg(exited_color).add_modifier(Modifier::BOLD),
@@ -81,10 +112,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         exited_marker.to_string(),
                         Style::default().fg(exited_color).add_modifier(Modifier::DIM),
                     ),
-                ])
+                ]
             } else if needs_attention {
                 let attn = app.theme.session_attention;
-                Line::from(vec![
+                vec![
                     Span::styled(
                         format!("{} {} ", hotkey, indicator),
                         Style::default().fg(attn).add_modifier(Modifier::BOLD),
@@ -97,9 +128,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         format!(" [{}]", branch_str),
                         Style::default().fg(attn),
                     ),
-                ])
+                ]
             } else {
-                Line::from(vec![
+                vec![
                     Span::styled(
                         format!("{} {} ", hotkey, indicator),
                         Style::default().fg(indicator_color),
@@ -112,9 +143,26 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         format!(" [{}]", branch_str),
                         Style::default().fg(app.theme.fg_dim),
                     ),
-                ])
+                ]
             };
-            ListItem::new(line)
+
+            // Right-align bouncing animation if session is actively producing output
+            if is_animating {
+                // Content area: total width - 2 (borders) - 2 (highlight symbol "▶ ")
+                let content_width = (area.width as usize).saturating_sub(4);
+                // Text width: "{hotkey} {indicator} " (4) + repo_name + " [{branch}]" (3+branch)
+                //             + optional " [exited]" (9)
+                let text_width = 4 + repo_name.len() + 3 + branch_str.len()
+                    + if is_exited { 9 } else { 0 };
+                let anim_width = 5; // 5 animation characters
+                let padding = content_width.saturating_sub(text_width + anim_width);
+
+                spans.push(Span::raw(" ".repeat(padding)));
+                let pos = app.activity.position(session_id.unwrap());
+                spans.extend(build_animation_spans(pos, &app.theme));
+            }
+
+            ListItem::new(Line::from(spans))
         })
         .collect();
 
@@ -137,7 +185,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                 .bg(app.theme.highlight_bg)
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol("▶ ");
+        .highlight_symbol("\u{25B6} ");
 
     let mut state = ListState::default();
     state.select(Some(app.selected_worktree));

@@ -147,6 +147,7 @@ async fn run_loop(
                         app.session_ids.retain(|_, v| v != &session_id);
                         app.attention_sessions.remove(&session_id);
                         app.exited_sessions.remove(&session_id);
+                        app.activity.remove_session(&session_id);
                         app.input_mode = InputMode::Navigation;
                         app.status_message = Some("Session closed".to_string());
                     } else {
@@ -202,6 +203,7 @@ async fn run_loop(
                             session_manager.remove(&session_id);
                             app.attention_sessions.remove(&session_id);
                             app.exited_sessions.remove(&session_id);
+                            app.activity.remove_session(&session_id);
                             if app.active_session_id.as_deref() == Some(&session_id) {
                                 app.active_session_id = None;
                             }
@@ -258,6 +260,7 @@ async fn run_loop(
                             session_manager.remove(&old_id);
                             app.attention_sessions.remove(&old_id);
                             app.exited_sessions.remove(&old_id);
+                            app.activity.remove_session(&old_id);
                             if app.active_session_id.as_deref() == Some(&old_id) {
                                 app.active_session_id = None;
                             }
@@ -294,6 +297,7 @@ async fn run_loop(
                                         session_manager.get_mut(session_id)
                                     {
                                         let _ = session.write_input(&bytes);
+                                        app.activity.mark_input(session_id);
                                     }
                                 }
                             }
