@@ -54,6 +54,24 @@ impl SidebarView {
             SidebarView::GitStatus => ViewKind::GitStatus,
         }
     }
+
+    pub fn next(self) -> Self {
+        match self {
+            SidebarView::Worktrees => SidebarView::FileExplorer,
+            SidebarView::FileExplorer => SidebarView::Search,
+            SidebarView::Search => SidebarView::GitStatus,
+            SidebarView::GitStatus => SidebarView::Worktrees,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        match self {
+            SidebarView::Worktrees => SidebarView::GitStatus,
+            SidebarView::FileExplorer => SidebarView::Worktrees,
+            SidebarView::Search => SidebarView::FileExplorer,
+            SidebarView::GitStatus => SidebarView::Search,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1203,6 +1221,17 @@ impl App {
         if self.show_help {
             self.show_help = false;
             return;
+        }
+        // h/l cycle sidebar views when left panel is focused
+        if self.panel_focus == PanelFocus::Left {
+            if key.code == KeyCode::Char('l') {
+                self.sidebar_view = self.sidebar_view.next();
+                return;
+            }
+            if key.code == KeyCode::Char('h') {
+                self.sidebar_view = self.sidebar_view.prev();
+                return;
+            }
         }
         match self.focused_view() {
             ViewKind::Worktrees => self.handle_worktrees_key(key),

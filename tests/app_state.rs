@@ -586,6 +586,44 @@ fn q_quits_from_diff_view() {
     assert!(!app.running);
 }
 
+// ── Sidebar h/l cycling ─────────────────────────────────────
+
+#[test]
+fn l_cycles_sidebar_forward() {
+    let mut app = make_app(3);
+    assert_eq!(app.sidebar_view, SidebarView::Worktrees);
+    app.handle_event(&key(KeyCode::Char('l')));
+    assert_eq!(app.sidebar_view, SidebarView::FileExplorer);
+    app.handle_event(&key(KeyCode::Char('l')));
+    assert_eq!(app.sidebar_view, SidebarView::Search);
+    app.handle_event(&key(KeyCode::Char('l')));
+    assert_eq!(app.sidebar_view, SidebarView::GitStatus);
+    app.handle_event(&key(KeyCode::Char('l')));
+    assert_eq!(app.sidebar_view, SidebarView::Worktrees);
+}
+
+#[test]
+fn h_cycles_sidebar_backward() {
+    let mut app = make_app(3);
+    assert_eq!(app.sidebar_view, SidebarView::Worktrees);
+    app.handle_event(&key(KeyCode::Char('h')));
+    assert_eq!(app.sidebar_view, SidebarView::GitStatus);
+    app.handle_event(&key(KeyCode::Char('h')));
+    assert_eq!(app.sidebar_view, SidebarView::Search);
+}
+
+#[test]
+fn h_l_no_effect_on_right_panel() {
+    let mut app = make_app(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    let before = app.sidebar_view;
+    app.handle_event(&key(KeyCode::Char('l')));
+    assert_eq!(app.sidebar_view, before);
+    app.handle_event(&key(KeyCode::Char('h')));
+    assert_eq!(app.sidebar_view, before);
+}
+
 // ── Activity Animation ──────────────────────────────────────
 
 #[test]
