@@ -789,6 +789,77 @@ fn is_edtui_compatible_helper() {
     assert!(!is_edtui_compatible(&KeyCode::CapsLock));
 }
 
+// ── Session counts / branch info helpers ─────────────────────
+
+#[test]
+fn running_session_count_excludes_exited() {
+    let mut app = make_app(3);
+    let p0 = app.worktrees[0].path.clone();
+    let p1 = app.worktrees[1].path.clone();
+    let p2 = app.worktrees[2].path.clone();
+    app.session_ids.insert(p0, "s0".to_string());
+    app.session_ids.insert(p1, "s1".to_string());
+    app.session_ids.insert(p2, "s2".to_string());
+    app.exited_sessions.insert("s1".to_string());
+    assert_eq!(app.running_session_count(), 2);
+}
+
+#[test]
+fn exited_session_count_only_counts_exited() {
+    let mut app = make_app(3);
+    let p0 = app.worktrees[0].path.clone();
+    let p1 = app.worktrees[1].path.clone();
+    let p2 = app.worktrees[2].path.clone();
+    app.session_ids.insert(p0, "s0".to_string());
+    app.session_ids.insert(p1, "s1".to_string());
+    app.session_ids.insert(p2, "s2".to_string());
+    app.exited_sessions.insert("s1".to_string());
+    assert_eq!(app.exited_session_count(), 1);
+}
+
+#[test]
+fn selected_branch_info_returns_branch_and_counts() {
+    let mut app = make_app(2);
+    app.git_status = Some(GitStatusState {
+        entries: vec![
+            GitStatusEntry {
+                category: GitStatusCategory::Staged,
+                status: GitFileStatus::Modified,
+                path: "a.rs".to_string(),
+                orig_path: None,
+            },
+            GitStatusEntry {
+                category: GitStatusCategory::Unstaged,
+                status: GitFileStatus::Modified,
+                path: "b.rs".to_string(),
+                orig_path: None,
+            },
+            GitStatusEntry {
+                category: GitStatusCategory::Untracked,
+                status: GitFileStatus::Untracked,
+                path: "c.rs".to_string(),
+                orig_path: None,
+            },
+        ],
+        selected: 0,
+        error: None,
+        worktree_path: app.worktrees[0].path.clone(),
+    });
+    let (branch, untracked, modified) = app.selected_branch_info().unwrap();
+    assert_eq!(branch, "main");
+    assert_eq!(untracked, 1);
+    assert_eq!(modified, 2); // staged + unstaged
+}
+
+#[test]
+fn selected_branch_info_without_git_status_returns_zeros() {
+    let app = make_app(2);
+    let (branch, untracked, modified) = app.selected_branch_info().unwrap();
+    assert_eq!(branch, "main");
+    assert_eq!(untracked, 0);
+    assert_eq!(modified, 0);
+}
+
 // ── File Watching ────────────────────────────────────────────
 
 fn make_app_with_open_file(content: &str) -> (darya::app::App, PathBuf) {
