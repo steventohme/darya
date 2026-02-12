@@ -1697,6 +1697,49 @@ impl App {
         self.worktrees.get(self.selected_worktree).map(|wt| &wt.path)
     }
 
+    /// Count sessions that are running (in session_ids but not exited).
+    pub fn running_session_count(&self) -> usize {
+        self.session_ids
+            .values()
+            .filter(|id| !self.exited_sessions.contains(id.as_str()))
+            .count()
+    }
+
+    /// Count sessions that have exited.
+    pub fn exited_session_count(&self) -> usize {
+        self.session_ids
+            .values()
+            .filter(|id| self.exited_sessions.contains(id.as_str()))
+            .count()
+    }
+
+    /// Get branch name and dirty counts for the selected worktree.
+    /// Returns (branch_name, untracked_count, modified_count).
+    pub fn selected_branch_info(&self) -> Option<(String, usize, usize)> {
+        let wt = self.worktrees.get(self.selected_worktree)?;
+        let branch = wt
+            .branch
+            .clone()
+            .unwrap_or_else(|| "detached".to_string());
+        let (untracked, modified) = match &self.git_status {
+            Some(gs) if gs.worktree_path == wt.path => {
+                let u = gs
+                    .entries
+                    .iter()
+                    .filter(|e| e.category == GitStatusCategory::Untracked)
+                    .count();
+                let m = gs
+                    .entries
+                    .iter()
+                    .filter(|e| e.category != GitStatusCategory::Untracked)
+                    .count();
+                (u, m)
+            }
+            _ => (0, 0),
+        };
+        Some((branch, untracked, modified))
+    }
+
     pub fn needs_session_restart(&self, key: &KeyEvent) -> bool {
         if key.code != KeyCode::Char('r')
             || self.prompt.is_some()
