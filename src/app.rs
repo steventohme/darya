@@ -981,10 +981,11 @@ pub struct App {
     pub git_status: Option<GitStatusState>,
     pub diff_view: Option<DiffViewState>,
     pub activity: ActivityAnimation,
+    pub session_command: String,
 }
 
 impl App {
-    pub fn new(worktrees: Vec<Worktree>, theme: Theme, terminal_start_bottom: bool, keybindings: KeybindingsConfig) -> Self {
+    pub fn new(worktrees: Vec<Worktree>, theme: Theme, terminal_start_bottom: bool, keybindings: KeybindingsConfig, session_command: String) -> Self {
         let explorer_root = worktrees
             .first()
             .map(|wt| wt.path.clone())
@@ -1016,6 +1017,7 @@ impl App {
             git_status: None,
             diff_view: None,
             activity: ActivityAnimation::new(),
+            session_command,
         }
     }
 

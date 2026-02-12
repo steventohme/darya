@@ -217,11 +217,17 @@ pub fn parse_keybinding(s: &str) -> Option<(KeyModifiers, KeyCode)> {
 }
 
 #[derive(Debug, Deserialize, Default)]
+struct SessionToml {
+    command: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
 struct ConfigToml {
     theme: Option<ThemeToml>,
     terminal: Option<TerminalToml>,
     worktree: Option<WorktreeToml>,
     keybindings: Option<KeybindingsToml>,
+    session: Option<SessionToml>,
 }
 
 pub const DEFAULT_WORKTREE_DIR_FORMAT: &str = "{repo}-{branch}";
@@ -232,6 +238,7 @@ pub struct AppConfig {
     pub terminal_start_bottom: bool,
     pub worktree_dir_format: String,
     pub keybindings: KeybindingsConfig,
+    pub session_command: String,
 }
 
 /// Parse a hex color string like "#33FF33" or "33FF33" into a ratatui Color.
@@ -252,8 +259,9 @@ pub fn load_config() -> AppConfig {
     let mut terminal_start_bottom = true;
     let mut worktree_dir_format = DEFAULT_WORKTREE_DIR_FORMAT.to_string();
     let mut keybindings = KeybindingsConfig::default();
+    let mut session_command = CLAUDE_COMMAND.to_string();
 
-    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone(), keybindings: KeybindingsConfig::default() };
+    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone(), keybindings: KeybindingsConfig::default(), session_command: CLAUDE_COMMAND.to_string() };
 
     let Some(home) = dirs_path() else {
         return defaults();
@@ -335,7 +343,29 @@ pub fn load_config() -> AppConfig {
         apply_kb!(project_search);
     }
 
-    AppConfig { theme, terminal_start_bottom, worktree_dir_format, keybindings }
+    if let Some(ref s) = config.session {
+        if let Some(ref cmd) = s.command {
+            session_command = cmd.clone();
+        }
+    }
+
+    AppConfig { theme, terminal_start_bottom, worktree_dir_format, keybindings, session_command }
+}
+
+/// Resolve the session command for a worktree. Checks for a `.darya.toml`
+/// override in the worktree root, falling back to the global config value.
+pub fn resolve_session_command(worktree_path: &std::path::Path, global_command: &str) -> String {
+    let local_config = worktree_path.join(".darya.toml");
+    if let Ok(contents) = std::fs::read_to_string(&local_config) {
+        if let Ok(config) = toml::from_str::<ConfigToml>(&contents) {
+            if let Some(session) = config.session {
+                if let Some(cmd) = session.command {
+                    return cmd;
+                }
+            }
+        }
+    }
+    global_command.to_string()
 }
 
 fn dirs_path() -> Option<std::path::PathBuf> {

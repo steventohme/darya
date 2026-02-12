@@ -74,6 +74,7 @@ impl PtySession {
         rows: u16,
         cols: u16,
         theme_mode: ThemeMode,
+        command: &str,
         event_tx: mpsc::UnboundedSender<AppEvent>,
     ) -> Result<Self> {
         let id = uuid::Uuid::new_v4().to_string();
@@ -88,8 +89,13 @@ impl PtySession {
             })
             .map_err(|e| DaryaError::Pty(format!("failed to open pty: {}", e)))?;
 
-        // Build command: claude (in the worktree directory)
-        let mut cmd = CommandBuilder::new(CLAUDE_COMMAND);
+        // Build command from configured string (e.g. "claude --model opus")
+        let parts: Vec<&str> = command.split_whitespace().collect();
+        let program = parts.first().copied().unwrap_or(CLAUDE_COMMAND);
+        let mut cmd = CommandBuilder::new(program);
+        for arg in &parts[1..] {
+            cmd.arg(arg);
+        }
         cmd.cwd(&worktree_path);
         if theme_mode == ThemeMode::Light {
             cmd.env("COLORFGBG", "0;15");

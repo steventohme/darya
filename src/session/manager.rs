@@ -21,7 +21,7 @@ impl SessionManager {
         }
     }
 
-    /// Spawn a new Claude Code session for the given worktree path.
+    /// Spawn a new session for the given worktree path.
     /// Returns the session ID.
     pub fn spawn_session(
         &mut self,
@@ -29,12 +29,14 @@ impl SessionManager {
         rows: u16,
         cols: u16,
         theme_mode: ThemeMode,
+        command: &str,
     ) -> Result<String> {
         let session = PtySession::spawn(
             worktree_path,
             rows,
             cols,
             theme_mode,
+            command,
             self.event_tx.clone(),
         )?;
         let id = session.id.clone();

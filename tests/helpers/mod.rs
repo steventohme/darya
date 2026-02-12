@@ -5,14 +5,14 @@ use std::path::PathBuf;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use darya::app::App;
-use darya::config::{KeybindingsConfig, Theme};
+use darya::config::{KeybindingsConfig, Theme, CLAUDE_COMMAND};
 use darya::event::AppEvent;
 use darya::worktree::types::Worktree;
 
 /// Create an App with `n` mock worktrees using temp-like paths.
 pub fn make_app(n: usize) -> App {
     let worktrees = make_worktrees(n);
-    App::new(worktrees, Theme::dark(), true, KeybindingsConfig::default())
+    App::new(worktrees, Theme::dark(), true, KeybindingsConfig::default(), CLAUDE_COMMAND.to_string())
 }
 
 /// Create an App with `n` worktrees where the first worktree has an active session mapped.

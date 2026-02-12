@@ -88,9 +88,10 @@ async fn main() -> color_eyre::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Create app with loaded theme and keybindings
+    // Create app with loaded theme, keybindings, and session command
     let keybindings = app_config.keybindings;
-    let mut app = App::new(worktrees, theme, terminal_start_bottom, keybindings);
+    let session_command = app_config.session_command;
+    let mut app = App::new(worktrees, theme, terminal_start_bottom, keybindings, session_command);
     let (pty_rows, _pty_cols) = pty_size(&terminal);
     app.terminal_height = pty_rows;
     let (mut events, event_tx) = create_event_handler();
@@ -242,12 +243,16 @@ async fn run_loop(
                     if let Some(wt_path) = app.selected_worktree_path().cloned() {
                         if !app.session_ids.contains_key(&wt_path) {
                             let (rows, cols) = pty_size(terminal);
-                            match session_manager.spawn_session(wt_path.clone(), rows, cols, app.theme.mode) {
+                            let command = config::resolve_session_command(&wt_path, &app.session_command);
+                            match session_manager.spawn_session(wt_path.clone(), rows, cols, app.theme.mode, &command) {
                                 Ok(id) => {
                                     app.session_ids.insert(wt_path, id.clone());
                                     app.active_session_id = Some(id);
                                     app.focus_terminal_panel();
                                     app.input_mode = InputMode::Terminal;
+                                    if command != config::CLAUDE_COMMAND {
+                                        app.status_message = Some(format!("Started session ({})", command));
+                                    }
                                 }
                                 Err(e) => {
                                     app.status_message =
@@ -279,17 +284,22 @@ async fn run_loop(
                             }
                         }
                         let (rows, cols) = pty_size(terminal);
+                        let command = config::resolve_session_command(&wt_path, &app.session_command);
                         match session_manager.spawn_session(
                             wt_path.clone(),
                             rows,
                             cols,
                             app.theme.mode,
+                            &command,
                         ) {
                             Ok(id) => {
                                 app.session_ids.insert(wt_path, id.clone());
                                 app.active_session_id = Some(id);
                                 app.focus_terminal_panel();
                                 app.input_mode = InputMode::Terminal;
+                                if command != config::CLAUDE_COMMAND {
+                                    app.status_message = Some(format!("Started session ({})", command));
+                                }
                             }
                             Err(e) => {
                                 app.status_message =

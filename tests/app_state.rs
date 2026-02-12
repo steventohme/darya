@@ -9,6 +9,7 @@ use darya::app::{
     GitStatusCategory, GitStatusEntry, GitStatusState, GitFileStatus,
     InputMode, MainView, PanelFocus, Prompt, SidebarView,
 };
+use darya::config;
 use darya::event::AppEvent;
 
 use helpers::{key, ctrl_key, make_app, make_app_with_session};
@@ -972,4 +973,34 @@ fn file_changed_identical_content_no_message() {
     app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.clone()] });
     // No status message when content is identical
     assert!(app.status_message.is_none());
+}
+
+// ── resolve_session_command ─────────────────────────────────
+
+#[test]
+fn resolve_session_command_uses_global_default() {
+    let dir = tempfile::tempdir().unwrap();
+    // No .darya.toml present — should return the global value
+    let result = config::resolve_session_command(dir.path(), "claude --model opus");
+    assert_eq!(result, "claude --model opus");
+}
+
+#[test]
+fn resolve_session_command_reads_local_override() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join(".darya.toml"),
+        "[session]\ncommand = \"custom-cmd --flag\"\n",
+    )
+    .unwrap();
+    let result = config::resolve_session_command(dir.path(), "claude");
+    assert_eq!(result, "custom-cmd --flag");
+}
+
+#[test]
+fn resolve_session_command_falls_back_on_invalid_toml() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join(".darya.toml"), "not valid toml {{{{").unwrap();
+    let result = config::resolve_session_command(dir.path(), "global-default");
+    assert_eq!(result, "global-default");
 }
