@@ -1,0 +1,24 @@
+---
+source: tests/snapshots.rs
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━━━━━━┓┏ my-project ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓┏ my-project-feature-1 ━━━━━━━━━━━━━━━━━━━━━┓
+┃▶ 1 ● my-project [main]     ┃┃  No session data                          ┃┃  No session data                          ┃
+┃  2 ● my-project [feature-1]┃┃                                           ┃┃                                           ┃
+┃  3 ○ my-project [feature-2]┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┃                            ┃┃                                           ┃┃                                           ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] terminal                                             main                                              2 running

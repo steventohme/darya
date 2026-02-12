@@ -68,3 +68,17 @@ pub fn alt_key(c: char) -> AppEvent {
         KeyModifiers::ALT,
     ))
 }
+
+/// Create an App with `n` worktrees where the first two worktrees have active sessions.
+pub fn make_app_with_two_sessions(n: usize) -> App {
+    assert!(n >= 2);
+    let mut app = make_app(n);
+    let wt0 = app.worktrees[0].path.clone();
+    let wt1 = app.worktrees[1].path.clone();
+    let s0 = "test-session-1".to_string();
+    let s1 = "test-session-2".to_string();
+    app.session_ids.insert(wt0, s0.clone());
+    app.session_ids.insert(wt1, s1);
+    app.active_session_id = Some(s0);
+    app
+}

@@ -9,7 +9,6 @@ expression: output
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
 ┃                   ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
 ┃                   ┃ Navigation — Terminal                                    ┃                   ┃
 ┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
@@ -17,14 +16,15 @@ expression: output
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃ i, Enter    Enter terminal mode                          ┃                   ┃
 ┃                   ┃ PgUp/PgDn   Scroll output                                ┃                   ┃
+┃                   ┃ Ctrl+\      Split pane                                   ┃                   ┃
+┃                   ┃ Ctrl+W      Close pane                                   ┃                   ┃
 ┃                   ┃ 1-9, 0      Jump to worktree                             ┃                   ┃
-┃                   ┃ Tab         Switch panel                                 ┃                   ┃
+┃                   ┃ Tab         Cycle panes / switch panel                   ┃                   ┃
 ┃                   ┃ Ctrl+P      Fuzzy file finder                            ┃                   ┃
 ┃                   ┃ Ctrl+F      Project search                               ┃                   ┃
 ┃                   ┃ q           Quit                                         ┃                   ┃
 ┃                   ┃ Ctrl+C      Close session / Quit                         ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
-┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃

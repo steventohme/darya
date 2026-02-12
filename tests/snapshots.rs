@@ -5,7 +5,7 @@ use ratatui::Terminal;
 
 use darya::app::{
     App, DiffLine, DiffLineKind, DiffViewState, GitFileStatus, GitStatusCategory,
-    GitStatusEntry, GitStatusState, InputMode, MainView, PanelFocus, SidebarView,
+    GitStatusEntry, GitStatusState, InputMode, MainView, PaneLayout, PanelFocus, SidebarView,
 };
 use darya::config::{KeybindingsConfig, Theme};
 use darya::session::manager::SessionManager;
@@ -253,4 +253,47 @@ fn snapshot_help_overlay_diff_view() {
     let sm = make_session_manager();
     let output = render_to_string(&mut app, &sm, 100, 30);
     insta::assert_snapshot!("help_overlay_diff_view", output);
+}
+
+// ── Split pane snapshots ────────────────────────────────────
+
+#[test]
+fn snapshot_split_two_panes() {
+    let mut app = make_test_app(3);
+    let wt0 = app.worktrees[0].path.clone();
+    let wt1 = app.worktrees[1].path.clone();
+    app.session_ids.insert(wt0, "s0".to_string());
+    app.session_ids.insert(wt1, "s1".to_string());
+    app.active_session_id = Some("s0".to_string());
+    app.main_view = MainView::Terminal;
+    app.panel_focus = PanelFocus::Right;
+    app.pane_layout = Some(PaneLayout {
+        panes: vec!["s0".to_string(), "s1".to_string()],
+        focused: 0,
+    });
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 120, 20);
+    insta::assert_snapshot!("split_two_panes", output);
+}
+
+#[test]
+fn snapshot_split_focused_pane_highlighted() {
+    let mut app = make_test_app(3);
+    let wt0 = app.worktrees[0].path.clone();
+    let wt1 = app.worktrees[1].path.clone();
+    app.session_ids.insert(wt0, "s0".to_string());
+    app.session_ids.insert(wt1, "s1".to_string());
+    app.active_session_id = Some("s0".to_string());
+    app.main_view = MainView::Terminal;
+    app.panel_focus = PanelFocus::Right;
+    // Focus is on second pane
+    app.pane_layout = Some(PaneLayout {
+        panes: vec!["s0".to_string(), "s1".to_string()],
+        focused: 1,
+    });
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 120, 20);
+    insta::assert_snapshot!("split_focused_pane_highlighted", output);
 }

@@ -12,7 +12,7 @@ use darya::app::{
 use darya::config;
 use darya::event::AppEvent;
 
-use helpers::{key, ctrl_key, make_app, make_app_with_session};
+use helpers::{key, ctrl_key, make_app, make_app_with_session, make_app_with_two_sessions};
 
 // ── Navigation ──────────────────────────────────────────────
 
@@ -1003,4 +1003,226 @@ fn resolve_session_command_falls_back_on_invalid_toml() {
     std::fs::write(dir.path().join(".darya.toml"), "not valid toml {{{{").unwrap();
     let result = config::resolve_session_command(dir.path(), "global-default");
     assert_eq!(result, "global-default");
+}
+
+// ── Split Pane Operations ───────────────────────────────────
+
+#[test]
+fn split_add_pane_creates_layout() {
+    let mut app = make_app_with_two_sessions(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    assert!(app.pane_layout.is_none());
+    assert!(app.split_add_pane());
+    let layout = app.pane_layout.as_ref().unwrap();
+    assert_eq!(layout.panes.len(), 2);
+    assert_eq!(layout.focused, 0);
+    // First pane is the active session, second is the next available
+    assert_eq!(layout.panes[0], "test-session-1");
+    assert_eq!(layout.panes[1], "test-session-2");
+}
+
+#[test]
+fn split_add_pane_fails_without_other_sessions() {
+    let mut app = make_app_with_session(2);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    // Only one session exists
+    assert!(!app.split_add_pane());
+    assert!(app.pane_layout.is_none());
+    assert!(app.status_message.as_ref().unwrap().contains("No other running"));
+}
+
+#[test]
+fn split_add_pane_caps_at_three() {
+    let mut app = make_app_with_two_sessions(4);
+    // Add a third session
+    let wt2 = app.worktrees[2].path.clone();
+    app.session_ids.insert(wt2, "test-session-3".to_string());
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    assert!(app.split_add_pane()); // 2 panes
+    assert!(app.split_add_pane()); // 3 panes
+    assert_eq!(app.pane_layout.as_ref().unwrap().panes.len(), 3);
+    assert!(!app.split_add_pane()); // max reached
+    assert!(app.status_message.as_ref().unwrap().contains("Maximum 3"));
+}
+
+#[test]
+fn close_focused_pane_collapses_to_single() {
+    let mut app = make_app_with_two_sessions(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    app.split_add_pane();
+    assert!(app.pane_layout.is_some());
+    app.close_focused_pane();
+    assert!(app.pane_layout.is_none());
+    // active_session_id should be set to remaining session
+    assert!(app.active_session_id.is_some());
+}
+
+#[test]
+fn close_focused_pane_adjusts_focus() {
+    let mut app = make_app_with_two_sessions(4);
+    let wt2 = app.worktrees[2].path.clone();
+    app.session_ids.insert(wt2, "test-session-3".to_string());
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    app.split_add_pane();
+    app.split_add_pane();
+    // Focus the last pane
+    let layout = app.pane_layout.as_mut().unwrap();
+    layout.focused = 2;
+    app.close_focused_pane();
+    let layout = app.pane_layout.as_ref().unwrap();
+    assert_eq!(layout.panes.len(), 2);
+    assert!(layout.focused < layout.panes.len());
+}
+
+#[test]
+fn cycle_pane_focus_wraps() {
+    let mut app = make_app_with_two_sessions(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    app.split_add_pane();
+
+    let layout = app.pane_layout.as_ref().unwrap();
+    assert_eq!(layout.focused, 0);
+    app.cycle_pane_focus_next();
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
+    app.cycle_pane_focus_next();
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0); // wrapped
+
+    app.cycle_pane_focus_prev();
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1); // wrapped back
+    app.cycle_pane_focus_prev();
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
+}
+
+#[test]
+fn focused_session_id_single_vs_split() {
+    let mut app = make_app_with_two_sessions(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    // Single mode: returns active_session_id
+    assert_eq!(app.focused_session_id(), Some(&"test-session-1".to_string()));
+
+    // Split mode: returns pane-focused session
+    app.split_add_pane();
+    assert_eq!(app.focused_session_id(), Some(&"test-session-1".to_string()));
+    app.cycle_pane_focus_next();
+    assert_eq!(app.focused_session_id(), Some(&"test-session-2".to_string()));
+}
+
+#[test]
+fn is_session_visible_split_mode() {
+    let mut app = make_app_with_two_sessions(4);
+    let wt2 = app.worktrees[2].path.clone();
+    app.session_ids.insert(wt2, "test-session-3".to_string());
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    app.split_add_pane();
+
+    assert!(app.is_session_visible("test-session-1"));
+    assert!(app.is_session_visible("test-session-2"));
+    assert!(!app.is_session_visible("test-session-3"));
+}
+
+#[test]
+fn split_preserves_across_view_switch() {
+    let mut app = make_app_with_two_sessions(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    app.split_add_pane();
+    let before = app.pane_layout.clone();
+
+    // Switch to editor and back
+    app.main_view = MainView::Editor;
+    app.main_view = MainView::Terminal;
+    assert_eq!(app.pane_layout.as_ref().unwrap().panes, before.unwrap().panes);
+}
+
+#[test]
+fn split_requires_terminal_view() {
+    let mut app = make_app_with_two_sessions(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Editor;
+    assert!(!app.split_add_pane());
+    assert!(app.status_message.as_ref().unwrap().contains("terminal view"));
+}
+
+#[test]
+fn remove_session_from_panes_collapses() {
+    let mut app = make_app_with_two_sessions(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    app.split_add_pane();
+    assert!(app.pane_layout.is_some());
+
+    app.remove_session_from_panes("test-session-2");
+    // Should collapse to single since only 1 pane remains
+    assert!(app.pane_layout.is_none());
+    assert_eq!(app.active_session_id.as_deref(), Some("test-session-1"));
+}
+
+#[test]
+fn tab_cycles_panes_then_sidebar_in_terminal_nav() {
+    let mut app = make_app_with_two_sessions(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    app.input_mode = InputMode::Navigation;
+    app.split_add_pane();
+
+    // Start at pane 0
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
+    // Tab → pane 1, enters terminal mode (session alive)
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
+    assert_eq!(app.input_mode, InputMode::Terminal);
+
+    // Tab from last pane in terminal mode → exits to nav, goes to left panel
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.panel_focus, PanelFocus::Left);
+    assert_eq!(app.input_mode, InputMode::Navigation);
+
+    // Tab from sidebar → back to right panel, pane focus resets to 0, enters terminal
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.panel_focus, PanelFocus::Right);
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
+    assert_eq!(app.input_mode, InputMode::Terminal);
+}
+
+#[test]
+fn tab_cycles_panes_in_terminal_mode() {
+    let mut app = make_app_with_two_sessions(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    app.input_mode = InputMode::Terminal;
+    app.split_add_pane();
+
+    // Tab in terminal mode with panes: cycle to next pane, stay in terminal mode
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
+    assert_eq!(app.input_mode, InputMode::Terminal);
+
+    // Tab on last pane in terminal mode → exit to nav, left panel
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.panel_focus, PanelFocus::Left);
+    assert_eq!(app.input_mode, InputMode::Navigation);
+}
+
+#[test]
+fn tab_no_panes_behaves_as_before() {
+    // Without split, Tab in terminal mode toggles to left panel
+    let mut app = make_app_with_session(3);
+    app.input_mode = InputMode::Terminal;
+    app.panel_focus = PanelFocus::Right;
+    assert!(app.pane_layout.is_none());
+
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.input_mode, InputMode::Navigation);
+    assert_eq!(app.panel_focus, PanelFocus::Left);
 }

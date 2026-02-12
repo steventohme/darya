@@ -3,8 +3,8 @@ source: tests/snapshots.rs
 expression: output
 ---
  darya
-┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃▶ 1 ● my-project [main]┃┃  Press Enter on a worktree to start a Claude Code session               ┃
+┏ Worktrees ━━━━━━━━━━━━┓┏ my-project ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃▶ 1 ● my-project [main]┃┃  No session data                                                        ┃
 ┃  2 ○ my-project [featu┃┃                                                                         ┃
 ┃  3 ✕ my-project [featu┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
