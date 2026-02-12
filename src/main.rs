@@ -19,6 +19,7 @@ use darya::config::{self, KeybindingsConfig};
 use darya::event::{self, create_event_handler, AppEvent};
 use darya::session::manager::SessionManager;
 use darya::ui;
+use darya::watcher::FileWatcher;
 use darya::worktree::manager::WorktreeManager;
 
 fn find_git_root() -> color_eyre::Result<PathBuf> {
@@ -93,7 +94,15 @@ async fn main() -> color_eyre::Result<()> {
     let (pty_rows, _pty_cols) = pty_size(&terminal);
     app.terminal_height = pty_rows;
     let (mut events, event_tx) = create_event_handler();
-    let mut session_manager = SessionManager::new(event_tx);
+    let watcher_tx = event_tx.clone();
+    let mut session_manager = SessionManager::new(event_tx.clone());
+
+    // Start file watcher on initial worktree path
+    let initial_watch_path = app
+        .selected_worktree_path()
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from("."));
+    let mut file_watcher = FileWatcher::new(initial_watch_path, watcher_tx).ok();
 
     // Main loop
     let result = run_loop(
@@ -102,6 +111,8 @@ async fn main() -> color_eyre::Result<()> {
         &mut events,
         &mut session_manager,
         &wt_manager,
+        &mut file_watcher,
+        &event_tx,
     )
     .await;
 
@@ -119,6 +130,8 @@ async fn run_loop(
     events: &mut event::EventHandler,
     session_manager: &mut SessionManager,
     wt_manager: &WorktreeManager,
+    file_watcher: &mut Option<FileWatcher>,
+    event_tx: &tokio::sync::mpsc::UnboundedSender<AppEvent>,
 ) -> color_eyre::Result<()> {
     while app.running {
         terminal.draw(|frame| ui::draw(frame, app, session_manager))?;
@@ -323,6 +336,20 @@ async fn run_loop(
             }
 
             app.handle_event(&event);
+
+            // Rewatch if the file explorer root changed (worktree switch)
+            let current_root = &app.file_explorer.root;
+            let needs_rewatch = match file_watcher {
+                Some(ref fw) => fw.watched_path() != current_root,
+                None => true,
+            };
+            if needs_rewatch {
+                let new_path = current_root.clone();
+                *file_watcher = match file_watcher.take() {
+                    Some(fw) => fw.rewatch(new_path, event_tx.clone()).ok(),
+                    None => FileWatcher::new(new_path, event_tx.clone()).ok(),
+                };
+            }
         }
     }
     Ok(())

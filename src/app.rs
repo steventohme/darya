@@ -305,6 +305,32 @@ impl EditorViewState {
         })
     }
 
+    /// Reload the file from disk if content has changed.
+    /// Returns Ok(true) if reloaded, Ok(false) if unchanged.
+    pub fn reload(&mut self) -> Result<bool, String> {
+        let content =
+            std::fs::read_to_string(&self.file_path).map_err(|e| format!("Cannot read file: {}", e))?;
+        let current = self.editor_state.lines.to_string();
+        if content == current {
+            return Ok(false);
+        }
+        let lines = EdtuiLines::from(content.as_str());
+        let new_state = EdtuiState::new(lines);
+        // Clamp cursor to new content bounds
+        let max_row = new_state.lines.len().saturating_sub(1);
+        let old_cursor = self.editor_state.cursor;
+        let row = old_cursor.row.min(max_row);
+        let col = new_state
+            .lines
+            .len_col(row)
+            .map(|len| old_cursor.col.min(len))
+            .unwrap_or(0);
+        self.editor_state = new_state;
+        self.editor_state.cursor = Index2::new(row, col);
+        self.modified = false;
+        Ok(true)
+    }
+
     pub fn save(&mut self) -> Result<(), String> {
         let content = self.editor_state.lines.to_string();
         std::fs::write(&self.file_path, content)
@@ -1064,6 +1090,33 @@ impl App {
                     && self.input_mode == InputMode::Terminal
                 {
                     self.input_mode = InputMode::Navigation;
+                }
+            }
+            AppEvent::FileChanged { paths } => {
+                if let Some(ref mut editor) = self.editor {
+                    if paths.iter().any(|p| p == &editor.file_path) {
+                        if editor.modified {
+                            self.status_message = Some(
+                                "File changed on disk (unsaved edits preserved)".to_string(),
+                            );
+                        } else {
+                            match editor.reload() {
+                                Ok(true) => {
+                                    self.status_message = Some("File reloaded".to_string());
+                                }
+                                Ok(false) => {} // identical content, no message
+                                Err(e) => {
+                                    self.status_message = Some(format!("Reload error: {}", e));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            AppEvent::FilesCreatedOrDeleted => {
+                self.file_explorer.refresh();
+                if let Some(ref mut gs) = self.git_status {
+                    gs.refresh();
                 }
             }
             AppEvent::Tick => {

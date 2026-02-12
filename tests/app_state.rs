@@ -1,5 +1,7 @@
 mod helpers;
 
+use std::path::PathBuf;
+
 use crossterm::event::KeyCode;
 
 use darya::app::{
@@ -785,4 +787,86 @@ fn is_edtui_compatible_helper() {
     assert!(!is_edtui_compatible(&KeyCode::Insert));
     assert!(!is_edtui_compatible(&KeyCode::F(13)));
     assert!(!is_edtui_compatible(&KeyCode::CapsLock));
+}
+
+// ── File Watching ────────────────────────────────────────────
+
+fn make_app_with_open_file(content: &str) -> (darya::app::App, PathBuf) {
+    let mut app = make_app(2);
+    let tmp = std::env::temp_dir().join("darya_test_fw.txt");
+    std::fs::write(&tmp, content).unwrap();
+    app.editor = Some(EditorViewState::open(tmp.clone()).unwrap());
+    app.main_view = MainView::Editor;
+    app.panel_focus = PanelFocus::Right;
+    (app, tmp)
+}
+
+#[test]
+fn file_changed_reloads_open_editor() {
+    let (mut app, tmp) = make_app_with_open_file("original\n");
+    // Modify file on disk
+    std::fs::write(&tmp, "changed content\n").unwrap();
+    app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.clone()] });
+    // Editor should have reloaded
+    let editor = app.editor.as_ref().unwrap();
+    assert_eq!(editor.editor_state.lines.to_string(), "changed content\n");
+    assert!(!editor.modified);
+    assert_eq!(app.status_message.as_deref(), Some("File reloaded"));
+}
+
+#[test]
+fn file_changed_does_not_overwrite_modified_editor() {
+    let (mut app, tmp) = make_app_with_open_file("original\n");
+    // Mark editor as modified by user
+    app.editor.as_mut().unwrap().modified = true;
+    // Modify file on disk
+    std::fs::write(&tmp, "changed content\n").unwrap();
+    app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.clone()] });
+    // Editor should still have original content
+    let editor = app.editor.as_ref().unwrap();
+    assert_eq!(editor.editor_state.lines.to_string(), "original\n");
+    assert!(editor.modified);
+    assert!(app.status_message.as_deref().unwrap().contains("unsaved edits preserved"));
+}
+
+#[test]
+fn file_changed_ignores_unrelated_path() {
+    let (mut app, _tmp) = make_app_with_open_file("original\n");
+    let unrelated = PathBuf::from("/tmp/some_other_file.txt");
+    app.handle_event(&AppEvent::FileChanged { paths: vec![unrelated] });
+    // No status message, content unchanged
+    assert!(app.status_message.is_none());
+    let editor = app.editor.as_ref().unwrap();
+    assert_eq!(editor.editor_state.lines.to_string(), "original\n");
+}
+
+#[test]
+fn file_changed_without_editor_is_noop() {
+    let mut app = make_app(2);
+    assert!(app.editor.is_none());
+    app.handle_event(&AppEvent::FileChanged { paths: vec![PathBuf::from("/tmp/foo.txt")] });
+    assert!(app.status_message.is_none());
+}
+
+#[test]
+fn files_created_or_deleted_refreshes_explorer() {
+    let tmp_dir = tempfile::tempdir().unwrap();
+    let mut app = make_app(2);
+    app.file_explorer.set_root(tmp_dir.path().to_path_buf());
+    let initial_count = app.file_explorer.entries.len();
+    // Create a file
+    std::fs::write(tmp_dir.path().join("new_file.txt"), "hello").unwrap();
+    app.handle_event(&AppEvent::FilesCreatedOrDeleted);
+    // Explorer should now include the new file
+    assert!(app.file_explorer.entries.len() > initial_count);
+    assert!(app.file_explorer.entries.iter().any(|e| e.name == "new_file.txt"));
+}
+
+#[test]
+fn file_changed_identical_content_no_message() {
+    let (mut app, tmp) = make_app_with_open_file("same content\n");
+    // File on disk is identical to editor content — no rewrite needed, just send event
+    app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.clone()] });
+    // No status message when content is identical
+    assert!(app.status_message.is_none());
 }

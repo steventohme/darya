@@ -1,5 +1,6 @@
 use crossterm::event::{Event, EventStream, KeyEvent};
 use futures::StreamExt;
+use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -13,6 +14,8 @@ pub enum AppEvent {
     PtyOutput { session_id: String },
     SessionBell { session_id: String },
     SessionExited { session_id: String },
+    FileChanged { paths: Vec<PathBuf> },
+    FilesCreatedOrDeleted,
     Tick,
 }
 
