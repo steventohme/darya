@@ -122,6 +122,8 @@ struct KeybindingsToml {
     git_status: Option<String>,
     fuzzy_finder: Option<String>,
     project_search: Option<String>,
+    split_pane: Option<String>,
+    close_pane: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -134,6 +136,8 @@ pub struct KeybindingsConfig {
     pub git_status: (KeyModifiers, KeyCode),
     pub fuzzy_finder: (KeyModifiers, KeyCode),
     pub project_search: (KeyModifiers, KeyCode),
+    pub split_pane: (KeyModifiers, KeyCode),
+    pub close_pane: (KeyModifiers, KeyCode),
 }
 
 impl Default for KeybindingsConfig {
@@ -147,6 +151,8 @@ impl Default for KeybindingsConfig {
             git_status: (KeyModifiers::CONTROL, KeyCode::Char('6')),
             fuzzy_finder: (KeyModifiers::CONTROL, KeyCode::Char('p')),
             project_search: (KeyModifiers::CONTROL, KeyCode::Char('f')),
+            split_pane: (KeyModifiers::CONTROL, KeyCode::Char('\\')),
+            close_pane: (KeyModifiers::CONTROL, KeyCode::Char('w')),
         }
     }
 }
@@ -341,6 +347,8 @@ pub fn load_config() -> AppConfig {
         apply_kb!(git_status);
         apply_kb!(fuzzy_finder);
         apply_kb!(project_search);
+        apply_kb!(split_pane);
+        apply_kb!(close_pane);
     }
 
     if let Some(ref s) = config.session {

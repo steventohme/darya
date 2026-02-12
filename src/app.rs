@@ -8,6 +8,13 @@ use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Index2, L
 
 const IGNORED_NAMES: &[&str] = &["target", "node_modules", "__pycache__"];
 const MAX_FILE_SIZE: u64 = 1_048_576; // 1MB
+const MAX_PANES: usize = 3;
+
+#[derive(Debug, Clone)]
+pub struct PaneLayout {
+    pub panes: Vec<String>,  // session IDs, left to right, max 3
+    pub focused: usize,       // index into panes — input goes here
+}
 
 use crate::config::{KeybindingsConfig, Theme};
 use crate::event::AppEvent;
@@ -982,6 +989,7 @@ pub struct App {
     pub diff_view: Option<DiffViewState>,
     pub activity: ActivityAnimation,
     pub session_command: String,
+    pub pane_layout: Option<PaneLayout>,
 }
 
 impl App {
@@ -1018,6 +1026,7 @@ impl App {
             diff_view: None,
             activity: ActivityAnimation::new(),
             session_command,
+            pane_layout: None,
         }
     }
 
@@ -1051,7 +1060,13 @@ impl App {
 
     pub fn toggle_focus(&mut self) {
         self.panel_focus = match self.panel_focus {
-            PanelFocus::Left => PanelFocus::Right,
+            PanelFocus::Left => {
+                // Reset pane focus to first pane when coming from sidebar
+                if let Some(ref mut layout) = self.pane_layout {
+                    layout.focused = 0;
+                }
+                PanelFocus::Right
+            }
             PanelFocus::Right => PanelFocus::Left,
         };
     }
@@ -1059,9 +1074,9 @@ impl App {
     /// If we just focused the main panel showing Terminal with an active non-exited session, enter terminal mode.
     fn enter_terminal_if_focused(&mut self) {
         if self.panel_focus == PanelFocus::Right && self.main_view == MainView::Terminal {
-            if let Some(ref id) = self.active_session_id {
-                self.attention_sessions.remove(id);
-                if !self.exited_sessions.contains(id) {
+            if let Some(id) = self.focused_session_id().cloned() {
+                self.attention_sessions.remove(&id);
+                if !self.exited_sessions.contains(&id) {
                     self.input_mode = InputMode::Terminal;
                     self.reset_scroll();
                 }
@@ -1381,12 +1396,23 @@ impl App {
         match key.code {
             KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
-                self.toggle_focus();
+                if let Some(ref layout) = self.pane_layout {
+                    if layout.focused < layout.panes.len() - 1 {
+                        // Not last pane: cycle to next, enter terminal if session alive
+                        self.cycle_pane_focus_next();
+                        self.enter_terminal_if_focused();
+                    } else {
+                        // Last pane: go to left panel
+                        self.panel_focus = PanelFocus::Left;
+                    }
+                } else {
+                    self.toggle_focus();
+                }
             }
             KeyCode::Char('i') | KeyCode::Enter => {
-                if let Some(ref id) = self.active_session_id {
-                    self.attention_sessions.remove(id);
-                    if !self.exited_sessions.contains(id) {
+                if let Some(id) = self.focused_session_id().cloned() {
+                    self.attention_sessions.remove(&id);
+                    if !self.exited_sessions.contains(&id) {
                         self.input_mode = InputMode::Terminal;
                         self.reset_scroll();
                     }
@@ -1410,8 +1436,19 @@ impl App {
 
     fn handle_terminal_key(&mut self, key: KeyEvent) {
         if key.code == KeyCode::Tab {
-            self.input_mode = InputMode::Navigation;
-            self.toggle_focus();
+            if let Some(ref layout) = self.pane_layout {
+                if layout.focused < layout.panes.len() - 1 {
+                    // Not last pane: cycle to next, stay in Terminal mode
+                    self.cycle_pane_focus_next();
+                } else {
+                    // Last pane: exit to nav, go to left panel
+                    self.input_mode = InputMode::Navigation;
+                    self.panel_focus = PanelFocus::Left;
+                }
+            } else {
+                self.input_mode = InputMode::Navigation;
+                self.toggle_focus();
+            }
         }
         // All other keys get forwarded to PTY (handled in main loop)
     }
@@ -1664,35 +1701,167 @@ impl App {
         }
     }
 
+    /// Returns the session ID that should receive input: pane focus or active_session_id.
+    pub fn focused_session_id(&self) -> Option<&String> {
+        if let Some(ref layout) = self.pane_layout {
+            layout.panes.get(layout.focused)
+        } else {
+            self.active_session_id.as_ref()
+        }
+    }
+
+    /// Whether a session is currently visible on screen.
+    pub fn is_session_visible(&self, session_id: &str) -> bool {
+        if let Some(ref layout) = self.pane_layout {
+            layout.panes.iter().any(|id| id == session_id)
+        } else {
+            self.active_session_id.as_deref() == Some(session_id)
+        }
+    }
+
+    /// Reverse lookup: find the worktree name for a given session ID.
+    pub fn worktree_name_for_session(&self, session_id: &str) -> Option<&str> {
+        for (path, sid) in &self.session_ids {
+            if sid == session_id {
+                for wt in &self.worktrees {
+                    if &wt.path == path {
+                        return Some(&wt.name);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Add a pane showing the next non-visible running session.
+    /// Creates PaneLayout if None. Max 3. Returns false if no sessions available.
+    pub fn split_add_pane(&mut self) -> bool {
+        if self.main_view != MainView::Terminal {
+            self.status_message = Some("Split only works in terminal view".to_string());
+            return false;
+        }
+
+        let current_panes: Vec<String> = if let Some(ref layout) = self.pane_layout {
+            if layout.panes.len() >= MAX_PANES {
+                self.status_message = Some(format!("Maximum {} panes", MAX_PANES));
+                return false;
+            }
+            layout.panes.clone()
+        } else if let Some(ref id) = self.active_session_id {
+            vec![id.clone()]
+        } else {
+            self.status_message = Some("No active session to split".to_string());
+            return false;
+        };
+
+        // Find next non-visible running session in worktree order
+        let next_session = self.worktrees.iter()
+            .filter_map(|wt| self.session_ids.get(&wt.path))
+            .find(|sid| !current_panes.contains(sid) && !self.exited_sessions.contains(sid.as_str()))
+            .cloned();
+
+        let Some(next_id) = next_session else {
+            self.status_message = Some("No other running sessions to show".to_string());
+            return false;
+        };
+
+        let mut panes = current_panes;
+        panes.push(next_id);
+        let focused = if let Some(ref layout) = self.pane_layout {
+            layout.focused
+        } else {
+            0
+        };
+        self.pane_layout = Some(PaneLayout { panes, focused });
+        true
+    }
+
+    /// Remove the focused pane. Collapses to single mode if <=1 remains.
+    pub fn close_focused_pane(&mut self) {
+        let Some(ref mut layout) = self.pane_layout else { return };
+        if layout.panes.len() <= 1 {
+            self.pane_layout = None;
+            return;
+        }
+        layout.panes.remove(layout.focused);
+        if layout.focused >= layout.panes.len() {
+            layout.focused = layout.panes.len() - 1;
+        }
+        if layout.panes.len() <= 1 {
+            // Switch active_session_id to the remaining pane
+            if let Some(remaining) = layout.panes.first().cloned() {
+                self.active_session_id = Some(remaining);
+            }
+            self.pane_layout = None;
+        }
+    }
+
+    pub fn cycle_pane_focus_next(&mut self) {
+        if let Some(ref mut layout) = self.pane_layout {
+            layout.focused = (layout.focused + 1) % layout.panes.len();
+        }
+    }
+
+    pub fn cycle_pane_focus_prev(&mut self) {
+        if let Some(ref mut layout) = self.pane_layout {
+            layout.focused = if layout.focused == 0 {
+                layout.panes.len() - 1
+            } else {
+                layout.focused - 1
+            };
+        }
+    }
+
+    /// Remove a session from the pane layout if present. Collapses if needed.
+    pub fn remove_session_from_panes(&mut self, session_id: &str) {
+        let Some(ref mut layout) = self.pane_layout else { return };
+        if let Some(pos) = layout.panes.iter().position(|id| id == session_id) {
+            layout.panes.remove(pos);
+            if layout.focused >= layout.panes.len() && layout.focused > 0 {
+                layout.focused = layout.panes.len() - 1;
+            }
+        }
+        if layout.panes.len() <= 1 {
+            if let Some(remaining) = layout.panes.first().cloned() {
+                self.active_session_id = Some(remaining);
+            }
+            self.pane_layout = None;
+        }
+    }
+
     pub fn scroll_up(&mut self, lines: usize) {
-        if let Some(ref id) = self.active_session_id {
-            let offset = self.scroll_offsets.entry(id.clone()).or_insert(0);
+        if let Some(id) = self.focused_session_id().cloned() {
+            let offset = self.scroll_offsets.entry(id).or_insert(0);
             *offset = offset.saturating_add(lines).min(1000);
         }
     }
 
     pub fn scroll_down(&mut self, lines: usize) {
-        if let Some(ref id) = self.active_session_id {
+        if let Some(id) = self.focused_session_id().cloned() {
             let offset = self.scroll_offsets.entry(id.clone()).or_insert(0);
             *offset = offset.saturating_sub(lines);
             if *offset == 0 {
-                self.scroll_offsets.remove(id);
+                self.scroll_offsets.remove(&id);
             }
         }
     }
 
     pub fn reset_scroll(&mut self) {
-        if let Some(ref id) = self.active_session_id {
-            self.scroll_offsets.remove(id);
+        if let Some(id) = self.focused_session_id().cloned() {
+            self.scroll_offsets.remove(&id);
         }
     }
 
     pub fn active_scroll_offset(&self) -> usize {
-        self.active_session_id
-            .as_ref()
+        self.focused_session_id()
             .and_then(|id| self.scroll_offsets.get(id))
             .copied()
             .unwrap_or(0)
+    }
+
+    /// Get scroll offset for a specific session (used in multi-pane rendering).
+    pub fn scroll_offset_for(&self, session_id: &str) -> usize {
+        self.scroll_offsets.get(session_id).copied().unwrap_or(0)
     }
 
     pub fn selected_worktree_path(&self) -> Option<&PathBuf> {

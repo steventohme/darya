@@ -61,4 +61,13 @@ impl SessionManager {
             let _ = session.resize(rows, cols);
         }
     }
+
+    /// Resize all sessions except those in the exclusion list.
+    pub fn resize_all_except(&mut self, exclude: &[String], rows: u16, cols: u16) {
+        for (id, session) in self.sessions.iter_mut() {
+            if !exclude.contains(id) {
+                let _ = session.resize(rows, cols);
+            }
+        }
+    }
 }
