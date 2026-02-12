@@ -3,26 +3,26 @@ source: tests/snapshots.rs
 expression: output
 ---
  darya
-┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃▶ 1 ○ my-project [main]┃┃  Press Enter on a worktree to start a Claude Code session               ┃
+┏ Worktrees ━━━━━━━━━━━━┓┏ Diff ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃▶ 1 ○ my-project [main]┃┃  Select a file from Git Status to view diff                             ┃
 ┃  2 ○ my-project [featu┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                   ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
-┃                   ┃ Navigation — Terminal                                    ┃                   ┃
+┃                   ┃ Navigation — Diff View                                   ┃                   ┃
 ┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
 ┃                   ┃ Ctrl+1: Worktrees  Ctrl+2: Terminal  Ctrl+3: Files  Ctrl+┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
-┃                   ┃ i, Enter    Enter terminal mode                          ┃                   ┃
-┃                   ┃ PgUp/PgDn   Scroll output                                ┃                   ┃
+┃                   ┃ j/k, ↑/↓    Scroll line                                  ┃                   ┃
+┃                   ┃ PgUp/PgDn   Scroll page                                  ┃                   ┃
+┃                   ┃ Esc         Back to terminal                             ┃                   ┃
 ┃                   ┃ 1-9, 0      Jump to worktree                             ┃                   ┃
 ┃                   ┃ Tab         Switch panel                                 ┃                   ┃
 ┃                   ┃ Ctrl+P      Fuzzy file finder                            ┃                   ┃
 ┃                   ┃ Ctrl+F      Project search                               ┃                   ┃
 ┃                   ┃ q           Quit                                         ┃                   ┃
-┃                   ┃ Ctrl+C      Close session / Quit                         ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
@@ -31,4 +31,4 @@ expression: output
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- [NAV] [terminal]  q:quit  Tab:switch  Ctrl+1..6:view  Ctrl+P:find  Ctrl+F:search  ?:help
+ [NAV] [diff]  q:quit  Tab:switch  Ctrl+1..6:view  Ctrl+P:find  Ctrl+F:search  ?:help

@@ -3,7 +3,10 @@ mod helpers;
 use crossterm::event::{KeyCode, KeyModifiers};
 use tempfile::TempDir;
 
-use darya::app::{FileExplorerState, SearchViewState};
+use darya::app::{
+    parse_diff_lines, run_git_status, DiffLineKind, DiffViewState, FileExplorerState,
+    GitFileStatus, GitStatusCategory, GitStatusState, SearchViewState,
+};
 use darya::config::{parse_keybinding, KeybindingsConfig};
 
 // ── FileExplorerState ───────────────────────────────────────
@@ -347,4 +350,188 @@ fn keybindings_matches_superset_modifiers() {
         KeyModifiers::CONTROL | KeyModifiers::SHIFT,
         KeyCode::Char('1')
     ));
+}
+
+// ── GitStatusState ─────────────────────────────────────────
+
+fn make_git_repo() -> TempDir {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    // Initialize a git repo
+    std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(root)
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(root)
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .args(["config", "user.name", "Test"])
+        .current_dir(root)
+        .output()
+        .unwrap();
+    // Create initial commit
+    std::fs::write(root.join("initial.txt"), "hello").unwrap();
+    std::process::Command::new("git")
+        .args(["add", "."])
+        .current_dir(root)
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .args(["commit", "-m", "initial"])
+        .current_dir(root)
+        .output()
+        .unwrap();
+    dir
+}
+
+#[test]
+fn git_status_modified_file() {
+    let dir = make_git_repo();
+    let root = dir.path();
+    // Modify the tracked file
+    std::fs::write(root.join("initial.txt"), "modified").unwrap();
+    let entries = run_git_status(root).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].category, GitStatusCategory::Unstaged);
+    assert_eq!(entries[0].status, GitFileStatus::Modified);
+    assert_eq!(entries[0].path, "initial.txt");
+}
+
+#[test]
+fn git_status_untracked_file() {
+    let dir = make_git_repo();
+    let root = dir.path();
+    std::fs::write(root.join("new.txt"), "new file").unwrap();
+    let entries = run_git_status(root).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].category, GitStatusCategory::Untracked);
+    assert_eq!(entries[0].status, GitFileStatus::Untracked);
+    assert_eq!(entries[0].path, "new.txt");
+}
+
+#[test]
+fn git_status_staged_added() {
+    let dir = make_git_repo();
+    let root = dir.path();
+    std::fs::write(root.join("added.txt"), "new content").unwrap();
+    std::process::Command::new("git")
+        .args(["add", "added.txt"])
+        .current_dir(root)
+        .output()
+        .unwrap();
+    let entries = run_git_status(root).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].category, GitStatusCategory::Staged);
+    assert_eq!(entries[0].status, GitFileStatus::Added);
+}
+
+#[test]
+fn git_status_mm_produces_two_entries() {
+    let dir = make_git_repo();
+    let root = dir.path();
+    // Modify, stage, then modify again => MM
+    std::fs::write(root.join("initial.txt"), "staged change").unwrap();
+    std::process::Command::new("git")
+        .args(["add", "initial.txt"])
+        .current_dir(root)
+        .output()
+        .unwrap();
+    std::fs::write(root.join("initial.txt"), "unstaged change").unwrap();
+    let entries = run_git_status(root).unwrap();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].category, GitStatusCategory::Staged);
+    assert_eq!(entries[1].category, GitStatusCategory::Unstaged);
+}
+
+#[test]
+fn git_status_deleted_file() {
+    let dir = make_git_repo();
+    let root = dir.path();
+    std::fs::remove_file(root.join("initial.txt")).unwrap();
+    let entries = run_git_status(root).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].status, GitFileStatus::Deleted);
+}
+
+#[test]
+fn git_status_empty_repo_no_changes() {
+    let dir = make_git_repo();
+    let entries = run_git_status(dir.path()).unwrap();
+    assert!(entries.is_empty());
+}
+
+#[test]
+fn git_status_state_move_up_down_wrapping() {
+    let dir = make_git_repo();
+    let root = dir.path();
+    std::fs::write(root.join("a.txt"), "a").unwrap();
+    std::fs::write(root.join("b.txt"), "b").unwrap();
+    std::fs::write(root.join("c.txt"), "c").unwrap();
+    let mut state = GitStatusState::new(root.to_path_buf());
+    assert_eq!(state.entries.len(), 3);
+    assert_eq!(state.selected, 0);
+    state.move_down();
+    assert_eq!(state.selected, 1);
+    state.move_down();
+    assert_eq!(state.selected, 2);
+    state.move_down();
+    assert_eq!(state.selected, 0); // wraps
+    state.move_up();
+    assert_eq!(state.selected, 2); // wraps
+}
+
+#[test]
+fn git_status_state_selected_entry() {
+    let dir = make_git_repo();
+    let root = dir.path();
+    std::fs::write(root.join("a.txt"), "a").unwrap();
+    std::fs::write(root.join("b.txt"), "b").unwrap();
+    let mut state = GitStatusState::new(root.to_path_buf());
+    state.move_down();
+    let entry = state.selected_entry().unwrap();
+    assert_eq!(entry.path, "b.txt");
+}
+
+// ── DiffViewState / parse_diff_lines ────────────────────────
+
+#[test]
+fn parse_diff_lines_classifies_additions() {
+    let diff = "+added line\n context\n-removed line\n";
+    let lines = parse_diff_lines(diff);
+    assert_eq!(lines[0].kind, DiffLineKind::Addition);
+    assert_eq!(lines[1].kind, DiffLineKind::Context);
+    assert_eq!(lines[2].kind, DiffLineKind::Deletion);
+}
+
+#[test]
+fn parse_diff_lines_classifies_headers() {
+    let diff = "diff --git a/foo b/foo\nindex abc..def 100644\n--- a/foo\n+++ b/foo\n@@ -1,3 +1,4 @@\n context\n";
+    let lines = parse_diff_lines(diff);
+    assert_eq!(lines[0].kind, DiffLineKind::Header); // diff --git
+    assert_eq!(lines[1].kind, DiffLineKind::Header); // index
+    assert_eq!(lines[2].kind, DiffLineKind::Header); // ---
+    assert_eq!(lines[3].kind, DiffLineKind::Header); // +++
+    assert_eq!(lines[4].kind, DiffLineKind::Header); // @@
+    assert_eq!(lines[5].kind, DiffLineKind::Context);
+}
+
+#[test]
+fn diff_view_scroll_up_down_clamped() {
+    let dir = make_git_repo();
+    let root = dir.path();
+    // Create a file with enough content to generate many diff lines
+    std::fs::write(root.join("big.txt"), "line\n".repeat(100)).unwrap();
+    let mut dv = DiffViewState::new("big.txt", root, GitStatusCategory::Untracked);
+    dv.visible_height = 10;
+    assert_eq!(dv.scroll_offset, 0);
+    dv.scroll_down(5);
+    assert_eq!(dv.scroll_offset, 5);
+    dv.scroll_up(3);
+    assert_eq!(dv.scroll_offset, 2);
+    dv.scroll_up(100);
+    assert_eq!(dv.scroll_offset, 0); // clamped at 0
 }

@@ -119,6 +119,7 @@ struct KeybindingsToml {
     files: Option<String>,
     editor: Option<String>,
     search: Option<String>,
+    git_status: Option<String>,
     fuzzy_finder: Option<String>,
     project_search: Option<String>,
 }
@@ -130,6 +131,7 @@ pub struct KeybindingsConfig {
     pub files: (KeyModifiers, KeyCode),
     pub editor: (KeyModifiers, KeyCode),
     pub search: (KeyModifiers, KeyCode),
+    pub git_status: (KeyModifiers, KeyCode),
     pub fuzzy_finder: (KeyModifiers, KeyCode),
     pub project_search: (KeyModifiers, KeyCode),
 }
@@ -142,6 +144,7 @@ impl Default for KeybindingsConfig {
             files: (KeyModifiers::CONTROL, KeyCode::Char('3')),
             editor: (KeyModifiers::CONTROL, KeyCode::Char('4')),
             search: (KeyModifiers::CONTROL, KeyCode::Char('5')),
+            git_status: (KeyModifiers::CONTROL, KeyCode::Char('6')),
             fuzzy_finder: (KeyModifiers::CONTROL, KeyCode::Char('p')),
             project_search: (KeyModifiers::CONTROL, KeyCode::Char('f')),
         }
@@ -327,6 +330,7 @@ pub fn load_config() -> AppConfig {
         apply_kb!(files);
         apply_kb!(editor);
         apply_kb!(search);
+        apply_kb!(git_status);
         apply_kb!(fuzzy_finder);
         apply_kb!(project_search);
     }

@@ -2,7 +2,10 @@ mod helpers;
 
 use crossterm::event::KeyCode;
 
-use darya::app::{InputMode, MainView, PanelFocus, Prompt, SidebarView};
+use darya::app::{
+    GitStatusCategory, GitStatusEntry, GitStatusState, GitFileStatus,
+    InputMode, MainView, PanelFocus, Prompt, SidebarView,
+};
 use darya::event::AppEvent;
 
 use helpers::{key, ctrl_key, make_app, make_app_with_session};
@@ -473,4 +476,112 @@ fn wants_delete_worktree_false_on_n() {
     });
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('n'), crossterm::event::KeyModifiers::NONE);
     assert!(!app.wants_delete_worktree(&key_event));
+}
+
+// ── Git Status view switching ───────────────────────────────
+
+#[test]
+fn ctrl_6_sets_sidebar_git_status() {
+    let mut app = make_app(3);
+    app.sidebar_view = SidebarView::Worktrees;
+    app.panel_focus = PanelFocus::Right;
+    app.handle_event(&ctrl_key('6'));
+    assert_eq!(app.sidebar_view, SidebarView::GitStatus);
+    assert_eq!(app.panel_focus, PanelFocus::Left);
+}
+
+fn make_app_with_git_status(n: usize) -> darya::app::App {
+    let mut app = make_app(n);
+    // Set up a mock git status state with test entries
+    app.git_status = Some(GitStatusState {
+        entries: vec![
+            GitStatusEntry {
+                category: GitStatusCategory::Staged,
+                status: GitFileStatus::Modified,
+                path: "staged.txt".to_string(),
+                orig_path: None,
+            },
+            GitStatusEntry {
+                category: GitStatusCategory::Unstaged,
+                status: GitFileStatus::Modified,
+                path: "unstaged.txt".to_string(),
+                orig_path: None,
+            },
+            GitStatusEntry {
+                category: GitStatusCategory::Untracked,
+                status: GitFileStatus::Untracked,
+                path: "new.txt".to_string(),
+                orig_path: None,
+            },
+        ],
+        selected: 0,
+        error: None,
+        worktree_path: app.worktrees[0].path.clone(),
+    });
+    app.sidebar_view = SidebarView::GitStatus;
+    app.panel_focus = PanelFocus::Left;
+    app
+}
+
+#[test]
+fn enter_on_git_status_opens_diff_in_main() {
+    let mut app = make_app_with_git_status(3);
+    app.handle_event(&key(KeyCode::Enter));
+    assert_eq!(app.main_view, MainView::DiffView);
+    assert!(app.diff_view.is_some());
+}
+
+#[test]
+fn d_on_git_status_opens_diff() {
+    let mut app = make_app_with_git_status(3);
+    app.handle_event(&key(KeyCode::Char('d')));
+    assert_eq!(app.main_view, MainView::DiffView);
+    assert!(app.diff_view.is_some());
+}
+
+#[test]
+fn esc_in_diff_view_returns_to_terminal() {
+    let mut app = make_app_with_git_status(3);
+    // Open diff first
+    app.handle_event(&key(KeyCode::Enter));
+    assert_eq!(app.main_view, MainView::DiffView);
+    // Switch focus to right panel to be in diff view
+    app.panel_focus = PanelFocus::Right;
+    app.handle_event(&key(KeyCode::Esc));
+    assert_eq!(app.main_view, MainView::Terminal);
+}
+
+#[test]
+fn tab_toggles_focus_from_git_status() {
+    let mut app = make_app_with_git_status(3);
+    assert_eq!(app.panel_focus, PanelFocus::Left);
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.panel_focus, PanelFocus::Right);
+}
+
+#[test]
+fn number_keys_jump_worktree_from_git_status() {
+    let mut app = make_app_with_git_status(3);
+    app.handle_event(&key(KeyCode::Char('2')));
+    assert_eq!(app.selected_worktree, 1);
+    // git_status cleared on worktree switch
+    assert!(app.git_status.is_none());
+}
+
+#[test]
+fn q_quits_from_git_status() {
+    let mut app = make_app_with_git_status(3);
+    assert!(app.running);
+    app.handle_event(&key(KeyCode::Char('q')));
+    assert!(!app.running);
+}
+
+#[test]
+fn q_quits_from_diff_view() {
+    let mut app = make_app_with_git_status(3);
+    app.handle_event(&key(KeyCode::Enter)); // open diff
+    app.panel_focus = PanelFocus::Right;
+    assert!(app.running);
+    app.handle_event(&key(KeyCode::Char('q')));
+    assert!(!app.running);
 }

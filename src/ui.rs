@@ -44,6 +44,8 @@ fn render_view(
         ViewKind::FileExplorer => widgets::file_explorer::render(frame, area, app, is_focused),
         ViewKind::Editor => widgets::editor::render(frame, area, app, is_focused),
         ViewKind::Search => widgets::search_results::render(frame, area, app, is_focused),
+        ViewKind::GitStatus => widgets::git_status::render(frame, area, app, is_focused),
+        ViewKind::DiffView => widgets::diff_view::render(frame, area, app, is_focused),
     }
 }
 
@@ -103,6 +105,8 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ViewKind::FileExplorer => "files",
             ViewKind::Editor => "editor",
             ViewKind::Search => "search",
+            ViewKind::GitStatus => "git",
+            ViewKind::DiffView => "diff",
         };
         let has_exited_selected = app
             .selected_worktree_path()
@@ -116,7 +120,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ""
         };
         format!(
-            " [{}] [{}]  q:quit  Tab:switch  Ctrl+1..5:view  Ctrl+P:find  Ctrl+F:search  ?:help{}{}",
+            " [{}] [{}]  q:quit  Tab:switch  Ctrl+1..6:view  Ctrl+P:find  Ctrl+F:search  ?:help{}{}",
             mode_str, view_str, restart_hint, scroll_hint
         )
     };

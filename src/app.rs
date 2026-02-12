@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Index2, Lines as EdtuiLines};
@@ -31,6 +32,8 @@ pub enum ViewKind {
     FileExplorer,
     Editor,
     Search,
+    GitStatus,
+    DiffView,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,6 +41,7 @@ pub enum SidebarView {
     Worktrees,
     FileExplorer,
     Search,
+    GitStatus,
 }
 
 impl SidebarView {
@@ -46,6 +50,7 @@ impl SidebarView {
             SidebarView::Worktrees => ViewKind::Worktrees,
             SidebarView::FileExplorer => ViewKind::FileExplorer,
             SidebarView::Search => ViewKind::Search,
+            SidebarView::GitStatus => ViewKind::GitStatus,
         }
     }
 }
@@ -54,6 +59,7 @@ impl SidebarView {
 pub enum MainView {
     Terminal,
     Editor,
+    DiffView,
 }
 
 impl MainView {
@@ -61,6 +67,7 @@ impl MainView {
         match self {
             MainView::Terminal => ViewKind::Terminal,
             MainView::Editor => ViewKind::Editor,
+            MainView::DiffView => ViewKind::DiffView,
         }
     }
 }
@@ -496,6 +503,275 @@ fn run_ripgrep(query: &str, root: &Path) -> Result<Vec<SearchResult>, String> {
     Ok(results)
 }
 
+// ── Git Status Types ────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GitFileStatus {
+    Added,
+    Modified,
+    Deleted,
+    Renamed,
+    Untracked,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GitStatusCategory {
+    Staged,
+    Unstaged,
+    Untracked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitStatusEntry {
+    pub category: GitStatusCategory,
+    pub status: GitFileStatus,
+    pub path: String,
+    pub orig_path: Option<String>,
+}
+
+pub struct GitStatusState {
+    pub entries: Vec<GitStatusEntry>,
+    pub selected: usize,
+    pub error: Option<String>,
+    pub worktree_path: PathBuf,
+}
+
+impl GitStatusState {
+    pub fn new(worktree_path: PathBuf) -> Self {
+        let (entries, error) = match run_git_status(&worktree_path) {
+            Ok(entries) => (entries, None),
+            Err(e) => (Vec::new(), Some(e)),
+        };
+        Self { entries, selected: 0, error, worktree_path }
+    }
+
+    pub fn refresh(&mut self) {
+        match run_git_status(&self.worktree_path) {
+            Ok(entries) => {
+                self.entries = entries;
+                self.error = None;
+                if !self.entries.is_empty() && self.selected >= self.entries.len() {
+                    self.selected = self.entries.len() - 1;
+                }
+            }
+            Err(e) => {
+                self.entries.clear();
+                self.error = Some(e);
+                self.selected = 0;
+            }
+        }
+    }
+
+    pub fn move_up(&mut self) {
+        if !self.entries.is_empty() {
+            self.selected = if self.selected == 0 {
+                self.entries.len() - 1
+            } else {
+                self.selected - 1
+            };
+        }
+    }
+
+    pub fn move_down(&mut self) {
+        if !self.entries.is_empty() {
+            self.selected = (self.selected + 1) % self.entries.len();
+        }
+    }
+
+    pub fn selected_entry(&self) -> Option<&GitStatusEntry> {
+        self.entries.get(self.selected)
+    }
+}
+
+pub fn run_git_status(root: &Path) -> Result<Vec<GitStatusEntry>, String> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain=v1"])
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("Failed to run git: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git status error: {}", stderr.trim()));
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut staged = Vec::new();
+    let mut unstaged = Vec::new();
+    let mut untracked = Vec::new();
+
+    for line in text.lines() {
+        if line.len() < 3 {
+            continue;
+        }
+        let index_char = line.as_bytes()[0] as char;
+        let worktree_char = line.as_bytes()[1] as char;
+        let file_part = &line[3..];
+
+        // Parse rename: "old -> new"
+        let (path, orig_path) = if file_part.contains(" -> ") {
+            let mut parts = file_part.splitn(2, " -> ");
+            let orig = parts.next().unwrap_or("").to_string();
+            let new = parts.next().unwrap_or("").to_string();
+            (new, Some(orig))
+        } else {
+            (file_part.to_string(), None)
+        };
+
+        // Untracked
+        if index_char == '?' && worktree_char == '?' {
+            untracked.push(GitStatusEntry {
+                category: GitStatusCategory::Untracked,
+                status: GitFileStatus::Untracked,
+                path,
+                orig_path,
+            });
+            continue;
+        }
+
+        // Staged changes (index column)
+        if index_char != ' ' && index_char != '?' {
+            let status = match index_char {
+                'A' => GitFileStatus::Added,
+                'M' => GitFileStatus::Modified,
+                'D' => GitFileStatus::Deleted,
+                'R' => GitFileStatus::Renamed,
+                _ => GitFileStatus::Modified,
+            };
+            staged.push(GitStatusEntry {
+                category: GitStatusCategory::Staged,
+                status,
+                path: path.clone(),
+                orig_path: orig_path.clone(),
+            });
+        }
+
+        // Unstaged changes (worktree column)
+        if worktree_char != ' ' && worktree_char != '?' {
+            let status = match worktree_char {
+                'M' => GitFileStatus::Modified,
+                'D' => GitFileStatus::Deleted,
+                _ => GitFileStatus::Modified,
+            };
+            unstaged.push(GitStatusEntry {
+                category: GitStatusCategory::Unstaged,
+                status,
+                path: path.clone(),
+                orig_path: orig_path.clone(),
+            });
+        }
+    }
+
+    let mut entries = Vec::new();
+    entries.extend(staged);
+    entries.extend(unstaged);
+    entries.extend(untracked);
+    Ok(entries)
+}
+
+// ── Diff View Types ─────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffLineKind {
+    Header,
+    Addition,
+    Deletion,
+    Context,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiffLine {
+    pub kind: DiffLineKind,
+    pub content: String,
+}
+
+pub struct DiffViewState {
+    pub file_path: String,
+    pub lines: Vec<DiffLine>,
+    pub scroll_offset: usize,
+    pub visible_height: usize,
+}
+
+impl DiffViewState {
+    pub fn new(file: &str, root: &Path, category: GitStatusCategory) -> Self {
+        let lines = match run_git_diff(file, root, category) {
+            Ok(lines) => lines,
+            Err(e) => vec![DiffLine { kind: DiffLineKind::Header, content: format!("Error: {}", e) }],
+        };
+        Self {
+            file_path: file.to_string(),
+            lines,
+            scroll_offset: 0,
+            visible_height: 24,
+        }
+    }
+
+    pub fn scroll_up(&mut self, n: usize) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(n);
+    }
+
+    pub fn scroll_down(&mut self, n: usize) {
+        let max_scroll = self.lines.len().saturating_sub(self.visible_height);
+        self.scroll_offset = (self.scroll_offset + n).min(max_scroll);
+    }
+}
+
+pub fn run_git_diff(file: &str, root: &Path, category: GitStatusCategory) -> Result<Vec<DiffLine>, String> {
+    let output = match category {
+        GitStatusCategory::Staged => {
+            Command::new("git")
+                .args(["diff", "--cached", "--", file])
+                .current_dir(root)
+                .output()
+                .map_err(|e| format!("Failed to run git diff: {}", e))?
+        }
+        GitStatusCategory::Unstaged => {
+            Command::new("git")
+                .args(["diff", "--", file])
+                .current_dir(root)
+                .output()
+                .map_err(|e| format!("Failed to run git diff: {}", e))?
+        }
+        GitStatusCategory::Untracked => {
+            Command::new("git")
+                .args(["diff", "--no-index", "/dev/null", file])
+                .current_dir(root)
+                .output()
+                .map_err(|e| format!("Failed to run git diff: {}", e))?
+        }
+    };
+
+    // git diff --no-index exits 1 when files differ (expected for untracked)
+    if !output.status.success() && category != GitStatusCategory::Untracked {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.is_empty() {
+            return Err(format!("git diff error: {}", stderr.trim()));
+        }
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    Ok(parse_diff_lines(&text))
+}
+
+pub fn parse_diff_lines(text: &str) -> Vec<DiffLine> {
+    let mut lines = Vec::new();
+    for line in text.lines().take(5000) {
+        let kind = if line.starts_with("+++") || line.starts_with("---") || line.starts_with("diff ") || line.starts_with("index ") {
+            DiffLineKind::Header
+        } else if line.starts_with("@@") {
+            DiffLineKind::Header
+        } else if line.starts_with('+') {
+            DiffLineKind::Addition
+        } else if line.starts_with('-') {
+            DiffLineKind::Deletion
+        } else {
+            DiffLineKind::Context
+        };
+        lines.push(DiffLine { kind, content: line.to_string() });
+    }
+    lines
+}
+
 pub struct App {
     pub running: bool,
     pub input_mode: InputMode,
@@ -528,6 +804,8 @@ pub struct App {
     pub editor: Option<EditorViewState>,
     pub search: Option<SearchViewState>,
     pub fuzzy_finder: Option<FuzzyFinderState>,
+    pub git_status: Option<GitStatusState>,
+    pub diff_view: Option<DiffViewState>,
 }
 
 impl App {
@@ -560,6 +838,8 @@ impl App {
             editor: None,
             search: None,
             fuzzy_finder: None,
+            git_status: None,
+            diff_view: None,
         }
     }
 
@@ -793,6 +1073,14 @@ impl App {
         if KeybindingsConfig::matches(&kb.search, key.modifiers, key.code) {
             self.set_sidebar_view(SidebarView::Search); return;
         }
+        if KeybindingsConfig::matches(&kb.git_status, key.modifiers, key.code) {
+            // Refresh git status on activation
+            if let Some(wt) = self.worktrees.get(self.selected_worktree) {
+                let path = wt.path.clone();
+                self.git_status = Some(GitStatusState::new(path));
+            }
+            self.set_sidebar_view(SidebarView::GitStatus); return;
+        }
 
         if key.code == KeyCode::Char('?') {
             self.show_help = !self.show_help;
@@ -808,6 +1096,8 @@ impl App {
             ViewKind::FileExplorer => self.handle_file_explorer_key(key),
             ViewKind::Editor => self.handle_editor_key(key),
             ViewKind::Search => self.handle_search_key(key),
+            ViewKind::GitStatus => self.handle_git_status_key(key),
+            ViewKind::DiffView => self.handle_diff_view_key(key),
         }
     }
 
@@ -1049,6 +1339,85 @@ impl App {
         }
     }
 
+    fn handle_git_status_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('q') => self.running = false,
+            KeyCode::Char('j') | KeyCode::Down => {
+                if let Some(ref mut gs) = self.git_status {
+                    gs.move_down();
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if let Some(ref mut gs) = self.git_status {
+                    gs.move_up();
+                }
+            }
+            KeyCode::Enter | KeyCode::Char('d') => {
+                if let Some(ref gs) = self.git_status {
+                    if let Some(entry) = gs.selected_entry() {
+                        let file = entry.path.clone();
+                        let category = entry.category;
+                        let root = gs.worktree_path.clone();
+                        self.diff_view = Some(DiffViewState::new(&file, &root, category));
+                        self.main_view = MainView::DiffView;
+                    }
+                }
+            }
+            KeyCode::Tab => {
+                self.toggle_focus();
+                self.enter_terminal_if_focused();
+            }
+            KeyCode::Char(c @ '1'..='9') => {
+                self.jump_to_worktree((c as usize) - ('1' as usize));
+            }
+            KeyCode::Char('0') => {
+                self.jump_to_worktree(9);
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_diff_view_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('q') => self.running = false,
+            KeyCode::Char('j') | KeyCode::Down => {
+                if let Some(ref mut dv) = self.diff_view {
+                    dv.scroll_down(1);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if let Some(ref mut dv) = self.diff_view {
+                    dv.scroll_up(1);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(ref mut dv) = self.diff_view {
+                    let h = dv.visible_height.saturating_sub(2);
+                    dv.scroll_down(h);
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(ref mut dv) = self.diff_view {
+                    let h = dv.visible_height.saturating_sub(2);
+                    dv.scroll_up(h);
+                }
+            }
+            KeyCode::Esc => {
+                self.main_view = MainView::Terminal;
+            }
+            KeyCode::Tab => {
+                self.toggle_focus();
+            }
+            KeyCode::Char(c @ '1'..='9') => {
+                self.jump_to_worktree((c as usize) - ('1' as usize));
+            }
+            KeyCode::Char('0') => {
+                self.jump_to_worktree(9);
+            }
+            _ => {}
+        }
+    }
+
     fn jump_to_worktree(&mut self, index: usize) {
         if index < self.worktrees.len() {
             self.selected_worktree = index;
@@ -1064,6 +1433,9 @@ impl App {
                 self.attention_sessions.remove(id);
             }
             self.file_explorer.set_root(wt.path.clone());
+            // Clear stale git state from previous worktree
+            self.git_status = None;
+            self.diff_view = None;
         }
     }
 

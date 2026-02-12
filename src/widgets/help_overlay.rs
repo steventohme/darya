@@ -17,9 +17,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let kb_fuzzy = KeybindingsConfig::format(&kb.fuzzy_finder);
     let kb_proj_search = KeybindingsConfig::format(&kb.project_search);
 
+    let kb_git = KeybindingsConfig::format(&kb.git_status);
+
     let view_bindings = format!(
-        "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search",
-        kb_worktrees, kb_terminal, kb_files, kb_editor, kb_search
+        "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search  {}: Git",
+        kb_worktrees, kb_terminal, kb_files, kb_editor, kb_search, kb_git
     );
 
     let (title, bindings): (&str, Vec<(&str, &str)>) = match app.focused_view() {
@@ -89,6 +91,31 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 (&kb_proj_search, "New search"),
                 ("q", "Quit"),
                 ("Ctrl+C", "Close session / Quit"),
+            ],
+        ),
+        ViewKind::GitStatus => (
+            "Navigation — Git Status",
+            vec![
+                ("j/k, ↑/↓", "Navigate files"),
+                ("Enter, d", "View diff"),
+                ("1-9, 0", "Jump to worktree"),
+                ("Tab", "Switch panel"),
+                (&kb_fuzzy, "Fuzzy file finder"),
+                (&kb_proj_search, "Project search"),
+                ("q", "Quit"),
+            ],
+        ),
+        ViewKind::DiffView => (
+            "Navigation — Diff View",
+            vec![
+                ("j/k, ↑/↓", "Scroll line"),
+                ("PgUp/PgDn", "Scroll page"),
+                ("Esc", "Back to terminal"),
+                ("1-9, 0", "Jump to worktree"),
+                ("Tab", "Switch panel"),
+                (&kb_fuzzy, "Fuzzy file finder"),
+                (&kb_proj_search, "Project search"),
+                ("q", "Quit"),
             ],
         ),
     };

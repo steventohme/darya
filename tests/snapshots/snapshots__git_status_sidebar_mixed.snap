@@ -3,10 +3,10 @@ source: tests/snapshots.rs
 expression: output
 ---
  darya
-┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃▶ 1 ● my-project [main]┃┃  Press Enter on a worktree to start a Claude Code session               ┃
-┃  2 ○ my-project [featu┃┃                                                                         ┃
-┃  3 ✕ my-project [featu┃┃                                                                         ┃
+┏ Git Status — 3 changes┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃M [staged] src/app.rs  ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
+┃M src/ui.rs            ┃┃                                                                         ┃
+┃? new_file.txt         ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
@@ -21,4 +21,4 @@ expression: output
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- [NAV] [worktrees]  q:quit  Tab:switch  Ctrl+1..6:view  Ctrl+P:find  Ctrl+F:search  ?:help
+ [NAV] [git]  q:quit  Tab:switch  Ctrl+1..6:view  Ctrl+P:find  Ctrl+F:search  ?:help
