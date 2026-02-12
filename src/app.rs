@@ -787,6 +787,8 @@ pub struct ActivityAnimation {
     last_input: HashMap<String, Instant>,
     /// Current animation frame per session (0..7 = 8-frame bounce cycle)
     frame: HashMap<String, usize>,
+    /// Alternates each tick so frames advance every other tick (100ms)
+    tick_parity: bool,
 }
 
 /// How long after last confirmed activity before animation stops (ms)
@@ -805,6 +807,7 @@ impl ActivityAnimation {
             last_active: HashMap::new(),
             last_input: HashMap::new(),
             frame: HashMap::new(),
+            tick_parity: false,
         }
     }
 
@@ -829,8 +832,12 @@ impl ActivityAnimation {
         // Advance frames for existing active sessions, remove expired
         let active_ids: HashSet<&String> = self.last_active.keys().collect();
         self.frame.retain(|id, _| active_ids.contains(id));
-        for (_, frame) in self.frame.iter_mut() {
-            *frame = (*frame + 1) % 8;
+        // Advance every other tick (100ms per frame instead of 50ms)
+        self.tick_parity = !self.tick_parity;
+        if self.tick_parity {
+            for (_, frame) in self.frame.iter_mut() {
+                *frame = (*frame + 1) % 8;
+            }
         }
 
         // Process sessions that had output this tick

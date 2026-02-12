@@ -1,5 +1,5 @@
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState};
 use ratatui::Frame;
@@ -8,26 +8,17 @@ use crate::app::App;
 use crate::config::Theme;
 
 /// Build 5 styled spans for the bouncing-block animation.
-/// `pos` is the bounce position (0..4), representing where the bright block is.
+/// Small dim squares as a track, with a bigger bright orange square bouncing through.
 fn build_animation_spans(pos: usize, theme: &Theme) -> Vec<Span<'static>> {
-    let bright = theme.session_active;
-    // Half-brightness trail derived from the session_active color
-    let trail = match bright {
-        Color::Rgb(r, g, b) => Color::Rgb(r / 2, g / 2, b / 2),
-        _ => theme.fg_dim,
-    };
-    let bg_char_style = Style::default().fg(theme.fg_dim);
-    let bright_style = Style::default().fg(bright);
-    let trail_style = Style::default().fg(trail);
+    let bright_style = Style::default().fg(theme.session_active);
+    let dim_style = Style::default().fg(theme.fg_dim);
 
     (0..5)
         .map(|i| {
             if i == pos {
-                Span::styled("\u{2588}", bright_style) // █
-            } else if i == pos.wrapping_sub(1) || i == pos + 1 {
-                Span::styled("\u{2593}", trail_style) // ▓
+                Span::styled("\u{25A0}", bright_style) // ■ big square
             } else {
-                Span::styled("\u{2591}", bg_char_style) // ░
+                Span::styled("\u{25AA}", dim_style) // ▪ small square
             }
         })
         .collect()
@@ -155,7 +146,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                 let text_width = 4 + repo_name.len() + 3 + branch_str.len()
                     + if is_exited { 9 } else { 0 };
                 let anim_width = 5; // 5 animation characters
-                let padding = content_width.saturating_sub(text_width + anim_width);
+                let right_margin = 1;
+                let padding = content_width.saturating_sub(text_width + anim_width + right_margin);
 
                 spans.push(Span::raw(" ".repeat(padding)));
                 let pos = app.activity.position(session_id.unwrap());

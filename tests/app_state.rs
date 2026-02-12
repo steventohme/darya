@@ -618,6 +618,9 @@ fn tick_advances_animation_position() {
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
     app.handle_event(&AppEvent::Tick);
     let pos_before = app.activity.position(&sid);
+    // Two ticks needed to advance (100ms per frame via parity skip)
+    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::Tick);
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
     app.handle_event(&AppEvent::Tick);
     let pos_after = app.activity.position(&sid);
@@ -632,11 +635,14 @@ fn animation_bounce_cycle() {
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
     app.handle_event(&AppEvent::Tick);
 
-    // Collect positions over a full 8-tick bounce cycle
+    // Collect positions over a full 8-frame bounce cycle
+    // Each frame takes 2 ticks (100ms) due to parity skip
     let mut positions = Vec::new();
     for _ in 0..8 {
         positions.push(app.activity.position(&sid));
-        // Re-output each tick to keep active
+        // Two ticks per frame advance
+        app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+        app.handle_event(&AppEvent::Tick);
         app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
         app.handle_event(&AppEvent::Tick);
     }
