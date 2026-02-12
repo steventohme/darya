@@ -50,6 +50,14 @@
 - **Terminal**: iTerm2 on macOS only. Do not worry about Terminal.app or other emulator compatibility.
 - **Keyboard protocol**: Kitty keyboard enhancement is enabled — Ctrl+number keys work.
 
+## Testing
+
+- **Every feature must ship with integration tests** in `tests/` covering its logic paths
+- Use the existing 4-layer test strategy: state machine tests, component tests, widget snapshots (insta), PTY callback tests
+- Add test helpers to `tests/helpers/mod.rs` as needed
+- Run `cargo test` before marking any feature complete — all tests must pass
+- For UI changes, add/update insta snapshots and run `cargo insta accept`
+
 ## Core Principles
 
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
