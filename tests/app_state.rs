@@ -3,6 +3,7 @@ mod helpers;
 use crossterm::event::KeyCode;
 
 use darya::app::{
+    is_edtui_compatible, EditorViewState,
     GitStatusCategory, GitStatusEntry, GitStatusState, GitFileStatus,
     InputMode, MainView, PanelFocus, Prompt, SidebarView,
 };
@@ -719,4 +720,69 @@ fn animation_independent_per_session() {
     app.handle_event(&AppEvent::Tick);
     assert!(app.activity.is_active(&sid1));
     assert!(app.activity.is_active(&sid2));
+}
+
+// ── BackTab / edtui compatibility ───────────────────────────
+
+fn make_app_with_editor(n: usize) -> darya::app::App {
+    let mut app = make_app(n);
+    let tmp = std::env::temp_dir().join("darya_test_editor.txt");
+    std::fs::write(&tmp, "hello world\n").unwrap();
+    app.editor = Some(EditorViewState::open(tmp).unwrap());
+    app.main_view = MainView::Editor;
+    app.panel_focus = PanelFocus::Right;
+    app
+}
+
+#[test]
+fn backtab_in_editor_insert_mode_no_crash() {
+    let mut app = make_app_with_editor(2);
+    app.input_mode = InputMode::Editor;
+    if let Some(ref mut ed) = app.editor {
+        ed.read_only = false;
+        ed.editor_state.mode = edtui::EditorMode::Insert;
+    }
+    // BackTab should be silently ignored, not panic
+    app.handle_event(&key(KeyCode::BackTab));
+    assert_eq!(app.input_mode, InputMode::Editor);
+}
+
+#[test]
+fn backtab_in_editor_normal_mode_no_crash() {
+    let mut app = make_app_with_editor(2);
+    app.input_mode = InputMode::Navigation;
+    if let Some(ref mut ed) = app.editor {
+        ed.editor_state.mode = edtui::EditorMode::Normal;
+    }
+    // BackTab should be silently ignored, not panic
+    app.handle_event(&key(KeyCode::BackTab));
+    assert_eq!(app.input_mode, InputMode::Navigation);
+}
+
+#[test]
+fn is_edtui_compatible_helper() {
+    // Compatible keys
+    assert!(is_edtui_compatible(&KeyCode::Char('a')));
+    assert!(is_edtui_compatible(&KeyCode::Enter));
+    assert!(is_edtui_compatible(&KeyCode::Backspace));
+    assert!(is_edtui_compatible(&KeyCode::Tab));
+    assert!(is_edtui_compatible(&KeyCode::Esc));
+    assert!(is_edtui_compatible(&KeyCode::Left));
+    assert!(is_edtui_compatible(&KeyCode::Right));
+    assert!(is_edtui_compatible(&KeyCode::Up));
+    assert!(is_edtui_compatible(&KeyCode::Down));
+    assert!(is_edtui_compatible(&KeyCode::Home));
+    assert!(is_edtui_compatible(&KeyCode::End));
+    assert!(is_edtui_compatible(&KeyCode::Delete));
+    assert!(is_edtui_compatible(&KeyCode::PageUp));
+    assert!(is_edtui_compatible(&KeyCode::PageDown));
+    assert!(is_edtui_compatible(&KeyCode::F(1)));
+    assert!(is_edtui_compatible(&KeyCode::F(12)));
+
+    // Incompatible keys that would cause edtui to panic
+    assert!(!is_edtui_compatible(&KeyCode::BackTab));
+    assert!(!is_edtui_compatible(&KeyCode::Null));
+    assert!(!is_edtui_compatible(&KeyCode::Insert));
+    assert!(!is_edtui_compatible(&KeyCode::F(13)));
+    assert!(!is_edtui_compatible(&KeyCode::CapsLock));
 }

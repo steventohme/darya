@@ -897,6 +897,29 @@ impl ActivityAnimation {
     }
 }
 
+/// Returns `false` for key codes that edtui's `From<crossterm::event::KeyCode>`
+/// doesn't handle (it calls `unimplemented!()` for these, causing a panic).
+pub fn is_edtui_compatible(code: &KeyCode) -> bool {
+    matches!(
+        code,
+        KeyCode::Char(_)
+            | KeyCode::Enter
+            | KeyCode::Backspace
+            | KeyCode::Delete
+            | KeyCode::Left
+            | KeyCode::Right
+            | KeyCode::Up
+            | KeyCode::Down
+            | KeyCode::Home
+            | KeyCode::End
+            | KeyCode::Tab
+            | KeyCode::Esc
+            | KeyCode::PageUp
+            | KeyCode::PageDown
+            | KeyCode::F(1..=12)
+    )
+}
+
 pub struct App {
     pub running: bool,
     pub input_mode: InputMode,
@@ -1404,7 +1427,9 @@ impl App {
             if editor.editor_state.mode == EditorMode::Insert {
                 editor.modified = true;
             }
-            editor.event_handler.on_key_event(key, &mut editor.editor_state);
+            if is_edtui_compatible(&key.code) {
+                editor.event_handler.on_key_event(key, &mut editor.editor_state);
+            }
             return;
         }
 
@@ -1428,9 +1453,11 @@ impl App {
             }
             _ => {
                 // Forward navigation keys to edtui in Normal mode
-                editor.event_handler.on_key_event(key, &mut editor.editor_state);
-                // Force back to Normal in case edtui changed mode
-                editor.editor_state.mode = EditorMode::Normal;
+                if is_edtui_compatible(&key.code) {
+                    editor.event_handler.on_key_event(key, &mut editor.editor_state);
+                    // Force back to Normal in case edtui changed mode
+                    editor.editor_state.mode = EditorMode::Normal;
+                }
             }
         }
     }
