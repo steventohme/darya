@@ -299,6 +299,22 @@ async fn run_loop(
                     }
                 }
 
+                // Handle session close on Backspace
+                else if app.needs_session_close(key) {
+                    if let Some(wt_path) = app.selected_worktree_path().cloned() {
+                        if let Some(session_id) = app.session_ids.remove(&wt_path) {
+                            session_manager.remove(&session_id);
+                            app.attention_sessions.remove(&session_id);
+                            app.exited_sessions.remove(&session_id);
+                            app.activity.remove_session(&session_id);
+                            if app.active_session_id.as_deref() == Some(&session_id) {
+                                app.active_session_id = None;
+                            }
+                            app.status_message = Some("Session closed".to_string());
+                        }
+                    }
+                }
+
                 // Forward keys to PTY in terminal mode
                 if app.input_mode == InputMode::Terminal && app.prompt.is_none() {
                     // Don't forward Tab — it switches to sidebar

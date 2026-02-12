@@ -439,6 +439,38 @@ fn needs_session_restart_false_without_exited() {
     assert!(!app.needs_session_restart(&key_event));
 }
 
+// ── needs_session_close ─────────────────────────────────────
+
+#[test]
+fn needs_session_close_on_backspace_with_session() {
+    let app = make_app_with_session(2);
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
+    assert!(app.needs_session_close(&key_event));
+}
+
+#[test]
+fn needs_session_close_false_without_session() {
+    let app = make_app(2);
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
+    assert!(!app.needs_session_close(&key_event));
+}
+
+#[test]
+fn needs_session_close_false_in_terminal_mode() {
+    let mut app = make_app_with_session(2);
+    app.input_mode = InputMode::Terminal;
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
+    assert!(!app.needs_session_close(&key_event));
+}
+
+#[test]
+fn needs_session_close_false_when_prompt_active() {
+    let mut app = make_app_with_session(2);
+    app.prompt = Some(Prompt::CreateWorktree { input: String::new() });
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
+    assert!(!app.needs_session_close(&key_event));
+}
+
 // ── wants_create/delete worktree ────────────────────────────
 
 #[test]

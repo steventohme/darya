@@ -1740,6 +1740,19 @@ impl App {
         Some((branch, untracked, modified))
     }
 
+    pub fn needs_session_close(&self, key: &KeyEvent) -> bool {
+        if key.code != KeyCode::Backspace
+            || self.prompt.is_some()
+            || self.show_help
+            || self.input_mode != InputMode::Navigation
+        {
+            return false;
+        }
+        self.selected_worktree_path()
+            .and_then(|p| self.session_ids.get(p))
+            .is_some()
+    }
+
     pub fn needs_session_restart(&self, key: &KeyEvent) -> bool {
         if key.code != KeyCode::Char('r')
             || self.prompt.is_some()
