@@ -7,9 +7,8 @@ use crate::app::{App, InputMode, PanelFocus, Prompt, ViewKind};
 use crate::session::manager::SessionManager;
 use crate::widgets;
 
-/// Compute the inner Rect where the terminal PTY is rendered.
-/// Terminal is always in the right (main) panel.
-pub fn compute_pty_rect(size: Rect) -> Rect {
+/// Compute the right panel Rect (before any pane splitting).
+fn right_panel_rect(size: Rect) -> Rect {
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -19,15 +18,35 @@ pub fn compute_pty_rect(size: Rect) -> Rect {
         ])
         .split(size);
 
-    let main_chunks = Layout::default()
+    Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
-        .split(outer[1]);
+        .split(outer[1])[1]
+}
 
+/// Compute inner Rects for each pane by splitting the right panel horizontally.
+pub fn compute_pane_rects(size: Rect, pane_count: usize) -> Vec<Rect> {
+    let panel = right_panel_rect(size);
+    if pane_count <= 1 {
+        return vec![panel];
+    }
+    let constraints: Vec<Constraint> = (0..pane_count)
+        .map(|_| Constraint::Ratio(1, pane_count as u32))
+        .collect();
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(constraints)
+        .split(panel)
+        .to_vec()
+}
+
+/// Compute the inner Rect where the terminal PTY is rendered (single pane).
+pub fn compute_pty_rect(size: Rect) -> Rect {
+    let panel = right_panel_rect(size);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Thick);
-    block.inner(main_chunks[1])
+    block.inner(panel)
 }
 
 fn render_view(
@@ -86,9 +105,30 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     let left_focused = app.panel_focus == PanelFocus::Left;
     render_view(frame, main_chunks[0], app.sidebar_view.to_view_kind(), app, session_manager, left_focused);
 
-    // Right panel (main)
+    // Right panel (main) — split panes for terminal, full panel for everything else
     let right_focused = app.panel_focus == PanelFocus::Right;
-    render_view(frame, main_chunks[1], app.main_view.to_view_kind(), app, session_manager, right_focused);
+    if app.main_view == crate::app::MainView::Terminal {
+        if let Some(ref layout) = app.pane_layout {
+            if layout.panes.len() > 1 {
+                // Split rendering
+                let pane_rects = compute_pane_rects(size, layout.panes.len());
+                for (i, pane_rect) in pane_rects.iter().enumerate() {
+                    if let Some(session_id) = layout.panes.get(i) {
+                        let pane_focused = right_focused && i == layout.focused;
+                        widgets::terminal_panel::render_session(
+                            frame, *pane_rect, app, session_manager, session_id, pane_focused,
+                        );
+                    }
+                }
+            } else {
+                render_view(frame, main_chunks[1], app.main_view.to_view_kind(), app, session_manager, right_focused);
+            }
+        } else {
+            render_view(frame, main_chunks[1], app.main_view.to_view_kind(), app, session_manager, right_focused);
+        }
+    } else {
+        render_view(frame, main_chunks[1], app.main_view.to_view_kind(), app, session_manager, right_focused);
+    }
 
     // Status bar
     if let Some(ref msg) = app.status_message {

@@ -18,6 +18,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let kb_proj_search = KeybindingsConfig::format(&kb.project_search);
 
     let kb_git = KeybindingsConfig::format(&kb.git_status);
+    let kb_split = KeybindingsConfig::format(&kb.split_pane);
+    let kb_close_pane = KeybindingsConfig::format(&kb.close_pane);
 
     let view_bindings = format!(
         "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search  {}: Git",
@@ -46,8 +48,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             vec![
                 ("i, Enter", "Enter terminal mode"),
                 ("PgUp/PgDn", "Scroll output"),
+                (&kb_split, "Split pane"),
+                (&kb_close_pane, "Close pane"),
                 ("1-9, 0", "Jump to worktree"),
-                ("Tab", "Switch panel"),
+                ("Tab", "Cycle panes / switch panel"),
                 (&kb_fuzzy, "Fuzzy file finder"),
                 (&kb_proj_search, "Project search"),
                 ("q", "Quit"),
