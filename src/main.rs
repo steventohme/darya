@@ -42,6 +42,32 @@ fn pty_size(terminal: &Terminal<CrosstermBackend<io::Stdout>>) -> (u16, u16) {
     (rect.height.max(1), rect.width.max(1))
 }
 
+/// Compute per-pane PTY sizes for split layout. Returns (session_id, rows, cols) tuples.
+fn pane_sizes(
+    terminal: &Terminal<CrosstermBackend<io::Stdout>>,
+    app: &App,
+) -> Vec<(String, u16, u16)> {
+    let size = terminal.size().unwrap_or_default();
+    if let Some(ref layout) = app.pane_layout {
+        if layout.panes.len() > 1 {
+            let rects = ui::compute_pane_rects(size.into(), layout.panes.len());
+            let block = ratatui::widgets::Block::default()
+                .borders(ratatui::widgets::Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Thick);
+            return layout
+                .panes
+                .iter()
+                .enumerate()
+                .map(|(i, sid)| {
+                    let inner = block.inner(rects[i]);
+                    (sid.clone(), inner.height.max(1), inner.width.max(1))
+                })
+                .collect();
+        }
+    }
+    Vec::new()
+}
+
 /// Restore the terminal to normal state. Called on both clean exit and panic.
 fn restore_terminal() {
     let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
@@ -156,12 +182,16 @@ async fn run_loop(
                             editor.editor_state.mode = edtui::EditorMode::Normal;
                         }
                         app.input_mode = InputMode::Navigation;
-                    } else if let Some(session_id) = app.active_session_id.take() {
+                    } else if let Some(session_id) = app.focused_session_id().cloned() {
                         session_manager.remove(&session_id);
                         app.session_ids.retain(|_, v| v != &session_id);
                         app.attention_sessions.remove(&session_id);
                         app.exited_sessions.remove(&session_id);
                         app.activity.remove_session(&session_id);
+                        app.remove_session_from_panes(&session_id);
+                        if app.active_session_id.as_deref() == Some(&session_id) {
+                            app.active_session_id = None;
+                        }
                         app.input_mode = InputMode::Navigation;
                         app.status_message = Some("Session closed".to_string());
                     } else {
@@ -218,6 +248,7 @@ async fn run_loop(
                             app.attention_sessions.remove(&session_id);
                             app.exited_sessions.remove(&session_id);
                             app.activity.remove_session(&session_id);
+                            app.remove_session_from_panes(&session_id);
                             if app.active_session_id.as_deref() == Some(&session_id) {
                                 app.active_session_id = None;
                             }
@@ -317,6 +348,7 @@ async fn run_loop(
                             app.attention_sessions.remove(&session_id);
                             app.exited_sessions.remove(&session_id);
                             app.activity.remove_session(&session_id);
+                            app.remove_session_from_panes(&session_id);
                             if app.active_session_id.as_deref() == Some(&session_id) {
                                 app.active_session_id = None;
                             }
@@ -325,18 +357,54 @@ async fn run_loop(
                     }
                 }
 
+                // Split pane (Navigation mode only)
+                if app.input_mode == InputMode::Navigation
+                    && KeybindingsConfig::matches(&app.keybindings.split_pane, key.modifiers, key.code)
+                {
+                    if app.split_add_pane() {
+                        // Resize sessions to new pane dimensions
+                        for (sid, rows, cols) in pane_sizes(terminal, app) {
+                            if let Some(session) = session_manager.get_mut(&sid) {
+                                let _ = session.resize(rows, cols);
+                            }
+                        }
+                    }
+                }
+
+                // Close pane — intercept in ANY mode when panes exist
+                // (prevents Ctrl+W from reaching PTY as delete-word)
+                if app.pane_layout.is_some()
+                    && KeybindingsConfig::matches(&app.keybindings.close_pane, key.modifiers, key.code)
+                {
+                    app.input_mode = InputMode::Navigation;
+                    app.close_focused_pane();
+                    // Resize sessions to new pane dimensions (or single pane)
+                    let sizes = pane_sizes(terminal, app);
+                    if sizes.is_empty() {
+                        // Back to single pane — resize all to full
+                        let (rows, cols) = pty_size(terminal);
+                        session_manager.resize_all(rows, cols);
+                    } else {
+                        for (sid, rows, cols) in sizes {
+                            if let Some(session) = session_manager.get_mut(&sid) {
+                                let _ = session.resize(rows, cols);
+                            }
+                        }
+                    }
+                }
+
                 // Forward keys to PTY in terminal mode
                 if app.input_mode == InputMode::Terminal && app.prompt.is_none() {
                     // Don't forward Tab — it switches to sidebar
                     if key.code != KeyCode::Tab {
-                        if let Some(ref session_id) = app.active_session_id {
+                        if let Some(session_id) = app.focused_session_id().cloned() {
                             if !app.exited_sessions.contains(session_id.as_str()) {
                                 if let Some(bytes) = key_event_to_bytes(key) {
                                     if let Some(session) =
-                                        session_manager.get_mut(session_id)
+                                        session_manager.get_mut(&session_id)
                                     {
                                         let _ = session.write_input(&bytes);
-                                        app.activity.mark_input(session_id);
+                                        app.activity.mark_input(&session_id);
                                     }
                                 }
                             }
@@ -345,20 +413,43 @@ async fn run_loop(
                 }
             }
 
-            // Reset scroll when new output arrives for the active session
+            // Reset scroll when new output arrives for a visible session
             if let AppEvent::PtyOutput { ref session_id } = event {
-                if app.active_session_id.as_deref() == Some(session_id.as_str()) {
+                if app.is_session_visible(session_id) {
                     app.scroll_offsets.remove(session_id);
                 }
             }
 
             // Handle resize
             if let AppEvent::Resize(w, h) = &event {
-                let rect = ui::compute_pty_rect(
-                    Rect::new(0, 0, *w, *h),
-                );
+                let full_size = Rect::new(0, 0, *w, *h);
+                let rect = ui::compute_pty_rect(full_size);
                 app.terminal_height = rect.height.max(1);
-                session_manager.resize_all(rect.height.max(1), rect.width.max(1));
+
+                if let Some(ref layout) = app.pane_layout {
+                    if layout.panes.len() > 1 {
+                        let pane_rects = ui::compute_pane_rects(full_size, layout.panes.len());
+                        let block = ratatui::widgets::Block::default()
+                            .borders(ratatui::widgets::Borders::ALL)
+                            .border_type(ratatui::widgets::BorderType::Thick);
+                        for (i, sid) in layout.panes.iter().enumerate() {
+                            let inner = block.inner(pane_rects[i]);
+                            if let Some(session) = session_manager.get_mut(sid) {
+                                let _ = session.resize(inner.height.max(1), inner.width.max(1));
+                            }
+                        }
+                        // Resize non-visible sessions to single-pane size
+                        session_manager.resize_all_except(
+                            &layout.panes,
+                            rect.height.max(1),
+                            rect.width.max(1),
+                        );
+                    } else {
+                        session_manager.resize_all(rect.height.max(1), rect.width.max(1));
+                    }
+                } else {
+                    session_manager.resize_all(rect.height.max(1), rect.width.max(1));
+                }
             }
 
             app.handle_event(&event);
