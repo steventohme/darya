@@ -91,9 +91,14 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     render_view(frame, main_chunks[1], app.main_view.to_view_kind(), app, session_manager, right_focused);
 
     // Status bar
-    let status_text = if let Some(ref msg) = app.status_message {
-        format!(" {} ", msg)
+    if let Some(ref msg) = app.status_message {
+        let status = Paragraph::new(format!(" {} ", msg))
+            .style(Style::default().fg(app.theme.warning).bg(app.theme.status_bar_bg));
+        frame.render_widget(status, outer[2]);
     } else {
+        let bar_width = outer[2].width as usize;
+
+        // Left: mode + view
         let mode_str = match app.input_mode {
             InputMode::Navigation => "NAV",
             InputMode::Terminal => "TERM",
@@ -108,29 +113,60 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ViewKind::GitStatus => "git",
             ViewKind::DiffView => "diff",
         };
-        let has_exited_selected = app
-            .selected_worktree_path()
-            .and_then(|p| app.session_ids.get(p))
-            .map(|id| app.exited_sessions.contains(id))
-            .unwrap_or(false);
-        let restart_hint = if has_exited_selected { "  r:restart" } else { "" };
-        let scroll_hint = if app.active_scroll_offset() > 0 {
-            "  [scrolled] PgUp/PgDn:scroll"
-        } else {
-            ""
+        let left = format!(" [{}] {}", mode_str, view_str);
+
+        // Center: branch info
+        let center = match app.selected_branch_info() {
+            Some((branch, u, m)) => {
+                let mut s = branch;
+                if m > 0 {
+                    s += &format!(" ~{}", m);
+                }
+                if u > 0 {
+                    s += &format!(" +{}", u);
+                }
+                s
+            }
+            None => String::new(),
         };
-        format!(
-            " [{}] [{}]  q:quit  Tab:switch  Ctrl+1..6:view  Ctrl+P:find  Ctrl+F:search  ?:help{}{}",
-            mode_str, view_str, restart_hint, scroll_hint
-        )
-    };
-    let status_style = if app.status_message.is_some() {
-        Style::default().fg(app.theme.warning).bg(app.theme.status_bar_bg)
-    } else {
-        Style::default().fg(app.theme.status_bar_fg).bg(app.theme.status_bar_bg)
-    };
-    let status = Paragraph::new(status_text).style(status_style);
-    frame.render_widget(status, outer[2]);
+
+        // Right: session counts
+        let running = app.running_session_count();
+        let exited = app.exited_session_count();
+        let mut right_parts = Vec::new();
+        if running > 0 {
+            right_parts.push(format!("{} running", running));
+        }
+        if exited > 0 {
+            right_parts.push(format!("{} exited", exited));
+        }
+        let right = if right_parts.is_empty() {
+            String::new()
+        } else {
+            format!("{} ", right_parts.join(" · "))
+        };
+
+        // Build a single line with left-aligned left, centered center, right-aligned right
+        let left_len = left.len();
+        let right_len = right.len();
+        let center_len = center.len();
+        let available = bar_width.saturating_sub(left_len + right_len);
+        let center_pad_left = available.saturating_sub(center_len) / 2;
+        let center_pad_right = available.saturating_sub(center_len + center_pad_left);
+
+        let line = format!(
+            "{}{}{}{}{}",
+            left,
+            " ".repeat(center_pad_left),
+            center,
+            " ".repeat(center_pad_right),
+            right,
+        );
+
+        let status = Paragraph::new(line)
+            .style(Style::default().fg(app.theme.status_bar_fg).bg(app.theme.status_bar_bg));
+        frame.render_widget(status, outer[2]);
+    }
 
     // Render prompt overlay if active
     if let Some(ref prompt) = app.prompt {
