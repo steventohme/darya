@@ -108,6 +108,25 @@ fn snapshot_status_bar_with_message() {
     insta::assert_snapshot!("status_bar_message", output);
 }
 
+// ── Status bar with session counts ──────────────────────────
+
+#[test]
+fn snapshot_status_bar_with_sessions() {
+    let mut app = make_test_app(3);
+    let wt0_path = app.worktrees[0].path.clone();
+    let wt1_path = app.worktrees[1].path.clone();
+    let wt2_path = app.worktrees[2].path.clone();
+    app.session_ids.insert(wt0_path, "s0".to_string());
+    app.session_ids.insert(wt1_path, "s1".to_string());
+    app.session_ids.insert(wt2_path, "s2".to_string());
+    app.active_session_id = Some("s0".to_string());
+    app.exited_sessions.insert("s2".to_string());
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 5);
+    insta::assert_snapshot!("status_bar_with_sessions", output);
+}
+
 // ── Help overlay snapshot ───────────────────────────────────
 
 #[test]
