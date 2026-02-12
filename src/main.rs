@@ -1,12 +1,3 @@
-mod app;
-mod config;
-mod error;
-mod event;
-mod session;
-mod ui;
-mod widgets;
-mod worktree;
-
 use std::io;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -23,11 +14,12 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Rect;
 use ratatui::Terminal;
 
-use app::{App, InputMode};
-use config::KeybindingsConfig;
-use event::{create_event_handler, AppEvent};
-use session::manager::SessionManager;
-use worktree::manager::WorktreeManager;
+use darya::app::{self, App, InputMode};
+use darya::config::{self, KeybindingsConfig};
+use darya::event::{self, create_event_handler, AppEvent};
+use darya::session::manager::SessionManager;
+use darya::ui;
+use darya::worktree::manager::WorktreeManager;
 
 fn find_git_root() -> color_eyre::Result<PathBuf> {
     let output = std::process::Command::new("git")

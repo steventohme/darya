@@ -1,0 +1,350 @@
+mod helpers;
+
+use crossterm::event::{KeyCode, KeyModifiers};
+use tempfile::TempDir;
+
+use darya::app::{FileExplorerState, SearchViewState};
+use darya::config::{parse_keybinding, KeybindingsConfig};
+
+// ── FileExplorerState ───────────────────────────────────────
+
+fn make_tempdir_tree() -> TempDir {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    // Create structure:
+    //   alpha/
+    //     nested.txt
+    //   beta.txt
+    //   gamma.rs
+    std::fs::create_dir_all(root.join("alpha")).unwrap();
+    std::fs::write(root.join("alpha/nested.txt"), "hello").unwrap();
+    std::fs::write(root.join("beta.txt"), "world").unwrap();
+    std::fs::write(root.join("gamma.rs"), "fn main() {}").unwrap();
+    dir
+}
+
+#[test]
+fn file_explorer_populates_entries() {
+    let dir = make_tempdir_tree();
+    let state = FileExplorerState::new(dir.path().to_path_buf());
+    // Should have: alpha/, beta.txt, gamma.rs (dirs first, then files, alphabetical)
+    assert_eq!(state.entries.len(), 3);
+    assert!(state.entries[0].is_dir);
+    assert_eq!(state.entries[0].name, "alpha");
+    assert!(!state.entries[1].is_dir);
+    assert_eq!(state.entries[1].name, "beta.txt");
+    assert!(!state.entries[2].is_dir);
+    assert_eq!(state.entries[2].name, "gamma.rs");
+}
+
+#[test]
+fn file_explorer_move_down_and_up() {
+    let dir = make_tempdir_tree();
+    let mut state = FileExplorerState::new(dir.path().to_path_buf());
+    assert_eq!(state.selected, 0);
+    state.move_down();
+    assert_eq!(state.selected, 1);
+    state.move_down();
+    assert_eq!(state.selected, 2);
+    state.move_up();
+    assert_eq!(state.selected, 1);
+}
+
+#[test]
+fn file_explorer_move_down_wraps() {
+    let dir = make_tempdir_tree();
+    let mut state = FileExplorerState::new(dir.path().to_path_buf());
+    state.selected = 2; // last entry
+    state.move_down();
+    assert_eq!(state.selected, 0);
+}
+
+#[test]
+fn file_explorer_move_up_wraps() {
+    let dir = make_tempdir_tree();
+    let mut state = FileExplorerState::new(dir.path().to_path_buf());
+    assert_eq!(state.selected, 0);
+    state.move_up();
+    assert_eq!(state.selected, 2);
+}
+
+#[test]
+fn file_explorer_enter_on_dir_expands() {
+    let dir = make_tempdir_tree();
+    let mut state = FileExplorerState::new(dir.path().to_path_buf());
+    // select alpha/ (index 0)
+    assert_eq!(state.selected, 0);
+    let result = state.enter();
+    assert!(result.is_none()); // dirs don't return a path
+    // Now entries should include nested.txt under alpha
+    assert_eq!(state.entries.len(), 4); // alpha/, nested.txt, beta.txt, gamma.rs
+    assert!(state.expanded.contains(&dir.path().join("alpha")));
+}
+
+#[test]
+fn file_explorer_enter_on_file_returns_path() {
+    let dir = make_tempdir_tree();
+    let mut state = FileExplorerState::new(dir.path().to_path_buf());
+    state.selected = 1; // beta.txt
+    let result = state.enter();
+    assert!(result.is_some());
+    assert_eq!(result.unwrap(), dir.path().join("beta.txt"));
+}
+
+#[test]
+fn file_explorer_enter_on_expanded_dir_collapses() {
+    let dir = make_tempdir_tree();
+    let mut state = FileExplorerState::new(dir.path().to_path_buf());
+    // Expand alpha
+    state.enter();
+    assert_eq!(state.entries.len(), 4);
+    // Collapse alpha
+    state.selected = 0;
+    state.enter();
+    assert_eq!(state.entries.len(), 3);
+    assert!(!state.expanded.contains(&dir.path().join("alpha")));
+}
+
+#[test]
+fn file_explorer_collapse_or_parent_on_expanded() {
+    let dir = make_tempdir_tree();
+    let mut state = FileExplorerState::new(dir.path().to_path_buf());
+    state.enter(); // expand alpha
+    assert_eq!(state.entries.len(), 4);
+    state.selected = 0; // alpha/ is selected
+    state.collapse_or_parent();
+    assert_eq!(state.entries.len(), 3); // collapsed
+}
+
+#[test]
+fn file_explorer_collapse_or_parent_jumps_to_parent() {
+    let dir = make_tempdir_tree();
+    let mut state = FileExplorerState::new(dir.path().to_path_buf());
+    state.enter(); // expand alpha
+    state.selected = 1; // nested.txt (depth 1)
+    state.collapse_or_parent();
+    assert_eq!(state.selected, 0); // jumped to alpha/ (parent)
+}
+
+#[test]
+fn file_explorer_set_root_resets() {
+    let dir = make_tempdir_tree();
+    let mut state = FileExplorerState::new(dir.path().to_path_buf());
+    state.selected = 2;
+    state.enter(); // expand something
+    let other_dir = TempDir::new().unwrap();
+    std::fs::write(other_dir.path().join("only.txt"), "x").unwrap();
+    state.set_root(other_dir.path().to_path_buf());
+    assert_eq!(state.selected, 0);
+    assert!(state.expanded.is_empty());
+    assert_eq!(state.entries.len(), 1);
+}
+
+#[test]
+fn file_explorer_ignores_hidden_and_target() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    std::fs::create_dir_all(root.join(".hidden")).unwrap();
+    std::fs::create_dir_all(root.join("target")).unwrap();
+    std::fs::create_dir_all(root.join("node_modules")).unwrap();
+    std::fs::write(root.join("visible.txt"), "x").unwrap();
+    std::fs::write(root.join(".dotfile"), "x").unwrap();
+
+    let state = FileExplorerState::new(root.to_path_buf());
+    assert_eq!(state.entries.len(), 1);
+    assert_eq!(state.entries[0].name, "visible.txt");
+}
+
+#[test]
+fn file_explorer_empty_dir() {
+    let dir = TempDir::new().unwrap();
+    let state = FileExplorerState::new(dir.path().to_path_buf());
+    assert!(state.entries.is_empty());
+    assert_eq!(state.selected, 0);
+}
+
+#[test]
+fn file_explorer_move_on_empty_is_noop() {
+    let dir = TempDir::new().unwrap();
+    let mut state = FileExplorerState::new(dir.path().to_path_buf());
+    state.move_up();
+    assert_eq!(state.selected, 0);
+    state.move_down();
+    assert_eq!(state.selected, 0);
+}
+
+// ── SearchViewState ─────────────────────────────────────────
+
+#[test]
+fn search_finds_matches_in_tempdir() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    std::fs::write(root.join("hello.txt"), "hello world\ngoodbye world\n").unwrap();
+    std::fs::write(root.join("other.txt"), "no match here\n").unwrap();
+
+    let state = SearchViewState::new("hello", root);
+    assert!(state.error.is_none());
+    assert_eq!(state.results.len(), 1);
+    assert_eq!(state.results[0].file_relative, "hello.txt");
+    assert_eq!(state.results[0].line_number, 1);
+    assert!(state.results[0].line_text.contains("hello world"));
+}
+
+#[test]
+fn search_no_matches_returns_empty() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    std::fs::write(root.join("test.txt"), "nothing relevant\n").unwrap();
+
+    let state = SearchViewState::new("zzzznotfound", root);
+    assert!(state.error.is_none());
+    assert!(state.results.is_empty());
+}
+
+#[test]
+fn search_move_up_down() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    std::fs::write(root.join("test.txt"), "line1 match\nline2 match\nline3 match\n").unwrap();
+
+    let mut state = SearchViewState::new("match", root);
+    assert_eq!(state.selected, 0);
+    state.move_down();
+    assert_eq!(state.selected, 1);
+    state.move_down();
+    assert_eq!(state.selected, 2);
+    state.move_down();
+    assert_eq!(state.selected, 0); // wraps
+    state.move_up();
+    assert_eq!(state.selected, 2); // wraps back
+}
+
+#[test]
+fn search_selected_result() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    std::fs::write(root.join("test.txt"), "aaa\nbbb match\nccc\n").unwrap();
+
+    let state = SearchViewState::new("match", root);
+    let result = state.selected_result().unwrap();
+    assert_eq!(result.line_number, 2);
+}
+
+#[test]
+fn search_empty_results_selected_is_none() {
+    let dir = TempDir::new().unwrap();
+    std::fs::write(dir.path().join("test.txt"), "no\n").unwrap();
+    let state = SearchViewState::new("zzz", dir.path());
+    assert!(state.selected_result().is_none());
+}
+
+// ── KeybindingsConfig ───────────────────────────────────────
+
+#[test]
+fn parse_keybinding_ctrl_number() {
+    let result = parse_keybinding("ctrl+1");
+    assert_eq!(result, Some((KeyModifiers::CONTROL, KeyCode::Char('1'))));
+}
+
+#[test]
+fn parse_keybinding_ctrl_letter() {
+    let result = parse_keybinding("ctrl+p");
+    assert_eq!(result, Some((KeyModifiers::CONTROL, KeyCode::Char('p'))));
+}
+
+#[test]
+fn parse_keybinding_alt_letter() {
+    let result = parse_keybinding("alt+f");
+    assert_eq!(result, Some((KeyModifiers::ALT, KeyCode::Char('f'))));
+}
+
+#[test]
+fn parse_keybinding_function_key() {
+    let result = parse_keybinding("shift+f5");
+    assert_eq!(result, Some((KeyModifiers::SHIFT, KeyCode::F(5))));
+}
+
+#[test]
+fn parse_keybinding_enter() {
+    let result = parse_keybinding("ctrl+enter");
+    assert_eq!(result, Some((KeyModifiers::CONTROL, KeyCode::Enter)));
+}
+
+#[test]
+fn parse_keybinding_invalid_returns_none() {
+    assert!(parse_keybinding("").is_none());
+    assert!(parse_keybinding("ctrl+").is_none());
+    assert!(parse_keybinding("invalid+key").is_none());
+    assert!(parse_keybinding("ctrl+longname").is_none());
+}
+
+#[test]
+fn parse_keybinding_case_insensitive() {
+    let result = parse_keybinding("Ctrl+P");
+    assert_eq!(result, Some((KeyModifiers::CONTROL, KeyCode::Char('p'))));
+}
+
+#[test]
+fn keybindings_format_roundtrip() {
+    let binding = (KeyModifiers::CONTROL, KeyCode::Char('p'));
+    let formatted = KeybindingsConfig::format(&binding);
+    assert_eq!(formatted, "Ctrl+P");
+}
+
+#[test]
+fn keybindings_format_multi_modifier() {
+    let binding = (
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+        KeyCode::Char('x'),
+    );
+    let formatted = KeybindingsConfig::format(&binding);
+    assert_eq!(formatted, "Ctrl+Alt+X");
+}
+
+#[test]
+fn keybindings_format_function_key() {
+    let binding = (KeyModifiers::SHIFT, KeyCode::F(12));
+    let formatted = KeybindingsConfig::format(&binding);
+    assert_eq!(formatted, "Shift+F12");
+}
+
+#[test]
+fn keybindings_matches_positive() {
+    let binding = (KeyModifiers::CONTROL, KeyCode::Char('1'));
+    assert!(KeybindingsConfig::matches(
+        &binding,
+        KeyModifiers::CONTROL,
+        KeyCode::Char('1')
+    ));
+}
+
+#[test]
+fn keybindings_matches_negative_wrong_modifier() {
+    let binding = (KeyModifiers::CONTROL, KeyCode::Char('1'));
+    assert!(!KeybindingsConfig::matches(
+        &binding,
+        KeyModifiers::ALT,
+        KeyCode::Char('1')
+    ));
+}
+
+#[test]
+fn keybindings_matches_negative_wrong_key() {
+    let binding = (KeyModifiers::CONTROL, KeyCode::Char('1'));
+    assert!(!KeybindingsConfig::matches(
+        &binding,
+        KeyModifiers::CONTROL,
+        KeyCode::Char('2')
+    ));
+}
+
+#[test]
+fn keybindings_matches_superset_modifiers() {
+    // If binding requires CONTROL, pressing CONTROL+SHIFT should still match
+    let binding = (KeyModifiers::CONTROL, KeyCode::Char('1'));
+    assert!(KeybindingsConfig::matches(
+        &binding,
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        KeyCode::Char('1')
+    ));
+}

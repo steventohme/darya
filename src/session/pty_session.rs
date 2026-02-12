@@ -15,7 +15,15 @@ use crate::event::AppEvent;
 /// Claude Code emits OSC 9;4;0 (clear progress indicator) when done,
 /// rather than a standalone BEL character.
 pub struct PtyCallback {
-    done_count: Arc<AtomicUsize>,
+    pub done_count: Arc<AtomicUsize>,
+}
+
+impl PtyCallback {
+    pub fn new() -> Self {
+        Self {
+            done_count: Arc::new(AtomicUsize::new(0)),
+        }
+    }
 }
 
 impl vt100::Callbacks for PtyCallback {

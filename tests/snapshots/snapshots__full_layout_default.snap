@@ -1,0 +1,34 @@
+---
+source: tests/snapshots.rs
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃▶ 1 ○ my-project [main]     ┃┃  Press Enter on a worktree to start a Claude Code session                              ┃
+┃  2 ○ my-project [feature-1]┃┃                                                                                        ┃
+┃  3 ○ my-project [feature-2]┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┃                            ┃┃                                                                                        ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] [worktrees]  q:quit  Tab:switch  Ctrl+1..5:view  Ctrl+P:find  Ctrl+F:search  ?:help

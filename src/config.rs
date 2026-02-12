@@ -183,7 +183,7 @@ impl KeybindingsConfig {
 }
 
 /// Parse a keybinding string like "ctrl+1" or "ctrl+p" into (KeyModifiers, KeyCode).
-fn parse_keybinding(s: &str) -> Option<(KeyModifiers, KeyCode)> {
+pub fn parse_keybinding(s: &str) -> Option<(KeyModifiers, KeyCode)> {
     let lowered = s.trim().to_lowercase();
     let parts: Vec<&str> = lowered.split('+').map(|p| p.trim()).collect();
     if parts.is_empty() {
