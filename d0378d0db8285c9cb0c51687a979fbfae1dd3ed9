@@ -1,0 +1,37 @@
+tests/app_state.rs
+  f5e9287e81e45a59 12,977-1006
+src/main.rs
+  f5e9287e81e45a59 91,93-94,246-247,253-255,287,293,300-302
+tests/snapshots.rs
+  f5e9287e81e45a59 48
+src/session/pty_session.rs
+  f5e9287e81e45a59 77,92-98
+tests/helpers/mod.rs
+  f5e9287e81e45a59 8,15
+src/session/manager.rs
+  f5e9287e81e45a59 24,32,39
+src/app.rs
+  f5e9287e81e45a59 984,988,1020
+src/config.rs
+  f5e9287e81e45a59 220-223,230,241,262,264,346-352,355-368
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.3",
+  "base_commit_sha": "d0378d0db8285c9cb0c51687a979fbfae1dd3ed9",
+  "prompts": {
+    "f5e9287e81e45a59": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0ff12426-ce25-4a90-a2d0-5243dabb2b46",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 95,
+      "total_deletions": 14,
+      "accepted_lines": 93,
+      "overriden_lines": 0
+    }
+  }
+}
