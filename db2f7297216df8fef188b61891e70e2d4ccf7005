@@ -1,0 +1,36 @@
+CLAUDE.md
+  e9f8db84606f195d 53-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.3",
+  "base_commit_sha": "db2f7297216df8fef188b61891e70e2d4ccf7005",
+  "prompts": {
+    "8b0254670ed7e10b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d50a4089-311c-4624-a00b-8e04462cd3ef",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 103,
+      "total_deletions": 38,
+      "accepted_lines": 84,
+      "overriden_lines": 0
+    },
+    "f9f49e4d2ffc6bf7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2e5706cb-3697-4069-8132-a477fb6d6a12",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 706,
+      "total_deletions": 140,
+      "accepted_lines": 631,
+      "overriden_lines": 0
+    }
+  }
+}
