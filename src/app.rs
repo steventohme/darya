@@ -485,6 +485,129 @@ fn walk_project_files(root: &Path) -> Vec<String> {
     files
 }
 
+// ── Command Palette ──────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandId {
+    ViewWorktrees,
+    ViewTerminal,
+    ViewFiles,
+    ViewEditor,
+    ViewSearch,
+    ViewGitStatus,
+    ViewGitBlame,
+    ViewGitLog,
+    StartSession,
+    RestartSession,
+    CloseSession,
+    FuzzyFinder,
+    ProjectSearch,
+    RefreshGitStatus,
+    SplitPane,
+    ClosePane,
+    ToggleHelp,
+    Quit,
+}
+
+#[derive(Debug, Clone)]
+pub struct PaletteCommand {
+    pub id: CommandId,
+    pub name: String,
+    pub keybinding: Option<String>,
+}
+
+pub struct CommandPaletteState {
+    pub input: String,
+    pub all_commands: Vec<PaletteCommand>,
+    pub results: Vec<PaletteCommand>,
+    pub selected: usize,
+}
+
+impl CommandPaletteState {
+    pub fn new(keybindings: &KeybindingsConfig) -> Self {
+        let all_commands = vec![
+            PaletteCommand { id: CommandId::ViewWorktrees, name: "View: Worktrees".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.worktrees)) },
+            PaletteCommand { id: CommandId::ViewTerminal, name: "View: Terminal".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.terminal)) },
+            PaletteCommand { id: CommandId::ViewFiles, name: "View: Files".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.files)) },
+            PaletteCommand { id: CommandId::ViewEditor, name: "View: Editor".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.editor)) },
+            PaletteCommand { id: CommandId::ViewSearch, name: "View: Search".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.search)) },
+            PaletteCommand { id: CommandId::ViewGitStatus, name: "View: Git Status".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.git_status)) },
+            PaletteCommand { id: CommandId::ViewGitBlame, name: "View: Git Blame".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.git_blame)) },
+            PaletteCommand { id: CommandId::ViewGitLog, name: "View: Git Log".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.git_log)) },
+            PaletteCommand { id: CommandId::StartSession, name: "Session: Start".to_string(), keybinding: None },
+            PaletteCommand { id: CommandId::RestartSession, name: "Session: Restart".to_string(), keybinding: None },
+            PaletteCommand { id: CommandId::CloseSession, name: "Session: Close".to_string(), keybinding: None },
+            PaletteCommand { id: CommandId::FuzzyFinder, name: "Find File".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.fuzzy_finder)) },
+            PaletteCommand { id: CommandId::ProjectSearch, name: "Search Project".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.project_search)) },
+            PaletteCommand { id: CommandId::RefreshGitStatus, name: "Refresh Git Status".to_string(), keybinding: None },
+            PaletteCommand { id: CommandId::SplitPane, name: "Split Pane".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.split_pane)) },
+            PaletteCommand { id: CommandId::ClosePane, name: "Close Pane".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.close_pane)) },
+            PaletteCommand { id: CommandId::ToggleHelp, name: "Toggle Help".to_string(), keybinding: Some("?".to_string()) },
+            PaletteCommand { id: CommandId::Quit, name: "Quit".to_string(), keybinding: Some("q".to_string()) },
+        ];
+        let results = all_commands.clone();
+        Self {
+            input: String::new(),
+            all_commands,
+            results,
+            selected: 0,
+        }
+    }
+
+    pub fn update_matches(&mut self) {
+        use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
+        use nucleo_matcher::{Config, Matcher};
+
+        if self.input.is_empty() {
+            self.results = self.all_commands.clone();
+            self.selected = 0;
+            return;
+        }
+
+        let mut matcher = Matcher::new(Config::DEFAULT);
+        let pattern = Pattern::parse(&self.input, CaseMatching::Smart, Normalization::Smart);
+
+        let mut scored: Vec<(u32, usize)> = self
+            .all_commands
+            .iter()
+            .enumerate()
+            .filter_map(|(i, cmd)| {
+                let mut buf = Vec::new();
+                let haystack = nucleo_matcher::Utf32Str::new(&cmd.name, &mut buf);
+                pattern.score(haystack, &mut matcher).map(|s| (s, i))
+            })
+            .collect();
+
+        scored.sort_by(|a, b| b.0.cmp(&a.0));
+
+        self.results = scored
+            .into_iter()
+            .map(|(_, i)| self.all_commands[i].clone())
+            .collect();
+        self.selected = 0;
+    }
+
+    pub fn move_up(&mut self) {
+        if !self.results.is_empty() {
+            self.selected = if self.selected == 0 {
+                self.results.len() - 1
+            } else {
+                self.selected - 1
+            };
+        }
+    }
+
+    pub fn move_down(&mut self) {
+        if !self.results.is_empty() {
+            self.selected = (self.selected + 1) % self.results.len();
+        }
+    }
+
+    pub fn selected_command(&self) -> Option<CommandId> {
+        self.results.get(self.selected).map(|c| c.id)
+    }
+}
+
 pub struct SearchResult {
     pub file_path: PathBuf,
     pub file_relative: String,
@@ -1236,6 +1359,7 @@ pub struct App {
     pub editor: Option<EditorViewState>,
     pub search: Option<SearchViewState>,
     pub fuzzy_finder: Option<FuzzyFinderState>,
+    pub command_palette: Option<CommandPaletteState>,
     pub git_status: Option<GitStatusState>,
     pub diff_view: Option<DiffViewState>,
     pub git_blame: Option<GitBlameState>,
@@ -1275,6 +1399,7 @@ impl App {
             editor: None,
             search: None,
             fuzzy_finder: None,
+            command_palette: None,
             git_status: None,
             diff_view: None,
             git_blame: None,
@@ -1405,9 +1530,10 @@ impl App {
             return;
         }
 
-        // Fuzzy finder and project search keybindings are handled in main.rs event loop
+        // Fuzzy finder, project search, and command palette keybindings are handled in main.rs event loop
         if KeybindingsConfig::matches(&self.keybindings.fuzzy_finder, key.modifiers, key.code)
             || KeybindingsConfig::matches(&self.keybindings.project_search, key.modifiers, key.code)
+            || KeybindingsConfig::matches(&self.keybindings.command_palette, key.modifiers, key.code)
         {
             return;
         }
@@ -1415,6 +1541,12 @@ impl App {
         // Fuzzy finder gets exclusive keyboard focus
         if self.fuzzy_finder.is_some() {
             self.handle_fuzzy_finder_key(key);
+            return;
+        }
+
+        // Command palette gets exclusive keyboard focus
+        if self.command_palette.is_some() {
+            self.handle_command_palette_key(key);
             return;
         }
 
@@ -1534,6 +1666,105 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn handle_command_palette_key(&mut self, key: KeyEvent) {
+        // Ignore Ctrl+key combos (same pattern as fuzzy finder)
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            return;
+        }
+        match key.code {
+            KeyCode::Esc => {
+                self.command_palette = None;
+            }
+            KeyCode::Enter => {
+                if let Some(ref palette) = self.command_palette {
+                    if let Some(id) = palette.selected_command() {
+                        self.command_palette = None;
+                        self.execute_command(id);
+                    }
+                }
+            }
+            KeyCode::Up => {
+                if let Some(ref mut palette) = self.command_palette {
+                    palette.move_up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(ref mut palette) = self.command_palette {
+                    palette.move_down();
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(ref mut palette) = self.command_palette {
+                    palette.input.pop();
+                    palette.update_matches();
+                }
+            }
+            KeyCode::Char(c) => {
+                if let Some(ref mut palette) = self.command_palette {
+                    palette.input.push(c);
+                    palette.update_matches();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn execute_command(&mut self, id: CommandId) {
+        match id {
+            CommandId::ViewWorktrees => self.set_sidebar_view(SidebarView::Worktrees),
+            CommandId::ViewTerminal => self.set_main_view(MainView::Terminal),
+            CommandId::ViewFiles => self.set_sidebar_view(SidebarView::FileExplorer),
+            CommandId::ViewEditor => self.set_main_view(MainView::Editor),
+            CommandId::ViewSearch => self.set_sidebar_view(SidebarView::Search),
+            CommandId::ViewGitStatus => {
+                if let Some(wt) = self.worktrees.get(self.selected_worktree) {
+                    let path = wt.path.clone();
+                    self.git_status = Some(GitStatusState::new(path));
+                }
+                self.set_sidebar_view(SidebarView::GitStatus);
+            }
+            CommandId::ViewGitBlame => self.open_git_blame(),
+            CommandId::ViewGitLog => self.open_git_log(),
+            CommandId::FuzzyFinder => {
+                let root = self.file_explorer.root.clone();
+                self.fuzzy_finder = Some(FuzzyFinderState::new(root));
+                self.input_mode = InputMode::Navigation;
+            }
+            CommandId::ProjectSearch => {
+                self.prompt = Some(Prompt::SearchInput { input: String::new() });
+                self.input_mode = InputMode::Navigation;
+            }
+            CommandId::RefreshGitStatus => {
+                if let Some(wt) = self.worktrees.get(self.selected_worktree) {
+                    let path = wt.path.clone();
+                    self.git_status = Some(GitStatusState::new(path));
+                    self.status_message = Some("Git status refreshed".to_string());
+                }
+            }
+            CommandId::SplitPane => {
+                self.split_add_pane();
+            }
+            CommandId::ClosePane => {
+                self.close_focused_pane();
+            }
+            CommandId::ToggleHelp => {
+                self.show_help = !self.show_help;
+            }
+            CommandId::Quit => {
+                self.running = false;
+            }
+            CommandId::StartSession => {
+                self.status_message = Some("Use Enter in worktree list to start a session".to_string());
+            }
+            CommandId::RestartSession => {
+                self.status_message = Some("Use 'r' in worktree list to restart an exited session".to_string());
+            }
+            CommandId::CloseSession => {
+                self.status_message = Some("Use Ctrl+C to close the active session".to_string());
+            }
         }
     }
 

@@ -1,3 +1,4 @@
+pub mod command_palette;
 pub mod diff_view;
 pub mod editor;
 pub mod file_explorer;

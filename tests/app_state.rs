@@ -10,6 +10,7 @@ use darya::app::{
     InputMode, MainView, PanelFocus, Prompt, SidebarView,
     BlameLine, GitBlameState, GitLogEntry, GitLogState,
     format_relative_time,
+    CommandId, CommandPaletteState,
 };
 use darya::config;
 use darya::event::AppEvent;
@@ -1548,4 +1549,167 @@ fn format_relative_time_months() {
 fn format_relative_time_years() {
     let now = 100000000;
     assert_eq!(format_relative_time(now - 31536000, now), "1 year ago");
+}
+
+// ── Command Palette ─────────────────────────────────────────
+
+#[test]
+fn command_palette_opens_and_lists_commands() {
+    let mut app = make_app(3);
+    app.command_palette = Some(CommandPaletteState::new(&app.keybindings));
+    let palette = app.command_palette.as_ref().unwrap();
+    assert!(!palette.all_commands.is_empty());
+    assert_eq!(palette.results.len(), palette.all_commands.len());
+    assert_eq!(palette.selected, 0);
+}
+
+#[test]
+fn command_palette_esc_dismisses() {
+    let mut app = make_app(3);
+    app.command_palette = Some(CommandPaletteState::new(&app.keybindings));
+    assert!(app.command_palette.is_some());
+    app.handle_event(&key(KeyCode::Esc));
+    assert!(app.command_palette.is_none());
+}
+
+#[test]
+fn command_palette_filter_narrows_results() {
+    let mut app = make_app(3);
+    app.command_palette = Some(CommandPaletteState::new(&app.keybindings));
+    // Type "quit" to filter
+    app.handle_event(&key(KeyCode::Char('q')));
+    app.handle_event(&key(KeyCode::Char('u')));
+    app.handle_event(&key(KeyCode::Char('i')));
+    app.handle_event(&key(KeyCode::Char('t')));
+    let palette = app.command_palette.as_ref().unwrap();
+    assert!(palette.results.len() < palette.all_commands.len());
+    assert!(palette.results.iter().any(|c| c.id == CommandId::Quit));
+}
+
+#[test]
+fn command_palette_backspace_widens_results() {
+    let mut app = make_app(3);
+    app.command_palette = Some(CommandPaletteState::new(&app.keybindings));
+    app.handle_event(&key(KeyCode::Char('q')));
+    app.handle_event(&key(KeyCode::Char('u')));
+    let narrow_count = app.command_palette.as_ref().unwrap().results.len();
+    app.handle_event(&key(KeyCode::Backspace));
+    let wider_count = app.command_palette.as_ref().unwrap().results.len();
+    assert!(wider_count >= narrow_count);
+}
+
+#[test]
+fn command_palette_navigate_up_down() {
+    let mut app = make_app(3);
+    app.command_palette = Some(CommandPaletteState::new(&app.keybindings));
+    assert_eq!(app.command_palette.as_ref().unwrap().selected, 0);
+    app.handle_event(&key(KeyCode::Down));
+    assert_eq!(app.command_palette.as_ref().unwrap().selected, 1);
+    app.handle_event(&key(KeyCode::Up));
+    assert_eq!(app.command_palette.as_ref().unwrap().selected, 0);
+}
+
+#[test]
+fn command_palette_execute_quit() {
+    let mut app = make_app(3);
+    assert!(app.running);
+    app.execute_command(CommandId::Quit);
+    assert!(!app.running);
+}
+
+#[test]
+fn command_palette_execute_view_worktrees() {
+    let mut app = make_app(3);
+    app.sidebar_view = SidebarView::FileExplorer;
+    app.panel_focus = PanelFocus::Right;
+    app.execute_command(CommandId::ViewWorktrees);
+    assert_eq!(app.sidebar_view, SidebarView::Worktrees);
+    assert_eq!(app.panel_focus, PanelFocus::Left);
+}
+
+#[test]
+fn command_palette_execute_view_terminal() {
+    let mut app = make_app(3);
+    app.main_view = MainView::Editor;
+    app.panel_focus = PanelFocus::Left;
+    app.execute_command(CommandId::ViewTerminal);
+    assert_eq!(app.main_view, MainView::Terminal);
+    assert_eq!(app.panel_focus, PanelFocus::Right);
+}
+
+#[test]
+fn command_palette_execute_toggle_help() {
+    let mut app = make_app(3);
+    assert!(!app.show_help);
+    app.execute_command(CommandId::ToggleHelp);
+    assert!(app.show_help);
+    app.execute_command(CommandId::ToggleHelp);
+    assert!(!app.show_help);
+}
+
+#[test]
+fn command_palette_execute_fuzzy_finder() {
+    let mut app = make_app(3);
+    assert!(app.fuzzy_finder.is_none());
+    app.execute_command(CommandId::FuzzyFinder);
+    assert!(app.fuzzy_finder.is_some());
+}
+
+#[test]
+fn command_palette_execute_project_search() {
+    let mut app = make_app(3);
+    assert!(app.prompt.is_none());
+    app.execute_command(CommandId::ProjectSearch);
+    assert!(matches!(app.prompt, Some(Prompt::SearchInput { .. })));
+}
+
+#[test]
+fn command_palette_enter_executes_selected() {
+    let mut app = make_app(3);
+    app.command_palette = Some(CommandPaletteState::new(&app.keybindings));
+    // Navigate to "Quit" — find its index
+    let quit_idx = app.command_palette.as_ref().unwrap()
+        .results.iter()
+        .position(|c| c.id == CommandId::Quit)
+        .unwrap();
+    // Set selected directly
+    app.command_palette.as_mut().unwrap().selected = quit_idx;
+    assert!(app.running);
+    app.handle_event(&key(KeyCode::Enter));
+    assert!(!app.running);
+    assert!(app.command_palette.is_none());
+}
+
+#[test]
+fn command_palette_blocks_other_keys() {
+    let mut app = make_app(3);
+    app.command_palette = Some(CommandPaletteState::new(&app.keybindings));
+    // 'q' should type into palette, not quit
+    app.handle_event(&key(KeyCode::Char('q')));
+    assert!(app.running);
+    assert!(app.command_palette.is_some());
+    assert_eq!(app.command_palette.as_ref().unwrap().input, "q");
+}
+
+#[test]
+fn command_palette_session_commands_show_guidance() {
+    let mut app = make_app(3);
+    app.execute_command(CommandId::StartSession);
+    assert!(app.status_message.is_some());
+    assert!(app.status_message.as_ref().unwrap().contains("Enter"));
+}
+
+#[test]
+fn command_palette_execute_view_git_status() {
+    let mut app = make_app(3);
+    app.execute_command(CommandId::ViewGitStatus);
+    assert_eq!(app.sidebar_view, SidebarView::GitStatus);
+    assert_eq!(app.panel_focus, PanelFocus::Left);
+}
+
+#[test]
+fn command_palette_execute_refresh_git_status() {
+    let mut app = make_app(3);
+    app.execute_command(CommandId::RefreshGitStatus);
+    assert!(app.status_message.as_ref().unwrap().contains("refreshed"));
 }

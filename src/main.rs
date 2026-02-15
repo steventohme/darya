@@ -171,7 +171,9 @@ async fn run_loop(
                 if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
                     && key.code == KeyCode::Char('c')
                 {
-                    if app.fuzzy_finder.is_some() {
+                    if app.command_palette.is_some() {
+                        app.command_palette = None;
+                    } else if app.fuzzy_finder.is_some() {
                         app.fuzzy_finder = None;
                     } else if app.prompt.is_some() {
                         app.prompt = None;
@@ -215,6 +217,16 @@ async fn run_loop(
                         app.prompt = Some(app::Prompt::SearchInput {
                             input: String::new(),
                         });
+                        app.input_mode = InputMode::Navigation;
+                    }
+                }
+
+                // Command palette keybinding
+                if KeybindingsConfig::matches(&app.keybindings.command_palette, key.modifiers, key.code) {
+                    if app.command_palette.is_none() {
+                        app.prompt = None;
+                        app.fuzzy_finder = None;
+                        app.command_palette = Some(app::CommandPaletteState::new(&app.keybindings));
                         app.input_mode = InputMode::Navigation;
                     }
                 }

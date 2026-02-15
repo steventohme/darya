@@ -1,20 +1,19 @@
-# Phase 11: Split Terminal Panes
+# Phase 14: Command Palette
 
 ## Steps
-- [x] Step 1: Add PaneLayout struct + pane methods to src/app.rs
-- [x] Step 2: Add split_pane/close_pane keybinding config to src/config.rs
-- [x] Step 3: Extract render_session() in src/widgets/terminal_panel.rs
-- [x] Step 4: Add compute_pane_rects() to src/ui.rs + update draw() for split rendering
-- [x] Step 5: Wire keybindings + update input routing in src/main.rs
-- [x] Step 6: Add resize_all_except() to src/session/manager.rs
-- [x] Step 7: Update help overlay with split pane keybindings
-- [x] Step 8: Add 12 state machine tests + 2 snapshot tests
-- [x] Step 9: Verify all tests pass + accept snapshots
+- [x] Step 1: Add `command_palette` keybinding to config (default: Ctrl+K)
+- [x] Step 2: Add CommandId, PaletteCommand, CommandPaletteState types + execute_command dispatch
+- [x] Step 3: Add command palette key handler with exclusive focus
+- [x] Step 4: Create command_palette.rs widget (centered overlay with fuzzy search)
+- [x] Step 5: Wire rendering in ui.rs + widgets/mod.rs
+- [x] Step 6: Add keybinding trigger in main.rs + Ctrl+C dismissal
+- [x] Step 7: Update help overlay with Ctrl+K palette entry
+- [x] Step 8: Add 16 state machine tests + 2 snapshot tests
 
 ## Review Notes
-- All 12 new state machine tests pass (split_add_pane_creates_layout, split_add_pane_fails_without_other_sessions, split_add_pane_caps_at_three, close_focused_pane_collapses_to_single, close_focused_pane_adjusts_focus, cycle_pane_focus_wraps, focused_session_id_single_vs_split, is_session_visible_split_mode, split_preserves_across_view_switch, split_requires_terminal_view, remove_session_from_panes_collapses, alt_h_l_cycle_pane_focus_in_terminal_nav)
-- 2 new snapshot tests accepted: split_two_panes, split_focused_pane_highlighted
-- 1 existing snapshot updated: help_overlay_terminal (added pane keybindings)
-- 2 existing snapshots updated: worktree_list_3_items, status_bar_with_sessions (render_session now shows worktree name as title)
-- Pre-existing test race in file_changed tests (shared temp file) — not caused by this change
-- `cargo check` clean with zero warnings
+- All 216 tests pass (140 app_state + 43 components + 8 pty_callbacks + 22 snapshots + 3 unit)
+- 16 new command palette tests: open/close, filter/backspace, navigate, execute (quit, views, help, fuzzy finder, search, git status, refresh), enter-executes, blocks-other-keys, session guidance
+- 2 new snapshot tests: command_palette_open, command_palette_filtered
+- Existing help overlay snapshots unchanged (palette line added to view_bindings but fits within overlay width)
+- Uses nucleo fuzzy matcher (same as file finder) for command filtering
+- Session start/restart/close show guidance messages since they require main loop interaction

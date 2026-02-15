@@ -22,10 +22,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let kb_close_pane = KeybindingsConfig::format(&kb.close_pane);
     let kb_blame = KeybindingsConfig::format(&kb.git_blame);
     let kb_log = KeybindingsConfig::format(&kb.git_log);
+    let kb_cmd_palette = KeybindingsConfig::format(&kb.command_palette);
 
     let view_bindings = format!(
-        "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search  {}: Git  {}: Blame  {}: Log",
-        kb_worktrees, kb_terminal, kb_files, kb_editor, kb_search, kb_git, kb_blame, kb_log
+        "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search  {}: Git  {}: Blame  {}: Log  {}: Palette",
+        kb_worktrees, kb_terminal, kb_files, kb_editor, kb_search, kb_git, kb_blame, kb_log, kb_cmd_palette
     );
 
     let (title, bindings): (&str, Vec<(&str, &str)>) = match app.focused_view() {

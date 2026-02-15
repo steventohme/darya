@@ -226,6 +226,11 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     if app.fuzzy_finder.is_some() {
         widgets::fuzzy_finder::render(frame, size, app);
     }
+
+    // Render command palette overlay if active
+    if app.command_palette.is_some() {
+        widgets::command_palette::render(frame, size, app);
+    }
 }
 
 fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::config::Theme) {

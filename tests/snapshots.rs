@@ -4,8 +4,8 @@ use ratatui::backend::TestBackend;
 use ratatui::Terminal;
 
 use darya::app::{
-    App, BlameLine, DiffLine, DiffLineKind, DiffViewState, FileExplorerState, GitFileStatus,
-    GitLogEntry, GitLogState, GitBlameState,
+    App, BlameLine, CommandPaletteState, DiffLine, DiffLineKind, DiffViewState, FileExplorerState,
+    GitFileStatus, GitLogEntry, GitLogState, GitBlameState,
     GitStatusCategory, GitStatusEntry, GitStatusState, InputMode, MainView, PaneLayout,
     PanelFocus, SidebarView,
 };
@@ -480,4 +480,29 @@ fn snapshot_help_overlay_git_log() {
     let sm = make_session_manager();
     let output = render_to_string(&mut app, &sm, 100, 30);
     insta::assert_snapshot!("help_overlay_git_log", output);
+}
+
+// ── Command Palette snapshots ───────────────────────────────
+
+#[test]
+fn snapshot_command_palette_open() {
+    let mut app = make_test_app(3);
+    app.command_palette = Some(CommandPaletteState::new(&app.keybindings));
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 30);
+    insta::assert_snapshot!("command_palette_open", output);
+}
+
+#[test]
+fn snapshot_command_palette_filtered() {
+    let mut app = make_test_app(3);
+    let mut palette = CommandPaletteState::new(&app.keybindings);
+    palette.input = "git".to_string();
+    palette.update_matches();
+    app.command_palette = Some(palette);
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 30);
+    insta::assert_snapshot!("command_palette_filtered", output);
 }
