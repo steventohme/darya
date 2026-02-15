@@ -1,0 +1,39 @@
+src/app.rs
+  f8abb72b81a01302 45-46,91-92,101-102,866-1077,1241-1242,1280-1281,1566-1571,1600-1601,1800-1803,1952-2105,2124-2125
+src/widgets/mod.rs
+  f8abb72b81a01302 5-6
+src/widgets/git_log.rs
+  f8abb72b81a01302 1-91
+src/config.rs
+  f8abb72b81a01302 127-128,143-144,160-161,358-359
+src/widgets/git_blame.rs
+  f8abb72b81a01302 1-87
+src/ui.rs
+  f8abb72b81a01302 68-69,157-158
+tests/app_state.rs
+  f8abb72b81a01302 11-12,1275-1551
+tests/snapshots.rs
+  f8abb72b81a01302 7-8,335-483
+src/widgets/help_overlay.rs
+  f8abb72b81a01302 23-24,27-28,127-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.3",
+  "base_commit_sha": "0c56a53debd35d6fdd79ee8857e9fa8b6d093a76",
+  "prompts": {
+    "f8abb72b81a01302": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "10bcb10e-8b31-4614-9220-dfc65de06e23",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 1042,
+      "total_deletions": 3,
+      "accepted_lines": 1042,
+      "overriden_lines": 0
+    }
+  }
+}
