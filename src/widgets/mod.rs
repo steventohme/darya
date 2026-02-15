@@ -2,6 +2,8 @@ pub mod diff_view;
 pub mod editor;
 pub mod file_explorer;
 pub mod fuzzy_finder;
+pub mod git_blame;
+pub mod git_log;
 pub mod git_status;
 pub mod help_overlay;
 pub mod search_results;

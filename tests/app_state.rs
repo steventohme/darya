@@ -8,6 +8,8 @@ use darya::app::{
     is_edtui_compatible, status_priority, EditorViewState,
     GitStatusCategory, GitStatusEntry, GitStatusState, GitFileStatus,
     InputMode, MainView, PanelFocus, Prompt, SidebarView,
+    BlameLine, GitBlameState, GitLogEntry, GitLogState,
+    format_relative_time,
 };
 use darya::config;
 use darya::event::AppEvent;
@@ -1269,4 +1271,281 @@ fn files_created_or_deleted_refreshes_git_indicators() {
     app.file_explorer.set_root(tmp.path().to_path_buf());
     app.handle_event(&AppEvent::FilesCreatedOrDeleted);
     assert!(app.file_explorer.git_indicators.is_empty());
+}
+
+// ── Git Blame View ──────────────────────────────────────────
+
+fn make_blame_lines() -> Vec<BlameLine> {
+    vec![
+        BlameLine {
+            commit_short: "abc12345".to_string(),
+            author: "Alice".to_string(),
+            relative_time: "2 days ago".to_string(),
+            line_number: 1,
+            content: "use std::io;".to_string(),
+            is_recent: true,
+        },
+        BlameLine {
+            commit_short: "def67890".to_string(),
+            author: "Bob".to_string(),
+            relative_time: "3 months ago".to_string(),
+            line_number: 2,
+            content: "fn main() {}".to_string(),
+            is_recent: false,
+        },
+    ]
+}
+
+fn make_app_with_blame(n: usize) -> darya::app::App {
+    let mut app = make_app(n);
+    app.git_blame = Some(GitBlameState {
+        file_path: "src/main.rs".to_string(),
+        lines: make_blame_lines(),
+        scroll_offset: 0,
+        visible_height: 20,
+        worktree_path: app.worktrees[0].path.clone(),
+    });
+    app.main_view = MainView::GitBlame;
+    app.panel_focus = PanelFocus::Right;
+    app
+}
+
+#[test]
+fn git_blame_scroll_down_and_up() {
+    let mut app = make_app_with_blame(2);
+    // Make visible_height small so scrolling works
+    app.git_blame.as_mut().unwrap().visible_height = 1;
+    // Scroll down
+    app.handle_event(&key(KeyCode::Char('j')));
+    assert_eq!(app.git_blame.as_ref().unwrap().scroll_offset, 1);
+    // Scroll up
+    app.handle_event(&key(KeyCode::Char('k')));
+    assert_eq!(app.git_blame.as_ref().unwrap().scroll_offset, 0);
+}
+
+#[test]
+fn git_blame_esc_returns_to_editor() {
+    let mut app = make_app_with_blame(2);
+    app.handle_event(&key(KeyCode::Esc));
+    assert_eq!(app.main_view, MainView::Editor);
+}
+
+#[test]
+fn git_blame_tab_toggles_focus() {
+    let mut app = make_app_with_blame(2);
+    assert_eq!(app.panel_focus, PanelFocus::Right);
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.panel_focus, PanelFocus::Left);
+}
+
+#[test]
+fn git_blame_q_quits() {
+    let mut app = make_app_with_blame(2);
+    assert!(app.running);
+    app.handle_event(&key(KeyCode::Char('q')));
+    assert!(!app.running);
+}
+
+#[test]
+fn git_blame_number_jumps_worktree() {
+    let mut app = make_app_with_blame(3);
+    app.handle_event(&key(KeyCode::Char('2')));
+    assert_eq!(app.selected_worktree, 1);
+    // Blame cleared on worktree switch
+    assert!(app.git_blame.is_none());
+}
+
+#[test]
+fn git_blame_page_scroll() {
+    let mut app = make_app_with_blame(2);
+    // Set visible_height small so we can test bounds
+    app.git_blame.as_mut().unwrap().visible_height = 5;
+    // Add more lines
+    let mut lines = make_blame_lines();
+    for i in 3..=20 {
+        lines.push(BlameLine {
+            commit_short: format!("hash{:04}", i),
+            author: "Test".to_string(),
+            relative_time: "1 day ago".to_string(),
+            line_number: i,
+            content: format!("line {}", i),
+            is_recent: false,
+        });
+    }
+    app.git_blame.as_mut().unwrap().lines = lines;
+    app.handle_event(&key(KeyCode::PageDown));
+    assert!(app.git_blame.as_ref().unwrap().scroll_offset > 0);
+    app.handle_event(&key(KeyCode::PageUp));
+    assert_eq!(app.git_blame.as_ref().unwrap().scroll_offset, 0);
+}
+
+// ── Git Log View ────────────────────────────────────────────
+
+fn make_log_entries() -> Vec<GitLogEntry> {
+    vec![
+        GitLogEntry {
+            hash_short: "abc1234".to_string(),
+            subject: "Fix bug in parser".to_string(),
+            author: "Alice".to_string(),
+            relative_date: "2 hours ago".to_string(),
+        },
+        GitLogEntry {
+            hash_short: "def5678".to_string(),
+            subject: "Add new feature".to_string(),
+            author: "Bob".to_string(),
+            relative_date: "3 days ago".to_string(),
+        },
+        GitLogEntry {
+            hash_short: "ghi9012".to_string(),
+            subject: "Initial commit".to_string(),
+            author: "Alice".to_string(),
+            relative_date: "2 weeks ago".to_string(),
+        },
+    ]
+}
+
+fn make_app_with_git_log(n: usize) -> darya::app::App {
+    let mut app = make_app(n);
+    app.git_log = Some(GitLogState {
+        entries: make_log_entries(),
+        selected: 0,
+        scroll_offset: 0,
+        visible_height: 20,
+        worktree_path: app.worktrees[0].path.clone(),
+        file_filter: None,
+    });
+    app.main_view = MainView::GitLog;
+    app.panel_focus = PanelFocus::Right;
+    app
+}
+
+#[test]
+fn git_log_j_moves_selection_down() {
+    let mut app = make_app_with_git_log(2);
+    assert_eq!(app.git_log.as_ref().unwrap().selected, 0);
+    app.handle_event(&key(KeyCode::Char('j')));
+    assert_eq!(app.git_log.as_ref().unwrap().selected, 1);
+}
+
+#[test]
+fn git_log_k_moves_selection_up() {
+    let mut app = make_app_with_git_log(2);
+    app.git_log.as_mut().unwrap().selected = 2;
+    app.handle_event(&key(KeyCode::Char('k')));
+    assert_eq!(app.git_log.as_ref().unwrap().selected, 1);
+}
+
+#[test]
+fn git_log_j_wraps_around() {
+    let mut app = make_app_with_git_log(2);
+    app.git_log.as_mut().unwrap().selected = 2;
+    app.handle_event(&key(KeyCode::Char('j')));
+    assert_eq!(app.git_log.as_ref().unwrap().selected, 0);
+}
+
+#[test]
+fn git_log_esc_returns_to_terminal() {
+    let mut app = make_app_with_git_log(2);
+    app.handle_event(&key(KeyCode::Esc));
+    assert_eq!(app.main_view, MainView::Terminal);
+}
+
+#[test]
+fn git_log_tab_toggles_focus() {
+    let mut app = make_app_with_git_log(2);
+    assert_eq!(app.panel_focus, PanelFocus::Right);
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.panel_focus, PanelFocus::Left);
+}
+
+#[test]
+fn git_log_q_quits() {
+    let mut app = make_app_with_git_log(2);
+    assert!(app.running);
+    app.handle_event(&key(KeyCode::Char('q')));
+    assert!(!app.running);
+}
+
+#[test]
+fn git_log_number_jumps_worktree() {
+    let mut app = make_app_with_git_log(3);
+    app.handle_event(&key(KeyCode::Char('2')));
+    assert_eq!(app.selected_worktree, 1);
+    // Log cleared on worktree switch
+    assert!(app.git_log.is_none());
+}
+
+#[test]
+fn ctrl_7_opens_git_blame_view() {
+    // Without an editor open, should show status message
+    let mut app = make_app(3);
+    app.handle_event(&ctrl_key('7'));
+    assert!(app.status_message.as_ref().unwrap().contains("No file open"));
+}
+
+#[test]
+fn ctrl_8_opens_git_log_view() {
+    let mut app = make_app(3);
+    // This will try to run git log on a non-git dir, should show error
+    app.handle_event(&ctrl_key('8'));
+    // Either it succeeds (if in a git repo) or shows an error
+    assert!(app.main_view == MainView::GitLog || app.status_message.is_some());
+}
+
+#[test]
+fn b_in_editor_readonly_opens_blame() {
+    // Without a real git repo, this will fail gracefully
+    let mut app = make_app_with_editor(2);
+    app.input_mode = InputMode::Navigation;
+    app.handle_event(&key(KeyCode::Char('b')));
+    // Should either open blame or show error (no git repo)
+    assert!(app.main_view == MainView::GitBlame || app.status_message.is_some());
+}
+
+// ── format_relative_time ────────────────────────────────────
+
+#[test]
+fn format_relative_time_just_now() {
+    let now = 1000000;
+    assert_eq!(format_relative_time(now, now), "just now");
+    assert_eq!(format_relative_time(now - 30, now), "just now");
+}
+
+#[test]
+fn format_relative_time_minutes() {
+    let now = 1000000;
+    assert_eq!(format_relative_time(now - 120, now), "2 mins ago");
+    assert_eq!(format_relative_time(now - 60, now), "1 min ago");
+}
+
+#[test]
+fn format_relative_time_hours() {
+    let now = 1000000;
+    assert_eq!(format_relative_time(now - 3600, now), "1 hour ago");
+    assert_eq!(format_relative_time(now - 7200, now), "2 hours ago");
+}
+
+#[test]
+fn format_relative_time_days() {
+    let now = 1000000;
+    assert_eq!(format_relative_time(now - 86400, now), "1 day ago");
+    assert_eq!(format_relative_time(now - 172800, now), "2 days ago");
+}
+
+#[test]
+fn format_relative_time_weeks() {
+    let now = 1000000;
+    assert_eq!(format_relative_time(now - 604800, now), "1 week ago");
+}
+
+#[test]
+fn format_relative_time_months() {
+    let now = 10000000;
+    assert_eq!(format_relative_time(now - 2592000, now), "1 month ago");
+}
+
+#[test]
+fn format_relative_time_years() {
+    let now = 100000000;
+    assert_eq!(format_relative_time(now - 31536000, now), "1 year ago");
 }

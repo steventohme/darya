@@ -42,6 +42,8 @@ pub enum ViewKind {
     Search,
     GitStatus,
     DiffView,
+    GitBlame,
+    GitLog,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,6 +88,8 @@ pub enum MainView {
     Terminal,
     Editor,
     DiffView,
+    GitBlame,
+    GitLog,
 }
 
 impl MainView {
@@ -94,6 +98,8 @@ impl MainView {
             MainView::Terminal => ViewKind::Terminal,
             MainView::Editor => ViewKind::Editor,
             MainView::DiffView => ViewKind::DiffView,
+            MainView::GitBlame => ViewKind::GitBlame,
+            MainView::GitLog => ViewKind::GitLog,
         }
     }
 }
@@ -857,6 +863,218 @@ pub fn parse_diff_lines(text: &str) -> Vec<DiffLine> {
     lines
 }
 
+// ── Git Blame Types ─────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlameLine {
+    pub commit_short: String,
+    pub author: String,
+    pub relative_time: String,
+    pub line_number: usize,
+    pub content: String,
+    pub is_recent: bool,
+}
+
+pub struct GitBlameState {
+    pub file_path: String,
+    pub lines: Vec<BlameLine>,
+    pub scroll_offset: usize,
+    pub visible_height: usize,
+    pub worktree_path: PathBuf,
+}
+
+impl GitBlameState {
+    pub fn scroll_up(&mut self, n: usize) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(n);
+    }
+
+    pub fn scroll_down(&mut self, n: usize) {
+        let max_scroll = self.lines.len().saturating_sub(self.visible_height);
+        self.scroll_offset = (self.scroll_offset + n).min(max_scroll);
+    }
+}
+
+pub fn run_git_blame(file: &str, root: &Path) -> Result<Vec<BlameLine>, String> {
+    let output = Command::new("git")
+        .args(["blame", "--porcelain", file])
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("Failed to run git blame: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git blame error: {}", stderr.trim()));
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    parse_blame_porcelain(&text)
+}
+
+fn parse_blame_porcelain(text: &str) -> Result<Vec<BlameLine>, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let mut lines = Vec::new();
+    let mut current_hash = String::new();
+    let mut current_author = String::new();
+    let mut current_time: u64 = 0;
+    let mut current_line_number: usize = 0;
+
+    for line in text.lines() {
+        if line.starts_with('\t') {
+            // Content line — emit BlameLine
+            let content = &line[1..];
+            let elapsed = now.saturating_sub(current_time);
+            let is_recent = elapsed < 7 * 24 * 3600;
+            lines.push(BlameLine {
+                commit_short: if current_hash.len() >= 8 {
+                    current_hash[..8].to_string()
+                } else {
+                    current_hash.clone()
+                },
+                author: current_author.clone(),
+                relative_time: format_relative_time(current_time, now),
+                line_number: current_line_number,
+                content: content.to_string(),
+                is_recent,
+            });
+        } else if line.starts_with("author ") {
+            current_author = line[7..].to_string();
+        } else if line.starts_with("author-time ") {
+            current_time = line[12..].parse().unwrap_or(0);
+        } else {
+            // Check if it's a commit header line: 40-char hash + line numbers
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 && parts[0].len() == 40 && parts[0].chars().all(|c| c.is_ascii_hexdigit()) {
+                current_hash = parts[0].to_string();
+                current_line_number = parts[2].parse().unwrap_or(0);
+            }
+        }
+    }
+    Ok(lines)
+}
+
+pub fn format_relative_time(epoch_secs: u64, now: u64) -> String {
+    let elapsed = now.saturating_sub(epoch_secs);
+    let minutes = elapsed / 60;
+    let hours = minutes / 60;
+    let days = hours / 24;
+    let weeks = days / 7;
+    let months = days / 30;
+    let years = days / 365;
+
+    if years > 0 {
+        format!("{} year{} ago", years, if years == 1 { "" } else { "s" })
+    } else if months > 0 {
+        format!("{} month{} ago", months, if months == 1 { "" } else { "s" })
+    } else if weeks > 0 {
+        format!("{} week{} ago", weeks, if weeks == 1 { "" } else { "s" })
+    } else if days > 0 {
+        format!("{} day{} ago", days, if days == 1 { "" } else { "s" })
+    } else if hours > 0 {
+        format!("{} hour{} ago", hours, if hours == 1 { "" } else { "s" })
+    } else if minutes > 0 {
+        format!("{} min{} ago", minutes, if minutes == 1 { "" } else { "s" })
+    } else {
+        "just now".to_string()
+    }
+}
+
+// ── Git Log Types ───────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitLogEntry {
+    pub hash_short: String,
+    pub subject: String,
+    pub author: String,
+    pub relative_date: String,
+}
+
+pub struct GitLogState {
+    pub entries: Vec<GitLogEntry>,
+    pub selected: usize,
+    pub scroll_offset: usize,
+    pub visible_height: usize,
+    pub worktree_path: PathBuf,
+    pub file_filter: Option<String>,
+}
+
+impl GitLogState {
+    pub fn move_up(&mut self) {
+        if !self.entries.is_empty() {
+            self.selected = if self.selected == 0 {
+                self.entries.len() - 1
+            } else {
+                self.selected - 1
+            };
+        }
+    }
+
+    pub fn move_down(&mut self) {
+        if !self.entries.is_empty() {
+            self.selected = (self.selected + 1) % self.entries.len();
+        }
+    }
+
+    pub fn selected_entry(&self) -> Option<&GitLogEntry> {
+        self.entries.get(self.selected)
+    }
+}
+
+pub fn run_git_log(root: &Path, file_filter: Option<&str>) -> Result<Vec<GitLogEntry>, String> {
+    let mut args = vec!["log", "--format=%h%x00%s%x00%an%x00%cr", "-200"];
+    let dashdash;
+    if let Some(file) = file_filter {
+        dashdash = format!("{}", file);
+        args.push("--");
+        args.push(&dashdash);
+    }
+
+    let output = Command::new("git")
+        .args(&args)
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("Failed to run git log: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git log error: {}", stderr.trim()));
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut entries = Vec::new();
+    for line in text.lines() {
+        let parts: Vec<&str> = line.splitn(4, '\0').collect();
+        if parts.len() == 4 {
+            entries.push(GitLogEntry {
+                hash_short: parts[0].to_string(),
+                subject: parts[1].to_string(),
+                author: parts[2].to_string(),
+                relative_date: parts[3].to_string(),
+            });
+        }
+    }
+    Ok(entries)
+}
+
+pub fn run_git_show(hash: &str, root: &Path) -> Result<Vec<DiffLine>, String> {
+    let output = Command::new("git")
+        .args(["show", "--format=commit %H%nAuthor: %an%nDate:   %ci%n%n    %s%n", hash])
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("Failed to run git show: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git show error: {}", stderr.trim()));
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    Ok(parse_diff_lines(&text))
+}
+
 // ── Activity Animation ──────────────────────────────────────
 
 /// Tracks bouncing-block animation for worktrees with active PTY output.
@@ -1020,6 +1238,8 @@ pub struct App {
     pub fuzzy_finder: Option<FuzzyFinderState>,
     pub git_status: Option<GitStatusState>,
     pub diff_view: Option<DiffViewState>,
+    pub git_blame: Option<GitBlameState>,
+    pub git_log: Option<GitLogState>,
     pub activity: ActivityAnimation,
     pub session_command: String,
     pub pane_layout: Option<PaneLayout>,
@@ -1057,6 +1277,8 @@ impl App {
             fuzzy_finder: None,
             git_status: None,
             diff_view: None,
+            git_blame: None,
+            git_log: None,
             activity: ActivityAnimation::new(),
             session_command,
             pane_layout: None,
@@ -1341,6 +1563,12 @@ impl App {
             }
             self.set_sidebar_view(SidebarView::GitStatus); return;
         }
+        if KeybindingsConfig::matches(&kb.git_blame, key.modifiers, key.code) {
+            self.open_git_blame(); return;
+        }
+        if KeybindingsConfig::matches(&kb.git_log, key.modifiers, key.code) {
+            self.open_git_log(); return;
+        }
 
         if key.code == KeyCode::Char('?') {
             self.show_help = !self.show_help;
@@ -1369,6 +1597,8 @@ impl App {
             ViewKind::Search => self.handle_search_key(key),
             ViewKind::GitStatus => self.handle_git_status_key(key),
             ViewKind::DiffView => self.handle_diff_view_key(key),
+            ViewKind::GitBlame => self.handle_git_blame_key(key),
+            ViewKind::GitLog => self.handle_git_log_key(key),
         }
     }
 
@@ -1567,6 +1797,10 @@ impl App {
                 editor.editor_state.mode = EditorMode::Insert;
                 self.input_mode = InputMode::Editor;
             }
+            KeyCode::Char('b') => {
+                self.open_git_blame();
+                return;
+            }
             KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
                 self.toggle_focus();
@@ -1715,6 +1949,160 @@ impl App {
         }
     }
 
+    fn handle_git_blame_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('q') => self.running = false,
+            KeyCode::Char('j') | KeyCode::Down => {
+                if let Some(ref mut gb) = self.git_blame {
+                    gb.scroll_down(1);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if let Some(ref mut gb) = self.git_blame {
+                    gb.scroll_up(1);
+                }
+            }
+            KeyCode::PageDown => {
+                if let Some(ref mut gb) = self.git_blame {
+                    let h = gb.visible_height.saturating_sub(2);
+                    gb.scroll_down(h);
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(ref mut gb) = self.git_blame {
+                    let h = gb.visible_height.saturating_sub(2);
+                    gb.scroll_up(h);
+                }
+            }
+            KeyCode::Esc => {
+                self.main_view = MainView::Editor;
+            }
+            KeyCode::Tab => {
+                self.toggle_focus();
+            }
+            KeyCode::Char(c @ '1'..='9') => {
+                self.jump_to_worktree((c as usize) - ('1' as usize));
+            }
+            KeyCode::Char('0') => {
+                self.jump_to_worktree(9);
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_git_log_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('q') => self.running = false,
+            KeyCode::Char('j') | KeyCode::Down => {
+                if let Some(ref mut gl) = self.git_log {
+                    gl.move_down();
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if let Some(ref mut gl) = self.git_log {
+                    gl.move_up();
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(ref gl) = self.git_log {
+                    if let Some(entry) = gl.selected_entry() {
+                        let hash = entry.hash_short.clone();
+                        let root = gl.worktree_path.clone();
+                        match run_git_show(&hash, &root) {
+                            Ok(diff_lines) => {
+                                self.diff_view = Some(DiffViewState {
+                                    file_path: format!("commit {}", hash),
+                                    lines: diff_lines,
+                                    scroll_offset: 0,
+                                    visible_height: 24,
+                                });
+                                self.main_view = MainView::DiffView;
+                            }
+                            Err(e) => {
+                                self.status_message = Some(format!("git show error: {}", e));
+                            }
+                        }
+                    }
+                }
+            }
+            KeyCode::Esc => {
+                self.main_view = MainView::Terminal;
+            }
+            KeyCode::Tab => {
+                self.toggle_focus();
+            }
+            KeyCode::Char(c @ '1'..='9') => {
+                self.jump_to_worktree((c as usize) - ('1' as usize));
+            }
+            KeyCode::Char('0') => {
+                self.jump_to_worktree(9);
+            }
+            _ => {}
+        }
+    }
+
+    fn open_git_blame(&mut self) {
+        let Some(ref editor) = self.editor else {
+            self.status_message = Some("No file open in editor".to_string());
+            return;
+        };
+        let Some(wt) = self.worktrees.get(self.selected_worktree) else {
+            return;
+        };
+        let root = wt.path.clone();
+        let file_path = editor.file_path.clone();
+        let relative = file_path
+            .strip_prefix(&root)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| file_path.to_string_lossy().to_string());
+
+        match run_git_blame(&relative, &root) {
+            Ok(lines) => {
+                self.git_blame = Some(GitBlameState {
+                    file_path: relative,
+                    lines,
+                    scroll_offset: 0,
+                    visible_height: 24,
+                    worktree_path: root,
+                });
+                self.set_main_view(MainView::GitBlame);
+            }
+            Err(e) => {
+                self.status_message = Some(format!("Blame error: {}", e));
+            }
+        }
+    }
+
+    fn open_git_log(&mut self) {
+        let Some(wt) = self.worktrees.get(self.selected_worktree) else {
+            return;
+        };
+        let root = wt.path.clone();
+        let file_filter = self.editor.as_ref().and_then(|ed| {
+            ed.file_path
+                .strip_prefix(&root)
+                .ok()
+                .map(|p| p.to_string_lossy().to_string())
+        });
+
+        match run_git_log(&root, file_filter.as_deref()) {
+            Ok(entries) => {
+                self.git_log = Some(GitLogState {
+                    entries,
+                    selected: 0,
+                    scroll_offset: 0,
+                    visible_height: 24,
+                    worktree_path: root,
+                    file_filter,
+                });
+                self.set_main_view(MainView::GitLog);
+            }
+            Err(e) => {
+                self.status_message = Some(format!("Log error: {}", e));
+            }
+        }
+    }
+
     fn jump_to_worktree(&mut self, index: usize) {
         if index < self.worktrees.len() {
             self.selected_worktree = index;
@@ -1733,6 +2121,8 @@ impl App {
             // Clear stale git state from previous worktree
             self.git_status = None;
             self.diff_view = None;
+            self.git_blame = None;
+            self.git_log = None;
         }
     }
 

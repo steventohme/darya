@@ -20,10 +20,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let kb_git = KeybindingsConfig::format(&kb.git_status);
     let kb_split = KeybindingsConfig::format(&kb.split_pane);
     let kb_close_pane = KeybindingsConfig::format(&kb.close_pane);
+    let kb_blame = KeybindingsConfig::format(&kb.git_blame);
+    let kb_log = KeybindingsConfig::format(&kb.git_log);
 
     let view_bindings = format!(
-        "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search  {}: Git",
-        kb_worktrees, kb_terminal, kb_files, kb_editor, kb_search, kb_git
+        "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search  {}: Git  {}: Blame  {}: Log",
+        kb_worktrees, kb_terminal, kb_files, kb_editor, kb_search, kb_git, kb_blame, kb_log
     );
 
     let (title, bindings): (&str, Vec<(&str, &str)>) = match app.focused_view() {
@@ -114,6 +116,32 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             vec![
                 ("j/k, ↑/↓", "Scroll line"),
                 ("PgUp/PgDn", "Scroll page"),
+                ("Esc", "Back to terminal"),
+                ("1-9, 0", "Jump to worktree"),
+                ("Tab", "Switch panel"),
+                (&kb_fuzzy, "Fuzzy file finder"),
+                (&kb_proj_search, "Project search"),
+                ("q", "Quit"),
+            ],
+        ),
+        ViewKind::GitBlame => (
+            "Navigation — Git Blame",
+            vec![
+                ("j/k, ↑/↓", "Scroll line"),
+                ("PgUp/PgDn", "Scroll page"),
+                ("Esc", "Back to editor"),
+                ("1-9, 0", "Jump to worktree"),
+                ("Tab", "Switch panel"),
+                (&kb_fuzzy, "Fuzzy file finder"),
+                (&kb_proj_search, "Project search"),
+                ("q", "Quit"),
+            ],
+        ),
+        ViewKind::GitLog => (
+            "Navigation — Git Log",
+            vec![
+                ("j/k, ↑/↓", "Navigate commits"),
+                ("Enter", "View commit diff"),
                 ("Esc", "Back to terminal"),
                 ("1-9, 0", "Jump to worktree"),
                 ("Tab", "Switch panel"),

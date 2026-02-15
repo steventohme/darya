@@ -1,0 +1,34 @@
+---
+source: tests/snapshots.rs
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━┓┏ Blame ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃▶ 1 ○ my-project [main]┃┃  Open a file in editor, then press b or Ctrl+7                          ┃
+┃  2 ○ my-project [featu┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                   ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
+┃                   ┃ Navigation — Git Blame                                   ┃                   ┃
+┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
+┃                   ┃ Ctrl+1: Worktrees  Ctrl+2: Terminal  Ctrl+3: Files  Ctrl+┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃ j/k, ↑/↓    Scroll line                                  ┃                   ┃
+┃                   ┃ PgUp/PgDn   Scroll page                                  ┃                   ┃
+┃                   ┃ Esc         Back to editor                               ┃                   ┃
+┃                   ┃ 1-9, 0      Jump to worktree                             ┃                   ┃
+┃                   ┃ Tab         Switch panel                                 ┃                   ┃
+┃                   ┃ Ctrl+P      Fuzzy file finder                            ┃                   ┃
+┃                   ┃ Ctrl+F      Project search                               ┃                   ┃
+┃                   ┃ q           Quit                                         ┃                   ┃
+┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] blame                                          main

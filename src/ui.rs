@@ -65,6 +65,8 @@ fn render_view(
         ViewKind::Search => widgets::search_results::render(frame, area, app, is_focused),
         ViewKind::GitStatus => widgets::git_status::render(frame, area, app, is_focused),
         ViewKind::DiffView => widgets::diff_view::render(frame, area, app, is_focused),
+        ViewKind::GitBlame => widgets::git_blame::render(frame, area, app, is_focused),
+        ViewKind::GitLog => widgets::git_log::render(frame, area, app, is_focused),
     }
 }
 
@@ -152,6 +154,8 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ViewKind::Search => "search",
             ViewKind::GitStatus => "git",
             ViewKind::DiffView => "diff",
+            ViewKind::GitBlame => "blame",
+            ViewKind::GitLog => "log",
         };
         let left = format!(" [{}] {}", mode_str, view_str);
 

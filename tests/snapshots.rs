@@ -4,7 +4,8 @@ use ratatui::backend::TestBackend;
 use ratatui::Terminal;
 
 use darya::app::{
-    App, DiffLine, DiffLineKind, DiffViewState, FileExplorerState, GitFileStatus,
+    App, BlameLine, DiffLine, DiffLineKind, DiffViewState, FileExplorerState, GitFileStatus,
+    GitLogEntry, GitLogState, GitBlameState,
     GitStatusCategory, GitStatusEntry, GitStatusState, InputMode, MainView, PaneLayout,
     PanelFocus, SidebarView,
 };
@@ -330,4 +331,153 @@ fn snapshot_file_explorer_with_git_indicators() {
     let sm = make_session_manager();
     let output = render_to_string(&mut app, &sm, 100, 15);
     insta::assert_snapshot!("file_explorer_with_git_indicators", output);
+}
+
+// ── Git Blame snapshot ──────────────────────────────────────
+
+#[test]
+fn snapshot_git_blame_view() {
+    let mut app = make_test_app(3);
+    app.git_blame = Some(GitBlameState {
+        file_path: "src/main.rs".to_string(),
+        lines: vec![
+            BlameLine {
+                commit_short: "abc12345".to_string(),
+                author: "Alice".to_string(),
+                relative_time: "2 days ago".to_string(),
+                line_number: 1,
+                content: "use std::io;".to_string(),
+                is_recent: true,
+            },
+            BlameLine {
+                commit_short: "def67890".to_string(),
+                author: "Bob".to_string(),
+                relative_time: "3 months ago".to_string(),
+                line_number: 2,
+                content: "fn main() {".to_string(),
+                is_recent: false,
+            },
+            BlameLine {
+                commit_short: "def67890".to_string(),
+                author: "Bob".to_string(),
+                relative_time: "3 months ago".to_string(),
+                line_number: 3,
+                content: "    println!(\"hello\");".to_string(),
+                is_recent: false,
+            },
+            BlameLine {
+                commit_short: "abc12345".to_string(),
+                author: "Alice".to_string(),
+                relative_time: "2 days ago".to_string(),
+                line_number: 4,
+                content: "}".to_string(),
+                is_recent: true,
+            },
+        ],
+        scroll_offset: 0,
+        visible_height: 20,
+        worktree_path: app.worktrees[0].path.clone(),
+    });
+    app.main_view = MainView::GitBlame;
+    app.panel_focus = PanelFocus::Right;
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 15);
+    insta::assert_snapshot!("git_blame_view", output);
+}
+
+// ── Git Log snapshot ────────────────────────────────────────
+
+#[test]
+fn snapshot_git_log_view() {
+    let mut app = make_test_app(3);
+    app.git_log = Some(GitLogState {
+        entries: vec![
+            GitLogEntry {
+                hash_short: "abc1234".to_string(),
+                subject: "Fix bug in parser".to_string(),
+                author: "Alice".to_string(),
+                relative_date: "2 hours ago".to_string(),
+            },
+            GitLogEntry {
+                hash_short: "def5678".to_string(),
+                subject: "Add new feature".to_string(),
+                author: "Bob".to_string(),
+                relative_date: "3 days ago".to_string(),
+            },
+            GitLogEntry {
+                hash_short: "ghi9012".to_string(),
+                subject: "Initial commit".to_string(),
+                author: "Alice".to_string(),
+                relative_date: "2 weeks ago".to_string(),
+            },
+        ],
+        selected: 0,
+        scroll_offset: 0,
+        visible_height: 20,
+        worktree_path: app.worktrees[0].path.clone(),
+        file_filter: None,
+    });
+    app.main_view = MainView::GitLog;
+    app.panel_focus = PanelFocus::Right;
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 15);
+    insta::assert_snapshot!("git_log_view", output);
+}
+
+// ── Git Log with file filter snapshot ───────────────────────
+
+#[test]
+fn snapshot_git_log_with_file_filter() {
+    let mut app = make_test_app(3);
+    app.git_log = Some(GitLogState {
+        entries: vec![
+            GitLogEntry {
+                hash_short: "abc1234".to_string(),
+                subject: "Fix parser bug".to_string(),
+                author: "Alice".to_string(),
+                relative_date: "1 hour ago".to_string(),
+            },
+        ],
+        selected: 0,
+        scroll_offset: 0,
+        visible_height: 20,
+        worktree_path: app.worktrees[0].path.clone(),
+        file_filter: Some("src/parser.rs".to_string()),
+    });
+    app.main_view = MainView::GitLog;
+    app.panel_focus = PanelFocus::Right;
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 15);
+    insta::assert_snapshot!("git_log_with_file_filter", output);
+}
+
+// ── Help overlay for Git Blame ──────────────────────────────
+
+#[test]
+fn snapshot_help_overlay_git_blame() {
+    let mut app = make_test_app(2);
+    app.show_help = true;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::GitBlame;
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 30);
+    insta::assert_snapshot!("help_overlay_git_blame", output);
+}
+
+// ── Help overlay for Git Log ────────────────────────────────
+
+#[test]
+fn snapshot_help_overlay_git_log() {
+    let mut app = make_test_app(2);
+    app.show_help = true;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::GitLog;
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 30);
+    insta::assert_snapshot!("help_overlay_git_log", output);
 }

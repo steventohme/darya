@@ -124,6 +124,8 @@ struct KeybindingsToml {
     project_search: Option<String>,
     split_pane: Option<String>,
     close_pane: Option<String>,
+    git_blame: Option<String>,
+    git_log: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -138,6 +140,8 @@ pub struct KeybindingsConfig {
     pub project_search: (KeyModifiers, KeyCode),
     pub split_pane: (KeyModifiers, KeyCode),
     pub close_pane: (KeyModifiers, KeyCode),
+    pub git_blame: (KeyModifiers, KeyCode),
+    pub git_log: (KeyModifiers, KeyCode),
 }
 
 impl Default for KeybindingsConfig {
@@ -153,6 +157,8 @@ impl Default for KeybindingsConfig {
             project_search: (KeyModifiers::CONTROL, KeyCode::Char('f')),
             split_pane: (KeyModifiers::CONTROL, KeyCode::Char('\\')),
             close_pane: (KeyModifiers::CONTROL, KeyCode::Char('w')),
+            git_blame: (KeyModifiers::CONTROL, KeyCode::Char('7')),
+            git_log: (KeyModifiers::CONTROL, KeyCode::Char('8')),
         }
     }
 }
@@ -349,6 +355,8 @@ pub fn load_config() -> AppConfig {
         apply_kb!(project_search);
         apply_kb!(split_pane);
         apply_kb!(close_pane);
+        apply_kb!(git_blame);
+        apply_kb!(git_log);
     }
 
     if let Some(ref s) = config.session {
