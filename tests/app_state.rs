@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crossterm::event::KeyCode;
 
 use darya::app::{
-    is_edtui_compatible, EditorViewState,
+    is_edtui_compatible, status_priority, EditorViewState,
     GitStatusCategory, GitStatusEntry, GitStatusState, GitFileStatus,
     InputMode, MainView, PanelFocus, Prompt, SidebarView,
 };
@@ -895,19 +895,20 @@ fn selected_branch_info_without_git_status_returns_zeros() {
 
 // ── File Watching ────────────────────────────────────────────
 
-fn make_app_with_open_file(content: &str) -> (darya::app::App, PathBuf) {
+fn make_app_with_open_file(content: &str) -> (darya::app::App, PathBuf, tempfile::TempDir) {
     let mut app = make_app(2);
-    let tmp = std::env::temp_dir().join("darya_test_fw.txt");
+    let dir = tempfile::tempdir().unwrap();
+    let tmp = dir.path().join("test_file.txt");
     std::fs::write(&tmp, content).unwrap();
     app.editor = Some(EditorViewState::open(tmp.clone()).unwrap());
     app.main_view = MainView::Editor;
     app.panel_focus = PanelFocus::Right;
-    (app, tmp)
+    (app, tmp, dir)
 }
 
 #[test]
 fn file_changed_reloads_open_editor() {
-    let (mut app, tmp) = make_app_with_open_file("original\n");
+    let (mut app, tmp, _dir) = make_app_with_open_file("original\n");
     // Modify file on disk
     std::fs::write(&tmp, "changed content\n").unwrap();
     app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.clone()] });
@@ -920,7 +921,7 @@ fn file_changed_reloads_open_editor() {
 
 #[test]
 fn file_changed_does_not_overwrite_modified_editor() {
-    let (mut app, tmp) = make_app_with_open_file("original\n");
+    let (mut app, tmp, _dir) = make_app_with_open_file("original\n");
     // Mark editor as modified by user
     app.editor.as_mut().unwrap().modified = true;
     // Modify file on disk
@@ -935,7 +936,7 @@ fn file_changed_does_not_overwrite_modified_editor() {
 
 #[test]
 fn file_changed_ignores_unrelated_path() {
-    let (mut app, _tmp) = make_app_with_open_file("original\n");
+    let (mut app, _tmp, _dir) = make_app_with_open_file("original\n");
     let unrelated = PathBuf::from("/tmp/some_other_file.txt");
     app.handle_event(&AppEvent::FileChanged { paths: vec![unrelated] });
     // No status message, content unchanged
@@ -968,7 +969,7 @@ fn files_created_or_deleted_refreshes_explorer() {
 
 #[test]
 fn file_changed_identical_content_no_message() {
-    let (mut app, tmp) = make_app_with_open_file("same content\n");
+    let (mut app, tmp, _dir) = make_app_with_open_file("same content\n");
     // File on disk is identical to editor content — no rewrite needed, just send event
     app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.clone()] });
     // No status message when content is identical
@@ -1225,4 +1226,47 @@ fn tab_no_panes_behaves_as_before() {
     app.handle_event(&key(KeyCode::Tab));
     assert_eq!(app.input_mode, InputMode::Navigation);
     assert_eq!(app.panel_focus, PanelFocus::Left);
+}
+
+// ── Git Indicators ──────────────────────────────────────────
+
+#[test]
+fn status_priority_ordering() {
+    assert!(status_priority(&GitFileStatus::Deleted) > status_priority(&GitFileStatus::Modified));
+    assert!(status_priority(&GitFileStatus::Modified) > status_priority(&GitFileStatus::Added));
+    assert!(status_priority(&GitFileStatus::Added) > status_priority(&GitFileStatus::Renamed));
+    assert!(status_priority(&GitFileStatus::Renamed) > status_priority(&GitFileStatus::Untracked));
+}
+
+#[test]
+fn git_indicators_cleared_on_set_root() {
+    let mut app = make_app(2);
+    // Manually inject a fake indicator
+    app.file_explorer.git_indicators.insert("foo.rs".to_string(), GitFileStatus::Modified);
+    assert!(!app.file_explorer.git_indicators.is_empty());
+    // Set root to a non-git temp path — indicators should be cleared
+    let tmp = tempfile::tempdir().unwrap();
+    app.file_explorer.set_root(tmp.path().to_path_buf());
+    assert!(app.file_explorer.git_indicators.is_empty());
+}
+
+#[test]
+fn file_changed_refreshes_git_indicators() {
+    // Ensure no panic on a non-git directory
+    let tmp = tempfile::tempdir().unwrap();
+    let mut app = make_app(2);
+    app.file_explorer.set_root(tmp.path().to_path_buf());
+    app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.path().join("a.txt")] });
+    // Should not panic, indicators stay empty for non-git dir
+    assert!(app.file_explorer.git_indicators.is_empty());
+}
+
+#[test]
+fn files_created_or_deleted_refreshes_git_indicators() {
+    // Ensure no panic on a non-git directory
+    let tmp = tempfile::tempdir().unwrap();
+    let mut app = make_app(2);
+    app.file_explorer.set_root(tmp.path().to_path_buf());
+    app.handle_event(&AppEvent::FilesCreatedOrDeleted);
+    assert!(app.file_explorer.git_indicators.is_empty());
 }

@@ -4,8 +4,9 @@ use ratatui::backend::TestBackend;
 use ratatui::Terminal;
 
 use darya::app::{
-    App, DiffLine, DiffLineKind, DiffViewState, GitFileStatus, GitStatusCategory,
-    GitStatusEntry, GitStatusState, InputMode, MainView, PaneLayout, PanelFocus, SidebarView,
+    App, DiffLine, DiffLineKind, DiffViewState, FileExplorerState, GitFileStatus,
+    GitStatusCategory, GitStatusEntry, GitStatusState, InputMode, MainView, PaneLayout,
+    PanelFocus, SidebarView,
 };
 use darya::config::{KeybindingsConfig, Theme};
 use darya::session::manager::SessionManager;
@@ -296,4 +297,37 @@ fn snapshot_split_focused_pane_highlighted() {
     let sm = make_session_manager();
     let output = render_to_string(&mut app, &sm, 120, 20);
     insta::assert_snapshot!("split_focused_pane_highlighted", output);
+}
+
+// ── File explorer with git indicators ───────────────────────
+
+#[test]
+fn snapshot_file_explorer_with_git_indicators() {
+    // Create a temp dir with a stable-named project dir inside
+    let tmp = tempfile::tempdir().unwrap();
+    let project = tmp.path().join("my-project");
+    std::fs::create_dir(&project).unwrap();
+    let src_dir = project.join("src");
+    std::fs::create_dir(&src_dir).unwrap();
+    std::fs::write(src_dir.join("app.rs"), "").unwrap();
+    std::fs::write(src_dir.join("main.rs"), "").unwrap();
+    std::fs::write(project.join("README.md"), "").unwrap();
+
+    let mut app = make_test_app(2);
+    app.file_explorer = FileExplorerState::new(project);
+    // Expand the src directory
+    app.file_explorer.expanded.insert(src_dir.clone());
+    app.file_explorer.refresh();
+
+    // Inject git indicators matching relative paths
+    app.file_explorer.git_indicators.insert("src/app.rs".to_string(), GitFileStatus::Modified);
+    app.file_explorer.git_indicators.insert("README.md".to_string(), GitFileStatus::Untracked);
+    app.file_explorer.git_indicators.insert("src/main.rs".to_string(), GitFileStatus::Added);
+
+    app.sidebar_view = SidebarView::FileExplorer;
+    app.panel_focus = PanelFocus::Left;
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 15);
+    insta::assert_snapshot!("file_explorer_with_git_indicators", output);
 }

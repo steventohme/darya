@@ -1,10 +1,10 @@
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState};
 use ratatui::Frame;
 
-use crate::app::App;
+use crate::app::{App, GitFileStatus};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
     let root_display = app
@@ -14,6 +14,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| app.file_explorer.root.display().to_string());
 
+    let root = app.file_explorer.root.clone();
     let items: Vec<ListItem> = app
         .file_explorer
         .entries
@@ -28,9 +29,39 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                 ("  ", Style::default().fg(app.theme.fg))
             };
 
+            let marker = if entry.is_dir {
+                // Check if any dirty descendant exists under this directory
+                let dir_rel = entry.path
+                    .strip_prefix(&root)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let prefix = format!("{}/", dir_rel);
+                let has_dirty = app.file_explorer.git_indicators.keys()
+                    .any(|k| k.starts_with(&prefix));
+                if has_dirty {
+                    Span::styled(" ●", Style::default().fg(Color::DarkGray))
+                } else {
+                    Span::raw("")
+                }
+            } else {
+                let rel = entry.path
+                    .strip_prefix(&root)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                match app.file_explorer.git_indicators.get(&rel) {
+                    Some(GitFileStatus::Added) => Span::styled(" A", Style::default().fg(Color::Green)),
+                    Some(GitFileStatus::Modified) => Span::styled(" M", Style::default().fg(Color::Yellow)),
+                    Some(GitFileStatus::Deleted) => Span::styled(" D", Style::default().fg(Color::Red)),
+                    Some(GitFileStatus::Renamed) => Span::styled(" R", Style::default().fg(Color::Blue)),
+                    Some(GitFileStatus::Untracked) => Span::styled(" ?", Style::default().fg(Color::DarkGray)),
+                    None => Span::raw(""),
+                }
+            };
+
             let line = Line::from(vec![
                 Span::styled(format!("{}{}", indent, icon), style),
                 Span::styled(&entry.name, style),
+                marker,
             ]);
             ListItem::new(line)
         })

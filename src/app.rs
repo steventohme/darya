@@ -121,6 +121,7 @@ pub struct FileExplorerState {
     pub selected: usize,
     pub expanded: HashSet<PathBuf>,
     pub root: PathBuf,
+    pub git_indicators: HashMap<String, GitFileStatus>,
 }
 
 impl FileExplorerState {
@@ -130,8 +131,10 @@ impl FileExplorerState {
             selected: 0,
             expanded: HashSet::new(),
             root,
+            git_indicators: HashMap::new(),
         };
         state.refresh();
+        state.refresh_git_indicators();
         state
     }
 
@@ -259,6 +262,24 @@ impl FileExplorerState {
         }
     }
 
+    /// Refresh the git indicator cache by running `git status` on the root.
+    pub fn refresh_git_indicators(&mut self) {
+        self.git_indicators.clear();
+        let Ok(entries) = run_git_status(&self.root) else {
+            return;
+        };
+        for entry in entries {
+            self.git_indicators
+                .entry(entry.path.clone())
+                .and_modify(|existing| {
+                    if status_priority(&entry.status) > status_priority(existing) {
+                        *existing = entry.status;
+                    }
+                })
+                .or_insert(entry.status);
+        }
+    }
+
     /// Set root to a new path (e.g. when switching worktrees).
     pub fn set_root(&mut self, path: PathBuf) {
         if self.root != path {
@@ -266,6 +287,7 @@ impl FileExplorerState {
             self.expanded.clear();
             self.selected = 0;
             self.refresh();
+            self.refresh_git_indicators();
         }
     }
 }
@@ -721,6 +743,17 @@ pub fn run_git_status(root: &Path) -> Result<Vec<GitStatusEntry>, String> {
     Ok(entries)
 }
 
+/// Priority for merging duplicate git status entries — higher wins.
+pub fn status_priority(status: &GitFileStatus) -> u8 {
+    match status {
+        GitFileStatus::Untracked => 0,
+        GitFileStatus::Renamed => 1,
+        GitFileStatus::Added => 2,
+        GitFileStatus::Modified => 3,
+        GitFileStatus::Deleted => 4,
+    }
+}
+
 // ── Diff View Types ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1129,9 +1162,11 @@ impl App {
                         }
                     }
                 }
+                self.file_explorer.refresh_git_indicators();
             }
             AppEvent::FilesCreatedOrDeleted => {
                 self.file_explorer.refresh();
+                self.file_explorer.refresh_git_indicators();
                 if let Some(ref mut gs) = self.git_status {
                     gs.refresh();
                 }

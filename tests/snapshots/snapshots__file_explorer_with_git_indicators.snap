@@ -1,0 +1,19 @@
+---
+source: tests/snapshots.rs
+expression: output
+---
+ darya
+┏ my-project ━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃▶ ▾ src ●              ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
+┃      app.rs M         ┃┃                                                                         ┃
+┃      main.rs A        ┃┃                                                                         ┃
+┃    README.md ?        ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] files                                          main
