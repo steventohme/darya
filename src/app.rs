@@ -1015,6 +1015,17 @@ impl GitBlameState {
         let max_scroll = self.lines.len().saturating_sub(self.visible_height);
         self.scroll_offset = (self.scroll_offset + n).min(max_scroll);
     }
+
+    pub fn refresh(&mut self) {
+        match run_git_blame(&self.file_path, &self.worktree_path) {
+            Ok(lines) => {
+                self.lines = lines;
+                let max_scroll = self.lines.len().saturating_sub(self.visible_height);
+                self.scroll_offset = self.scroll_offset.min(max_scroll);
+            }
+            Err(_) => {}
+        }
+    }
 }
 
 pub fn run_git_blame(file: &str, root: &Path) -> Result<Vec<BlameLine>, String> {
@@ -1143,6 +1154,18 @@ impl GitLogState {
 
     pub fn selected_entry(&self) -> Option<&GitLogEntry> {
         self.entries.get(self.selected)
+    }
+
+    pub fn refresh(&mut self) {
+        match run_git_log(&self.worktree_path, self.file_filter.as_deref()) {
+            Ok(entries) => {
+                self.entries = entries;
+                if !self.entries.is_empty() && self.selected >= self.entries.len() {
+                    self.selected = self.entries.len() - 1;
+                }
+            }
+            Err(_) => {}
+        }
     }
 }
 
@@ -1567,12 +1590,27 @@ impl App {
                     }
                 }
                 self.file_explorer.refresh_git_indicators();
+                if let Some(ref mut gs) = self.git_status {
+                    gs.refresh();
+                }
+                if let Some(ref mut gl) = self.git_log {
+                    gl.refresh();
+                }
+                if let Some(ref mut gb) = self.git_blame {
+                    gb.refresh();
+                }
             }
             AppEvent::FilesCreatedOrDeleted => {
                 self.file_explorer.refresh();
                 self.file_explorer.refresh_git_indicators();
                 if let Some(ref mut gs) = self.git_status {
                     gs.refresh();
+                }
+                if let Some(ref mut gl) = self.git_log {
+                    gl.refresh();
+                }
+                if let Some(ref mut gb) = self.git_blame {
+                    gb.refresh();
                 }
             }
             AppEvent::Tick => {

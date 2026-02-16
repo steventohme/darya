@@ -1734,3 +1734,87 @@ fn command_palette_execute_refresh_git_status() {
     app.execute_command(CommandId::RefreshGitStatus);
     assert!(app.status_message.as_ref().unwrap().contains("refreshed"));
 }
+
+// ── Git View Auto-Refresh ──────────────────────────────────
+
+#[test]
+fn git_log_refresh_preserves_state_on_error() {
+    let mut app = make_app_with_git_log(2);
+    app.git_log.as_mut().unwrap().selected = 1;
+    // refresh() calls git on a non-existent repo path, silently keeps stale data
+    app.git_log.as_mut().unwrap().refresh();
+    let gl = app.git_log.as_ref().unwrap();
+    assert_eq!(gl.entries.len(), 3); // original entries preserved
+    assert_eq!(gl.selected, 1); // selection preserved
+}
+
+#[test]
+fn git_blame_refresh_preserves_state_on_error() {
+    let mut app = make_app_with_blame(2);
+    app.git_blame.as_mut().unwrap().scroll_offset = 2;
+    // refresh() calls git on a non-existent repo path, silently keeps stale data
+    app.git_blame.as_mut().unwrap().refresh();
+    let gb = app.git_blame.as_ref().unwrap();
+    assert!(!gb.lines.is_empty()); // original lines preserved
+    assert_eq!(gb.scroll_offset, 2); // scroll preserved
+}
+
+#[test]
+fn file_changed_refreshes_git_views() {
+    let mut app = make_app_with_git_log(2);
+    app.git_blame = Some(GitBlameState {
+        file_path: "src/main.rs".to_string(),
+        lines: vec![BlameLine {
+            commit_short: "abc1234".to_string(),
+            author: "Test".to_string(),
+            relative_time: "1 hour ago".to_string(),
+            line_number: 1,
+            content: "fn main() {}".to_string(),
+            is_recent: false,
+        }],
+        scroll_offset: 0,
+        visible_height: 20,
+        worktree_path: app.worktrees[0].path.clone(),
+    });
+    app.git_status = Some(GitStatusState {
+        entries: vec![],
+        selected: 0,
+        error: None,
+        worktree_path: app.worktrees[0].path.clone(),
+    });
+    // Should not panic — refresh silently keeps stale data on non-git paths
+    app.handle_event(&AppEvent::FileChanged { paths: vec![PathBuf::from("/tmp/foo.rs")] });
+    assert!(app.git_log.is_some());
+    assert!(app.git_blame.is_some());
+    assert!(app.git_status.is_some());
+}
+
+#[test]
+fn files_created_or_deleted_refreshes_git_views() {
+    let mut app = make_app_with_git_log(2);
+    app.git_blame = Some(GitBlameState {
+        file_path: "src/main.rs".to_string(),
+        lines: vec![BlameLine {
+            commit_short: "abc1234".to_string(),
+            author: "Test".to_string(),
+            relative_time: "1 hour ago".to_string(),
+            line_number: 1,
+            content: "fn main() {}".to_string(),
+            is_recent: false,
+        }],
+        scroll_offset: 0,
+        visible_height: 20,
+        worktree_path: app.worktrees[0].path.clone(),
+    });
+    app.git_status = Some(GitStatusState {
+        entries: vec![],
+        selected: 0,
+        error: None,
+        worktree_path: app.worktrees[0].path.clone(),
+    });
+    // Should not panic — refresh silently keeps stale data on non-git paths
+    app.handle_event(&AppEvent::FilesCreatedOrDeleted);
+    assert!(app.git_log.is_some());
+    assert!(app.git_blame.is_some());
+    assert!(app.git_status.is_some());
+}
