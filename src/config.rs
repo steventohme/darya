@@ -127,6 +127,7 @@ struct KeybindingsToml {
     git_blame: Option<String>,
     git_log: Option<String>,
     command_palette: Option<String>,
+    shell: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -144,6 +145,7 @@ pub struct KeybindingsConfig {
     pub git_blame: (KeyModifiers, KeyCode),
     pub git_log: (KeyModifiers, KeyCode),
     pub command_palette: (KeyModifiers, KeyCode),
+    pub shell: (KeyModifiers, KeyCode),
 }
 
 impl Default for KeybindingsConfig {
@@ -162,6 +164,7 @@ impl Default for KeybindingsConfig {
             git_blame: (KeyModifiers::CONTROL, KeyCode::Char('7')),
             git_log: (KeyModifiers::CONTROL, KeyCode::Char('8')),
             command_palette: (KeyModifiers::CONTROL, KeyCode::Char('k')),
+            shell: (KeyModifiers::CONTROL, KeyCode::Char('9')),
         }
     }
 }
@@ -237,12 +240,18 @@ struct SessionToml {
 }
 
 #[derive(Debug, Deserialize, Default)]
+struct ShellToml {
+    command: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
 struct ConfigToml {
     theme: Option<ThemeToml>,
     terminal: Option<TerminalToml>,
     worktree: Option<WorktreeToml>,
     keybindings: Option<KeybindingsToml>,
     session: Option<SessionToml>,
+    shell: Option<ShellToml>,
 }
 
 pub const DEFAULT_WORKTREE_DIR_FORMAT: &str = "{repo}-{branch}";
@@ -254,6 +263,7 @@ pub struct AppConfig {
     pub worktree_dir_format: String,
     pub keybindings: KeybindingsConfig,
     pub session_command: String,
+    pub shell_command: String,
 }
 
 /// Parse a hex color string like "#33FF33" or "33FF33" into a ratatui Color.
@@ -275,8 +285,9 @@ pub fn load_config() -> AppConfig {
     let mut worktree_dir_format = DEFAULT_WORKTREE_DIR_FORMAT.to_string();
     let mut keybindings = KeybindingsConfig::default();
     let mut session_command = CLAUDE_COMMAND.to_string();
+    let mut shell_command = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
 
-    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone(), keybindings: KeybindingsConfig::default(), session_command: CLAUDE_COMMAND.to_string() };
+    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone(), keybindings: KeybindingsConfig::default(), session_command: CLAUDE_COMMAND.to_string(), shell_command: shell_command.clone() };
 
     let Some(home) = dirs_path() else {
         return defaults();
@@ -361,6 +372,7 @@ pub fn load_config() -> AppConfig {
         apply_kb!(git_blame);
         apply_kb!(git_log);
         apply_kb!(command_palette);
+        apply_kb!(shell);
     }
 
     if let Some(ref s) = config.session {
@@ -369,7 +381,13 @@ pub fn load_config() -> AppConfig {
         }
     }
 
-    AppConfig { theme, terminal_start_bottom, worktree_dir_format, keybindings, session_command }
+    if let Some(ref s) = config.shell {
+        if let Some(ref cmd) = s.command {
+            shell_command = cmd.clone();
+        }
+    }
+
+    AppConfig { theme, terminal_start_bottom, worktree_dir_format, keybindings, session_command, shell_command }
 }
 
 /// Resolve the session command for a worktree. Checks for a `.darya.toml`
@@ -380,6 +398,22 @@ pub fn resolve_session_command(worktree_path: &std::path::Path, global_command: 
         if let Ok(config) = toml::from_str::<ConfigToml>(&contents) {
             if let Some(session) = config.session {
                 if let Some(cmd) = session.command {
+                    return cmd;
+                }
+            }
+        }
+    }
+    global_command.to_string()
+}
+
+/// Resolve the shell command for a worktree. Checks for a `.darya.toml`
+/// override in the worktree root, falling back to the global config value.
+pub fn resolve_shell_command(worktree_path: &std::path::Path, global_command: &str) -> String {
+    let local_config = worktree_path.join(".darya.toml");
+    if let Ok(contents) = std::fs::read_to_string(&local_config) {
+        if let Ok(config) = toml::from_str::<ConfigToml>(&contents) {
+            if let Some(shell) = config.shell {
+                if let Some(cmd) = shell.command {
                     return cmd;
                 }
             }
