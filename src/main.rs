@@ -48,7 +48,13 @@ fn pane_sizes(
     app: &App,
 ) -> Vec<(String, u16, u16)> {
     let size = terminal.size().unwrap_or_default();
-    if let Some(ref layout) = app.pane_layout {
+    // Check the view-appropriate pane layout
+    let layout_ref = if app.main_view == darya::app::MainView::Shell {
+        app.shell_pane_layout.as_ref()
+    } else {
+        app.pane_layout.as_ref()
+    };
+    if let Some(layout) = layout_ref {
         if layout.panes.len() > 1 {
             let rects = ui::compute_pane_rects(size.into(), layout.panes.len());
             let block = ratatui::widgets::Block::default()
@@ -117,7 +123,8 @@ async fn main() -> color_eyre::Result<()> {
     // Create app with loaded theme, keybindings, and session command
     let keybindings = app_config.keybindings;
     let session_command = app_config.session_command;
-    let mut app = App::new(worktrees, theme, terminal_start_bottom, keybindings, session_command);
+    let shell_command = app_config.shell_command;
+    let mut app = App::new(worktrees, theme, terminal_start_bottom, keybindings, session_command, shell_command);
     let (pty_rows, _pty_cols) = pty_size(&terminal);
     app.terminal_height = pty_rows;
     let (mut events, event_tx) = create_event_handler();
@@ -187,12 +194,17 @@ async fn run_loop(
                     } else if let Some(session_id) = app.focused_session_id().cloned() {
                         session_manager.remove(&session_id);
                         app.session_ids.retain(|_, v| v != &session_id);
+                        app.shell_session_ids.retain(|_, v| v != &session_id);
                         app.attention_sessions.remove(&session_id);
                         app.exited_sessions.remove(&session_id);
                         app.activity.remove_session(&session_id);
                         app.remove_session_from_panes(&session_id);
+                        app.remove_shell_session_from_panes(&session_id);
                         if app.active_session_id.as_deref() == Some(&session_id) {
                             app.active_session_id = None;
+                        }
+                        if app.active_shell_session_id.as_deref() == Some(&session_id) {
+                            app.active_shell_session_id = None;
                         }
                         app.input_mode = InputMode::Navigation;
                         app.status_message = Some("Session closed".to_string());
@@ -254,7 +266,7 @@ async fn run_loop(
                 // Handle worktree deletion
                 else if app.wants_delete_worktree(key) {
                     if let Some(wt) = app.worktrees.get(app.selected_worktree).cloned() {
-                        // Clean up session if it exists
+                        // Clean up Claude session if it exists
                         if let Some(session_id) = app.session_ids.remove(&wt.path) {
                             session_manager.remove(&session_id);
                             app.attention_sessions.remove(&session_id);
@@ -263,6 +275,17 @@ async fn run_loop(
                             app.remove_session_from_panes(&session_id);
                             if app.active_session_id.as_deref() == Some(&session_id) {
                                 app.active_session_id = None;
+                            }
+                        }
+                        // Clean up shell session if it exists
+                        if let Some(session_id) = app.shell_session_ids.remove(&wt.path) {
+                            session_manager.remove(&session_id);
+                            app.attention_sessions.remove(&session_id);
+                            app.exited_sessions.remove(&session_id);
+                            app.activity.remove_session(&session_id);
+                            app.remove_shell_session_from_panes(&session_id);
+                            if app.active_shell_session_id.as_deref() == Some(&session_id) {
+                                app.active_shell_session_id = None;
                             }
                         }
                         match wt_manager.remove(&wt.path) {
@@ -369,6 +392,88 @@ async fn run_loop(
                     }
                 }
 
+                // Handle shell session spawning on Enter in Shell view
+                else if app.needs_shell_spawn(key) {
+                    if let Some(wt_path) = app.selected_worktree_path().cloned() {
+                        if !app.shell_session_ids.contains_key(&wt_path) {
+                            let (rows, cols) = pty_size(terminal);
+                            let command = config::resolve_shell_command(&wt_path, &app.shell_command);
+                            match session_manager.spawn_session(wt_path.clone(), rows, cols, app.theme.mode, &command) {
+                                Ok(id) => {
+                                    app.shell_session_ids.insert(wt_path, id.clone());
+                                    app.active_shell_session_id = Some(id);
+                                    app.panel_focus = app::PanelFocus::Right;
+                                    app.input_mode = InputMode::Terminal;
+                                }
+                                Err(e) => {
+                                    app.status_message =
+                                        Some(format!("Failed to start shell: {}", e));
+                                }
+                            }
+                        } else {
+                            // Shell already exists, just switch to it
+                            if let Some(id) = app.shell_session_ids.get(&wt_path).cloned() {
+                                app.attention_sessions.remove(&id);
+                                app.active_shell_session_id = Some(id);
+                                app.panel_focus = app::PanelFocus::Right;
+                                app.input_mode = InputMode::Terminal;
+                            }
+                        }
+                    }
+                }
+
+                // Handle shell session restart on 'r' for exited shell sessions
+                else if app.needs_shell_restart(key) {
+                    if let Some(wt_path) = app.selected_worktree_path().cloned() {
+                        if let Some(old_id) = app.shell_session_ids.remove(&wt_path) {
+                            session_manager.remove(&old_id);
+                            app.attention_sessions.remove(&old_id);
+                            app.exited_sessions.remove(&old_id);
+                            app.activity.remove_session(&old_id);
+                            if app.active_shell_session_id.as_deref() == Some(&old_id) {
+                                app.active_shell_session_id = None;
+                            }
+                        }
+                        let (rows, cols) = pty_size(terminal);
+                        let command = config::resolve_shell_command(&wt_path, &app.shell_command);
+                        match session_manager.spawn_session(
+                            wt_path.clone(),
+                            rows,
+                            cols,
+                            app.theme.mode,
+                            &command,
+                        ) {
+                            Ok(id) => {
+                                app.shell_session_ids.insert(wt_path, id.clone());
+                                app.active_shell_session_id = Some(id);
+                                app.panel_focus = app::PanelFocus::Right;
+                                app.input_mode = InputMode::Terminal;
+                            }
+                            Err(e) => {
+                                app.status_message =
+                                    Some(format!("Failed to restart shell: {}", e));
+                            }
+                        }
+                    }
+                }
+
+                // Handle shell session close on Backspace
+                else if app.needs_shell_close(key) {
+                    if let Some(wt_path) = app.selected_worktree_path().cloned() {
+                        if let Some(session_id) = app.shell_session_ids.remove(&wt_path) {
+                            session_manager.remove(&session_id);
+                            app.attention_sessions.remove(&session_id);
+                            app.exited_sessions.remove(&session_id);
+                            app.activity.remove_session(&session_id);
+                            app.remove_shell_session_from_panes(&session_id);
+                            if app.active_shell_session_id.as_deref() == Some(&session_id) {
+                                app.active_shell_session_id = None;
+                            }
+                            app.status_message = Some("Shell closed".to_string());
+                        }
+                    }
+                }
+
                 // Split pane (Navigation mode only)
                 if app.input_mode == InputMode::Navigation
                     && KeybindingsConfig::matches(&app.keybindings.split_pane, key.modifiers, key.code)
@@ -385,7 +490,7 @@ async fn run_loop(
 
                 // Close pane — intercept in ANY mode when panes exist
                 // (prevents Ctrl+W from reaching PTY as delete-word)
-                if app.pane_layout.is_some()
+                if (app.pane_layout.is_some() || app.shell_pane_layout.is_some())
                     && KeybindingsConfig::matches(&app.keybindings.close_pane, key.modifiers, key.code)
                 {
                     app.input_mode = InputMode::Navigation;
@@ -438,6 +543,10 @@ async fn run_loop(
                 let rect = ui::compute_pty_rect(full_size);
                 app.terminal_height = rect.height.max(1);
 
+                // Collect all pane session IDs that need custom sizing
+                let mut paned_sids: Vec<String> = Vec::new();
+
+                // Resize Claude terminal panes
                 if let Some(ref layout) = app.pane_layout {
                     if layout.panes.len() > 1 {
                         let pane_rects = ui::compute_pane_rects(full_size, layout.panes.len());
@@ -449,18 +558,36 @@ async fn run_loop(
                             if let Some(session) = session_manager.get_mut(sid) {
                                 let _ = session.resize(inner.height.max(1), inner.width.max(1));
                             }
+                            paned_sids.push(sid.clone());
                         }
-                        // Resize non-visible sessions to single-pane size
-                        session_manager.resize_all_except(
-                            &layout.panes,
-                            rect.height.max(1),
-                            rect.width.max(1),
-                        );
-                    } else {
-                        session_manager.resize_all(rect.height.max(1), rect.width.max(1));
                     }
-                } else {
+                }
+
+                // Resize shell panes
+                if let Some(ref layout) = app.shell_pane_layout {
+                    if layout.panes.len() > 1 {
+                        let pane_rects = ui::compute_pane_rects(full_size, layout.panes.len());
+                        let block = ratatui::widgets::Block::default()
+                            .borders(ratatui::widgets::Borders::ALL)
+                            .border_type(ratatui::widgets::BorderType::Thick);
+                        for (i, sid) in layout.panes.iter().enumerate() {
+                            let inner = block.inner(pane_rects[i]);
+                            if let Some(session) = session_manager.get_mut(sid) {
+                                let _ = session.resize(inner.height.max(1), inner.width.max(1));
+                            }
+                            paned_sids.push(sid.clone());
+                        }
+                    }
+                }
+
+                if paned_sids.is_empty() {
                     session_manager.resize_all(rect.height.max(1), rect.width.max(1));
+                } else {
+                    session_manager.resize_all_except(
+                        &paned_sids,
+                        rect.height.max(1),
+                        rect.width.max(1),
+                    );
                 }
             }
 
