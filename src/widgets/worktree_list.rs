@@ -7,19 +7,39 @@ use ratatui::Frame;
 use crate::app::App;
 use crate::config::Theme;
 
-/// Build 5 styled spans for the bouncing-block animation.
-/// Small dim squares as a track, with a bigger bright orange square bouncing through.
-fn build_animation_spans(pos: usize, theme: &Theme) -> Vec<Span<'static>> {
-    let bright_style = Style::default().fg(theme.session_active);
-    let dim_style = Style::default().fg(theme.fg_dim);
+/// Linearly interpolate between two RGB colors. `t` ranges 0.0 (color a) to 1.0 (color b).
+fn lerp_color(a: ratatui::style::Color, b: ratatui::style::Color, t: f32) -> ratatui::style::Color {
+    use ratatui::style::Color;
+    match (a, b) {
+        (Color::Rgb(ar, ag, ab), Color::Rgb(br, bg, bb)) => {
+            let t = t.clamp(0.0, 1.0);
+            Color::Rgb(
+                (ar as f32 + (br as f32 - ar as f32) * t) as u8,
+                (ag as f32 + (bg as f32 - ag as f32) * t) as u8,
+                (ab as f32 + (bb as f32 - ab as f32) * t) as u8,
+            )
+        }
+        _ => if t > 0.5 { b } else { a },
+    }
+}
 
-    (0..5)
-        .map(|i| {
-            if i == pos {
-                Span::styled("\u{25A0}", bright_style) // ■ big square
-            } else {
-                Span::styled("\u{25AA}", dim_style) // ▪ small square
-            }
+/// Build 5 styled spans for the Knight Rider scanner animation.
+/// Diamond head with gradient trail that fades behind.
+fn build_animation_spans(trail: [u8; 5], theme: &Theme) -> Vec<Span<'static>> {
+    // 4-level gradient: dim → bright (session_active)
+    let colors = [
+        lerp_color(theme.fg_dim, theme.session_active, 0.0),   // level 0: dim
+        lerp_color(theme.fg_dim, theme.session_active, 0.35),  // level 1
+        lerp_color(theme.fg_dim, theme.session_active, 0.65),  // level 2
+        theme.session_active,                                    // level 3: full bright
+    ];
+
+    trail
+        .iter()
+        .map(|&level| {
+            let color = colors[level as usize];
+            let ch = if level >= 2 { "\u{25C6}" } else { "\u{00B7}" }; // ◆ or ·
+            Span::styled(ch, Style::default().fg(color))
         })
         .collect()
 }
@@ -150,8 +170,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                 let padding = content_width.saturating_sub(text_width + anim_width + right_margin);
 
                 spans.push(Span::raw(" ".repeat(padding)));
-                let pos = app.activity.position(session_id.unwrap());
-                spans.extend(build_animation_spans(pos, &app.theme));
+                let trail = app.activity.trail(session_id.unwrap());
+                spans.extend(build_animation_spans(trail, &app.theme));
             }
 
             ListItem::new(Line::from(spans))

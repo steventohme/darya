@@ -1210,7 +1210,7 @@ pub struct ActivityAnimation {
     last_active: HashMap<String, Instant>,
     /// Last time user input was sent to each session's PTY
     last_input: HashMap<String, Instant>,
-    /// Current animation frame per session (0..7 = 8-frame bounce cycle)
+    /// Current animation frame per session (0..17 = 18-frame scanner cycle)
     frame: HashMap<String, usize>,
     /// Alternates each tick so frames advance every other tick (100ms)
     tick_parity: bool,
@@ -1222,8 +1222,25 @@ const ACTIVITY_TIMEOUT_MS: u128 = 500;
 /// How long after user input to suppress animation (ms) — filters out echoes
 const INPUT_SUPPRESSION_MS: u128 = 300;
 
-/// Bounce pattern: positions 0,1,2,3,4,3,2,1 over 8 frames
-const BOUNCE_POSITIONS: [usize; 8] = [0, 1, 2, 3, 4, 3, 2, 1];
+/// Scanner cycle: 18 frames total
+/// Forward 5 (pos 0→4), hold end 3, backward 4 (pos 3→0), hold start 6
+const SCANNER_CYCLE_LEN: usize = 18;
+
+/// Head position for each frame in the 18-frame scanner cycle.
+const SCANNER_HEAD: [usize; SCANNER_CYCLE_LEN] = [
+    0, 1, 2, 3, 4, // forward
+    4, 4, 4,        // hold at end
+    3, 2, 1, 0,     // backward
+    0, 0, 0, 0, 0, 0, // hold at start
+];
+
+/// Direction at each frame: true = forward (trail behind), false = backward (trail ahead).
+const SCANNER_FWD: [bool; SCANNER_CYCLE_LEN] = [
+    true, true, true, true, true,
+    true, true, true,
+    false, false, false, false,
+    false, false, false, false, false, false,
+];
 
 impl ActivityAnimation {
     pub fn new() -> Self {
@@ -1261,7 +1278,7 @@ impl ActivityAnimation {
         self.tick_parity = !self.tick_parity;
         if self.tick_parity {
             for (_, frame) in self.frame.iter_mut() {
-                *frame = (*frame + 1) % 8;
+                *frame = (*frame + 1) % SCANNER_CYCLE_LEN;
             }
         }
 
@@ -1287,12 +1304,52 @@ impl ActivityAnimation {
         self.last_active.contains_key(session_id)
     }
 
-    /// Current bounce position (0..4) for the block character.
+    /// Current bounce position (0..4) — kept for compatibility, prefer `trail()`.
     pub fn position(&self, session_id: &str) -> usize {
         self.frame
             .get(session_id)
-            .map(|&f| BOUNCE_POSITIONS[f])
+            .map(|&f| SCANNER_HEAD[f])
             .unwrap_or(0)
+    }
+
+    /// Brightness levels (0-3) for each of the 5 scanner positions.
+    /// 3 = head, 2 = trail-1, 1 = trail-2, 0 = inactive.
+    pub fn trail(&self, session_id: &str) -> [u8; 5] {
+        let f = self.frame.get(session_id).copied().unwrap_or(0);
+        let head = SCANNER_HEAD[f];
+        let fwd = SCANNER_FWD[f];
+
+        // During hold frames, compute how many hold ticks have elapsed
+        // to fade the trail out progressively.
+        let is_hold_end = f >= 5 && f <= 7;
+        let is_hold_start = f >= 12 && f <= 17;
+        let hold_elapsed = if is_hold_end {
+            f - 5 // 0, 1, 2
+        } else if is_hold_start {
+            f - 12 // 0, 1, 2, 3, 4, 5
+        } else {
+            0
+        };
+
+        let mut levels = [0u8; 5];
+        levels[head] = 3;
+
+        // Trail goes opposite to direction of motion
+        let trail_dir: isize = if fwd { -1 } else { 1 };
+
+        // Place trail segments, fading during holds
+        for step in 1..=2u8 {
+            let pos = head as isize + trail_dir * step as isize;
+            if pos >= 0 && pos < 5 {
+                let base_brightness = 3 - step; // 2 for step 1, 1 for step 2
+                let brightness = base_brightness.saturating_sub(hold_elapsed as u8);
+                if brightness > 0 {
+                    levels[pos as usize] = brightness;
+                }
+            }
+        }
+
+        levels
     }
 
     /// Clean up state when a session is removed entirely.

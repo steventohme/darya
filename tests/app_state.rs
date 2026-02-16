@@ -689,33 +689,33 @@ fn output_suppressed_after_user_input() {
 }
 
 #[test]
-fn tick_advances_animation_position() {
+fn tick_advances_animation_trail() {
     let mut app = make_app_with_session(2);
     let sid = app.active_session_id.clone().unwrap();
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
     app.handle_event(&AppEvent::Tick);
-    let pos_before = app.activity.position(&sid);
+    let trail_before = app.activity.trail(&sid);
     // Two ticks needed to advance (100ms per frame via parity skip)
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
     app.handle_event(&AppEvent::Tick);
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
     app.handle_event(&AppEvent::Tick);
-    let pos_after = app.activity.position(&sid);
-    assert_ne!(pos_before, pos_after);
+    let trail_after = app.activity.trail(&sid);
+    assert_ne!(trail_before, trail_after);
 }
 
 #[test]
-fn animation_bounce_cycle() {
+fn animation_scanner_cycle() {
     let mut app = make_app_with_session(2);
     let sid = app.active_session_id.clone().unwrap();
     // Initial output to start animation
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
     app.handle_event(&AppEvent::Tick);
 
-    // Collect positions over a full 8-frame bounce cycle
+    // Collect head positions over a full 18-frame scanner cycle
     // Each frame takes 2 ticks (100ms) due to parity skip
     let mut positions = Vec::new();
-    for _ in 0..8 {
+    for _ in 0..18 {
         positions.push(app.activity.position(&sid));
         // Two ticks per frame advance
         app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
@@ -723,7 +723,28 @@ fn animation_bounce_cycle() {
         app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
         app.handle_event(&AppEvent::Tick);
     }
-    assert_eq!(positions, vec![0, 1, 2, 3, 4, 3, 2, 1]);
+    // Forward 5, hold end 3, backward 4, hold start 6
+    assert_eq!(
+        positions,
+        vec![0, 1, 2, 3, 4, 4, 4, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0]
+    );
+
+    // Verify trail at a mid-forward frame (frame index 2, head at pos 2)
+    // Reset by creating fresh app
+    let mut app2 = make_app_with_session(2);
+    let sid2 = app2.active_session_id.clone().unwrap();
+    app2.handle_event(&AppEvent::PtyOutput { session_id: sid2.clone() });
+    app2.handle_event(&AppEvent::Tick);
+    // Advance 2 frames (head should be at pos 2)
+    for _ in 0..2 {
+        app2.handle_event(&AppEvent::PtyOutput { session_id: sid2.clone() });
+        app2.handle_event(&AppEvent::Tick);
+        app2.handle_event(&AppEvent::PtyOutput { session_id: sid2.clone() });
+        app2.handle_event(&AppEvent::Tick);
+    }
+    let trail = app2.activity.trail(&sid2);
+    // Head at 2 (brightness 3), trail at 1 (brightness 2), trail at 0 (brightness 1)
+    assert_eq!(trail, [1, 2, 3, 0, 0]);
 }
 
 #[test]
