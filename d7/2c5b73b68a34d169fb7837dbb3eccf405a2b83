@@ -1,0 +1,23 @@
+src/app.rs
+  8691f228443f96b1 47,94,105,503,541,1455-1462,1466,1503-1506,1545-1547,1554,1557,1650,1848,1921-1923,1954,2017-2022,2062-2067,2479,2484,2496-2497,2499-2505,2514,2516-2522,2524-2532,2534,2548-2556,2563-2565,2608-2625,2645-2650,2656-2661,2805-2900
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.3",
+  "base_commit_sha": "d72c5b73b68a34d169fb7837dbb3eccf405a2b83",
+  "prompts": {
+    "8691f228443f96b1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2aeab001-b100-40ad-91a1-194aaeef8c7f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 592,
+      "overriden_lines": 0
+    }
+  }
+}
