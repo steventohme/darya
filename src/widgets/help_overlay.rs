@@ -23,10 +23,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let kb_blame = KeybindingsConfig::format(&kb.git_blame);
     let kb_log = KeybindingsConfig::format(&kb.git_log);
     let kb_cmd_palette = KeybindingsConfig::format(&kb.command_palette);
+    let kb_shell = KeybindingsConfig::format(&kb.shell);
 
     let view_bindings = format!(
-        "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search  {}: Git  {}: Blame  {}: Log  {}: Palette",
-        kb_worktrees, kb_terminal, kb_files, kb_editor, kb_search, kb_git, kb_blame, kb_log, kb_cmd_palette
+        "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search  {}: Git  {}: Blame  {}: Log  {}: Shell  {}: Palette",
+        kb_worktrees, kb_terminal, kb_files, kb_editor, kb_search, kb_git, kb_blame, kb_log, kb_shell, kb_cmd_palette
     );
 
     let (title, bindings): (&str, Vec<(&str, &str)>) = match app.focused_view() {
@@ -149,6 +150,21 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 (&kb_fuzzy, "Fuzzy file finder"),
                 (&kb_proj_search, "Project search"),
                 ("q", "Quit"),
+            ],
+        ),
+        ViewKind::Shell => (
+            "Navigation — Shell",
+            vec![
+                ("i, Enter", "Enter terminal mode"),
+                ("PgUp/PgDn", "Scroll output"),
+                (&kb_split, "Split pane"),
+                (&kb_close_pane, "Close pane"),
+                ("1-9, 0", "Jump to worktree"),
+                ("Tab", "Cycle panes / switch panel"),
+                (&kb_fuzzy, "Fuzzy file finder"),
+                (&kb_proj_search, "Project search"),
+                ("q", "Quit"),
+                ("Ctrl+C", "Close session / Quit"),
             ],
         ),
     };

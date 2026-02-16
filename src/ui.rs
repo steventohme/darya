@@ -67,6 +67,7 @@ fn render_view(
         ViewKind::DiffView => widgets::diff_view::render(frame, area, app, is_focused),
         ViewKind::GitBlame => widgets::git_blame::render(frame, area, app, is_focused),
         ViewKind::GitLog => widgets::git_log::render(frame, area, app, is_focused),
+        ViewKind::Shell => widgets::terminal_panel::render_shell(frame, area, app, session_manager, is_focused),
     }
 }
 
@@ -107,23 +108,24 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     let left_focused = app.panel_focus == PanelFocus::Left;
     render_view(frame, main_chunks[0], app.sidebar_view.to_view_kind(), app, session_manager, left_focused);
 
-    // Right panel (main) — split panes for terminal, full panel for everything else
+    // Right panel (main) — split panes for terminal/shell, full panel for everything else
     let right_focused = app.panel_focus == PanelFocus::Right;
-    if app.main_view == crate::app::MainView::Terminal {
-        if let Some(ref layout) = app.pane_layout {
-            if layout.panes.len() > 1 {
-                // Split rendering
-                let pane_rects = compute_pane_rects(size, layout.panes.len());
-                for (i, pane_rect) in pane_rects.iter().enumerate() {
-                    if let Some(session_id) = layout.panes.get(i) {
-                        let pane_focused = right_focused && i == layout.focused;
-                        widgets::terminal_panel::render_session(
-                            frame, *pane_rect, app, session_manager, session_id, pane_focused,
-                        );
-                    }
+    let active_pane_layout = match app.main_view {
+        crate::app::MainView::Terminal => app.pane_layout.as_ref(),
+        crate::app::MainView::Shell => app.shell_pane_layout.as_ref(),
+        _ => None,
+    };
+    if let Some(layout) = active_pane_layout {
+        if layout.panes.len() > 1 {
+            // Split rendering
+            let pane_rects = compute_pane_rects(size, layout.panes.len());
+            for (i, pane_rect) in pane_rects.iter().enumerate() {
+                if let Some(session_id) = layout.panes.get(i) {
+                    let pane_focused = right_focused && i == layout.focused;
+                    widgets::terminal_panel::render_session(
+                        frame, *pane_rect, app, session_manager, session_id, pane_focused,
+                    );
                 }
-            } else {
-                render_view(frame, main_chunks[1], app.main_view.to_view_kind(), app, session_manager, right_focused);
             }
         } else {
             render_view(frame, main_chunks[1], app.main_view.to_view_kind(), app, session_manager, right_focused);
@@ -156,6 +158,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ViewKind::DiffView => "diff",
             ViewKind::GitBlame => "blame",
             ViewKind::GitLog => "log",
+            ViewKind::Shell => "shell",
         };
         let left = format!(" [{}] {}", mode_str, view_str);
 

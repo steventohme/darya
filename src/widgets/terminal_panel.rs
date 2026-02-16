@@ -160,3 +160,28 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &Sessio
         frame.render_widget(placeholder, inner);
     }
 }
+
+/// Render the single-pane shell panel.
+pub fn render_shell(frame: &mut Frame, area: Rect, app: &App, session_manager: &SessionManager, is_focused: bool) {
+    if let Some(ref session_id) = app.active_shell_session_id {
+        render_session(frame, area, app, session_manager, session_id, is_focused);
+    } else {
+        let border_style = if is_focused {
+            Style::default().fg(app.theme.border_active)
+        } else {
+            Style::default().fg(app.theme.border_inactive)
+        };
+
+        let block = Block::default()
+            .title(" Shell ")
+            .borders(Borders::ALL)
+            .border_type(BorderType::Thick)
+            .border_style(border_style);
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+
+        let placeholder = Paragraph::new("  Press Enter to start a shell session")
+            .style(Style::default().fg(app.theme.fg_dim));
+        frame.render_widget(placeholder, inner);
+    }
+}

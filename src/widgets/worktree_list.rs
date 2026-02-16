@@ -59,7 +59,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
         .enumerate()
         .map(|(i, wt)| {
             let session_id = app.session_ids.get(&wt.path);
+            let shell_id = app.shell_session_ids.get(&wt.path);
             let has_session = session_id.is_some();
+            let has_shell = shell_id.is_some();
             let is_exited = session_id
                 .map(|id| app.exited_sessions.contains(id))
                 .unwrap_or(false);
@@ -76,6 +78,14 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                 "\u{25CF}"
             } else {
                 "\u{25CB}"
+            };
+            let shell_indicator = if has_shell {
+                let shell_exited = shell_id
+                    .map(|id| app.exited_sessions.contains(id))
+                    .unwrap_or(false);
+                if shell_exited { " \u{2715}$" } else { " $" }
+            } else {
+                ""
             };
 
             let branch_str = wt
@@ -123,6 +133,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         exited_marker.to_string(),
                         Style::default().fg(exited_color).add_modifier(Modifier::DIM),
                     ),
+                    Span::styled(
+                        shell_indicator.to_string(),
+                        Style::default().fg(app.theme.fg_dim),
+                    ),
                 ]
             } else if needs_attention {
                 let attn = app.theme.session_attention;
@@ -139,6 +153,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         format!(" [{}]", branch_str),
                         Style::default().fg(attn),
                     ),
+                    Span::styled(
+                        shell_indicator.to_string(),
+                        Style::default().fg(app.theme.fg_dim),
+                    ),
                 ]
             } else {
                 vec![
@@ -152,6 +170,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     ),
                     Span::styled(
                         format!(" [{}]", branch_str),
+                        Style::default().fg(app.theme.fg_dim),
+                    ),
+                    Span::styled(
+                        shell_indicator.to_string(),
                         Style::default().fg(app.theme.fg_dim),
                     ),
                 ]
