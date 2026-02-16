@@ -16,6 +16,7 @@ expression: output
 ┃                   ┃View: Git Status                                    Ctrl+6┃                   ┃
 ┃                   ┃View: Git Blame                                     Ctrl+7┃                   ┃
 ┃                   ┃View: Git Log                                       Ctrl+8┃                   ┃
+┃                   ┃View: Shell                                         Ctrl+9┃                   ┃
 ┃                   ┃Session: Start                                            ┃                   ┃
 ┃                   ┃Session: Restart                                          ┃                   ┃
 ┃                   ┃Session: Close                                            ┃                   ┃
@@ -25,7 +26,6 @@ expression: output
 ┃                   ┃Split Pane                                          Ctrl+\┃                   ┃
 ┃                   ┃Close Pane                                          Ctrl+W┃                   ┃
 ┃                   ┃Toggle Help                                              ?┃                   ┃
-┃                   ┃Quit                                                     q┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃

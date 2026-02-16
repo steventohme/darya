@@ -12,7 +12,7 @@ use darya::worktree::types::Worktree;
 /// Create an App with `n` mock worktrees using temp-like paths.
 pub fn make_app(n: usize) -> App {
     let worktrees = make_worktrees(n);
-    App::new(worktrees, Theme::dark(), true, KeybindingsConfig::default(), CLAUDE_COMMAND.to_string())
+    App::new(worktrees, Theme::dark(), true, KeybindingsConfig::default(), CLAUDE_COMMAND.to_string(), "/bin/sh".to_string())
 }
 
 /// Create an App with `n` worktrees where the first worktree has an active session mapped.

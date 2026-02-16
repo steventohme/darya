@@ -47,7 +47,7 @@ fn buffer_to_string(buf: &ratatui::buffer::Buffer) -> String {
 
 fn make_test_app(n_worktrees: usize) -> App {
     let worktrees = make_worktrees(n_worktrees);
-    App::new(worktrees, Theme::dark(), true, KeybindingsConfig::default(), darya::config::CLAUDE_COMMAND.to_string())
+    App::new(worktrees, Theme::dark(), true, KeybindingsConfig::default(), darya::config::CLAUDE_COMMAND.to_string(), "/bin/sh".to_string())
 }
 
 fn make_session_manager() -> SessionManager {

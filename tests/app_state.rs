@@ -7,7 +7,7 @@ use crossterm::event::KeyCode;
 use darya::app::{
     is_edtui_compatible, status_priority, EditorViewState,
     GitStatusCategory, GitStatusEntry, GitStatusState, GitFileStatus,
-    InputMode, MainView, PanelFocus, Prompt, SidebarView,
+    InputMode, MainView, PanelFocus, Prompt, SidebarView, ViewKind,
     BlameLine, GitBlameState, GitLogEntry, GitLogState,
     format_relative_time,
     CommandId, CommandPaletteState,
@@ -1817,4 +1817,182 @@ fn files_created_or_deleted_refreshes_git_views() {
     assert!(app.git_log.is_some());
     assert!(app.git_blame.is_some());
     assert!(app.git_status.is_some());
+}
+
+// ── Shell View ──────────────────────────────────────────────
+
+fn make_app_with_shell_session(n: usize) -> darya::app::App {
+    let mut app = make_app(n);
+    if let Some(wt) = app.worktrees.first() {
+        let session_id = "test-shell-1".to_string();
+        app.shell_session_ids.insert(wt.path.clone(), session_id.clone());
+        app.active_shell_session_id = Some(session_id);
+    }
+    app.main_view = MainView::Shell;
+    app.panel_focus = PanelFocus::Right;
+    app
+}
+
+#[test]
+fn ctrl_9_sets_main_shell() {
+    let mut app = make_app(3);
+    app.main_view = MainView::Terminal;
+    app.panel_focus = PanelFocus::Left;
+    app.handle_event(&ctrl_key('9'));
+    assert_eq!(app.main_view, MainView::Shell);
+    assert_eq!(app.panel_focus, PanelFocus::Right);
+}
+
+#[test]
+fn shell_view_kind_is_shell() {
+    let mut app = make_app(3);
+    app.main_view = MainView::Shell;
+    app.panel_focus = PanelFocus::Right;
+    assert_eq!(app.focused_view(), ViewKind::Shell);
+}
+
+#[test]
+fn shell_session_spawn_signal() {
+    let mut app = make_app(3);
+    app.main_view = MainView::Shell;
+    app.panel_focus = PanelFocus::Right;
+    app.input_mode = InputMode::Navigation;
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+    assert!(app.needs_shell_spawn(&key_event));
+}
+
+#[test]
+fn shell_spawn_false_in_terminal_view() {
+    let mut app = make_app(3);
+    app.main_view = MainView::Terminal;
+    app.panel_focus = PanelFocus::Right;
+    app.input_mode = InputMode::Navigation;
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+    assert!(!app.needs_shell_spawn(&key_event));
+}
+
+#[test]
+fn shell_and_claude_sessions_coexist() {
+    let mut app = make_app(3);
+    let wt_path = app.worktrees[0].path.clone();
+    // Claude session
+    app.session_ids.insert(wt_path.clone(), "claude-1".to_string());
+    app.active_session_id = Some("claude-1".to_string());
+    // Shell session
+    app.shell_session_ids.insert(wt_path, "shell-1".to_string());
+    app.active_shell_session_id = Some("shell-1".to_string());
+
+    // In terminal view, focused_session_id returns claude session
+    app.main_view = MainView::Terminal;
+    assert_eq!(app.focused_session_id(), Some(&"claude-1".to_string()));
+
+    // In shell view, focused_session_id returns shell session
+    app.main_view = MainView::Shell;
+    assert_eq!(app.focused_session_id(), Some(&"shell-1".to_string()));
+}
+
+#[test]
+fn focused_session_id_returns_shell_in_shell_view() {
+    let app = make_app_with_shell_session(3);
+    assert_eq!(app.focused_session_id(), Some(&"test-shell-1".to_string()));
+}
+
+#[test]
+fn focused_session_id_returns_none_for_claude_in_shell_view() {
+    let mut app = make_app(3);
+    // No shell session, but we're in shell view
+    app.main_view = MainView::Shell;
+    assert_eq!(app.focused_session_id(), None);
+    // Add claude session — shouldn't be returned in shell view
+    let wt_path = app.worktrees[0].path.clone();
+    app.session_ids.insert(wt_path, "claude-1".to_string());
+    app.active_session_id = Some("claude-1".to_string());
+    assert_eq!(app.focused_session_id(), None);
+}
+
+#[test]
+fn shell_session_restart_signal() {
+    let mut app = make_app_with_shell_session(3);
+    let sid = app.active_shell_session_id.clone().unwrap();
+    app.exited_sessions.insert(sid);
+    app.input_mode = InputMode::Navigation;
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('r'), crossterm::event::KeyModifiers::NONE);
+    assert!(app.needs_shell_restart(&key_event));
+}
+
+#[test]
+fn shell_session_close_signal() {
+    let app = make_app_with_shell_session(3);
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
+    // needs_shell_close checks main_view == Shell and nav mode
+    assert!(app.needs_shell_close(&key_event));
+}
+
+#[test]
+fn shell_command_palette_integration() {
+    let mut app = make_app(3);
+    app.main_view = MainView::Terminal;
+    app.panel_focus = PanelFocus::Left;
+    app.execute_command(CommandId::ViewShell);
+    assert_eq!(app.main_view, MainView::Shell);
+    assert_eq!(app.panel_focus, PanelFocus::Right);
+}
+
+#[test]
+fn worktree_name_for_shell_session() {
+    let app = make_app_with_shell_session(3);
+    let name = app.worktree_name_for_session("test-shell-1");
+    assert_eq!(name, Some("my-project"));
+}
+
+#[test]
+fn switch_worktree_updates_shell_session() {
+    let mut app = make_app(3);
+    let wt0 = app.worktrees[0].path.clone();
+    let wt1 = app.worktrees[1].path.clone();
+    app.shell_session_ids.insert(wt0, "shell-0".to_string());
+    app.shell_session_ids.insert(wt1, "shell-1".to_string());
+    app.active_shell_session_id = Some("shell-0".to_string());
+
+    app.handle_event(&key(KeyCode::Char('2'))); // jump to worktree 1
+    assert_eq!(app.active_shell_session_id.as_deref(), Some("shell-1"));
+}
+
+#[test]
+fn enter_terminal_if_focused_works_for_shell() {
+    let mut app = make_app_with_shell_session(3);
+    app.input_mode = InputMode::Navigation;
+    app.panel_focus = PanelFocus::Left;
+    // Tab to right panel — should auto-enter terminal mode
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.panel_focus, PanelFocus::Right);
+    assert_eq!(app.input_mode, InputMode::Terminal);
+}
+
+#[test]
+fn shell_nav_uses_terminal_nav_key() {
+    let mut app = make_app_with_shell_session(3);
+    app.input_mode = InputMode::Navigation;
+    // In shell nav mode, 'i' should enter terminal mode
+    app.handle_event(&key(KeyCode::Char('i')));
+    assert_eq!(app.input_mode, InputMode::Terminal);
+}
+
+#[test]
+fn resolve_shell_command_uses_global_default() {
+    let dir = tempfile::tempdir().unwrap();
+    let result = config::resolve_shell_command(dir.path(), "/bin/zsh");
+    assert_eq!(result, "/bin/zsh");
+}
+
+#[test]
+fn resolve_shell_command_reads_local_override() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join(".darya.toml"),
+        "[shell]\ncommand = \"/usr/local/bin/fish\"\n",
+    )
+    .unwrap();
+    let result = config::resolve_shell_command(dir.path(), "/bin/sh");
+    assert_eq!(result, "/usr/local/bin/fish");
 }
