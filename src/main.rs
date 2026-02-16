@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crossterm::event::{
-    DisableMouseCapture, EnableMouseCapture, KeyCode, KeyboardEnhancementFlags,
+    KeyCode, KeyboardEnhancementFlags,
     PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use crossterm::execute;
@@ -72,7 +72,7 @@ fn pane_sizes(
 fn restore_terminal() {
     let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
     let _ = disable_raw_mode();
-    let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+    let _ = execute!(io::stdout(), LeaveAlternateScreen);
 }
 
 #[tokio::main]
@@ -105,7 +105,7 @@ async fn main() -> color_eyre::Result<()> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     // Enable keyboard enhancement so Ctrl+number keys are reported correctly
     let _ = execute!(
         stdout,
