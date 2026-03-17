@@ -52,6 +52,7 @@ impl SidebarTree {
             name: repo_name,
             collapsed: false,
             items,
+            root_path: None,
         }];
 
         let mut tree = Self {
@@ -244,14 +245,33 @@ impl SidebarTree {
         false
     }
 
-    /// Add a new section with the given name.
-    pub fn add_section(&mut self, name: String) {
+    /// Add a new section with the given name and optional root directory.
+    pub fn add_section(&mut self, name: String, root_path: Option<PathBuf>) {
         self.sections.push(Section {
             name,
             collapsed: false,
             items: Vec::new(),
+            root_path,
         });
         self.rebuild_visible();
+    }
+
+    /// Remove a section by index. Returns the removed section's active session IDs.
+    /// Refuses to remove the last section (always keep at least one).
+    pub fn remove_section(&mut self, section_idx: usize) -> Vec<String> {
+        if self.sections.len() <= 1 || section_idx >= self.sections.len() {
+            return Vec::new();
+        }
+        let section = self.sections.remove(section_idx);
+        // Collect all active session IDs from the removed section
+        let session_ids: Vec<String> = section
+            .items
+            .iter()
+            .flat_map(|item| item.sessions.iter())
+            .filter_map(|slot| slot.session_id.clone())
+            .collect();
+        self.rebuild_visible();
+        session_ids
     }
 
     /// Add a sidebar item to a section.
@@ -370,16 +390,12 @@ impl SidebarTree {
         None
     }
 
-    /// Refresh worktrees: merge updated worktree list into existing sections.
+    /// Refresh worktrees for a specific section by index.
     /// Preserves session IDs and user-added shell slots.
-    pub fn refresh_worktrees(&mut self, worktrees: &[Worktree]) {
-        if self.sections.is_empty() {
-            *self = Self::from_worktrees(worktrees);
+    pub fn refresh_section_worktrees(&mut self, section_idx: usize, worktrees: &[Worktree]) {
+        let Some(section) = self.sections.get_mut(section_idx) else {
             return;
-        }
-
-        // For the first section (auto-generated), sync items with worktrees.
-        let section = &mut self.sections[0];
+        };
 
         // Remove items whose paths no longer appear in worktrees
         section
@@ -414,10 +430,16 @@ impl SidebarTree {
         }
 
         self.rebuild_visible();
-        // Clamp cursor
-        if !self.visible.is_empty() && self.cursor >= self.visible.len() {
-            self.cursor = self.visible.len() - 1;
+    }
+
+    /// Refresh worktrees: merge updated worktree list into the first (auto-generated) section.
+    pub fn refresh_worktrees(&mut self, worktrees: &[Worktree]) {
+        if self.sections.is_empty() {
+            *self = Self::from_worktrees(worktrees);
+            return;
         }
+
+        self.refresh_section_worktrees(0, worktrees);
     }
 
     /// Get the index of the currently selected item among all items (for backward compat).
@@ -500,6 +522,7 @@ impl SidebarTree {
             }).collect();
             SectionToml {
                 name: section.name.clone(),
+                root: section.root_path.as_ref().map(|p| p.to_string_lossy().to_string()),
                 items,
             }
         }).collect();
@@ -546,6 +569,7 @@ impl SidebarTree {
                 name: sect_toml.name.clone(),
                 collapsed: false,
                 items,
+                root_path: sect_toml.root.as_ref().map(PathBuf::from),
             }
         }).collect();
 

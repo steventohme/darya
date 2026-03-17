@@ -10,7 +10,7 @@ use darya::app::{
     InputMode, MainView, PaneContent, PanelFocus, Prompt, SidebarView, ViewKind,
     BlameLine, GitBlameState, GitLogEntry, GitLogState,
     format_relative_time,
-    CommandId, CommandPaletteState,
+    CommandId, CommandPaletteState, DirBrowser,
 };
 use darya::config;
 use darya::event::AppEvent;
@@ -2343,4 +2343,192 @@ fn notification_none_for_other_events() {
             session_id: "foo".to_string(),
         })
         .is_none());
+}
+
+// ── Directory browser / Section creation ──────────────────────────
+
+#[test]
+fn n_key_opens_dir_browser() {
+    let mut app = make_app(3);
+    assert!(app.dir_browser.is_none());
+    app.handle_event(&key(KeyCode::Char('N')));
+    assert!(app.dir_browser.is_some());
+}
+
+#[test]
+fn dir_browser_esc_dismisses() {
+    let mut app = make_app(3);
+    app.handle_event(&key(KeyCode::Char('N')));
+    assert!(app.dir_browser.is_some());
+    app.handle_event(&key(KeyCode::Esc));
+    assert!(app.dir_browser.is_none());
+}
+
+#[test]
+fn dir_browser_jk_navigation() {
+    let mut app = make_app(3);
+    app.handle_event(&key(KeyCode::Char('N')));
+    let initial = app.dir_browser.as_ref().unwrap().selected;
+    app.handle_event(&key(KeyCode::Char('j')));
+    let after_j = app.dir_browser.as_ref().unwrap().selected;
+    // j moves down (or wraps if only 1 entry)
+    if app.dir_browser.as_ref().unwrap().entries.len() > 1 {
+        assert_eq!(after_j, initial + 1);
+    }
+    app.handle_event(&key(KeyCode::Char('k')));
+    let after_k = app.dir_browser.as_ref().unwrap().selected;
+    assert_eq!(after_k, initial);
+}
+
+#[test]
+fn add_section_with_root_path() {
+    let mut app = make_app(3);
+    let initial_sections = app.sidebar_tree.sections.len();
+    app.sidebar_tree.add_section("test-section".to_string(), Some(PathBuf::from("/tmp/test-root")));
+    assert_eq!(app.sidebar_tree.sections.len(), initial_sections + 1);
+    let new_section = app.sidebar_tree.sections.last().unwrap();
+    assert_eq!(new_section.name, "test-section");
+    assert_eq!(new_section.root_path, Some(PathBuf::from("/tmp/test-root")));
+}
+
+#[test]
+fn add_section_without_root_path() {
+    let mut app = make_app(3);
+    app.sidebar_tree.add_section("empty-section".to_string(), None);
+    let new_section = app.sidebar_tree.sections.last().unwrap();
+    assert_eq!(new_section.name, "empty-section");
+    assert_eq!(new_section.root_path, None);
+}
+
+#[test]
+fn sections_config_round_trip_with_root() {
+    let mut app = make_app(3);
+    app.sidebar_tree.add_section("rooted".to_string(), Some(PathBuf::from("/tmp/my-repo")));
+
+    // Serialize
+    let config = app.sidebar_tree.to_sections_config();
+    let rooted = config.sections.iter().find(|s| s.name == "rooted").unwrap();
+    assert_eq!(rooted.root.as_deref(), Some("/tmp/my-repo"));
+
+    // Deserialize back
+    let tree = darya::sidebar::tree::SidebarTree::from_config(&config, &[]);
+    let restored = tree.sections.iter().find(|s| s.name == "rooted").unwrap();
+    assert_eq!(restored.root_path, Some(PathBuf::from("/tmp/my-repo")));
+}
+
+#[test]
+fn sections_config_round_trip_without_root() {
+    let app = make_app(3);
+    let config = app.sidebar_tree.to_sections_config();
+    // First section (auto-generated) should have no root
+    assert!(config.sections[0].root.is_none());
+
+    let tree = darya::sidebar::tree::SidebarTree::from_config(&config, &[]);
+    assert!(tree.sections[0].root_path.is_none());
+}
+
+#[test]
+fn refresh_section_worktrees_populates_items() {
+    use darya::worktree::types::Worktree;
+
+    let mut app = make_app(3);
+    app.sidebar_tree.add_section("new-repo".to_string(), Some(PathBuf::from("/tmp/new-repo")));
+    let section_idx = app.sidebar_tree.sections.len() - 1;
+    assert!(app.sidebar_tree.sections[section_idx].items.is_empty());
+
+    let worktrees = vec![
+        Worktree {
+            name: "new-repo".to_string(),
+            path: PathBuf::from("/tmp/new-repo"),
+            branch: Some("main".to_string()),
+            is_main: true,
+        },
+        Worktree {
+            name: "new-repo-feature".to_string(),
+            path: PathBuf::from("/tmp/new-repo-feature"),
+            branch: Some("feature".to_string()),
+            is_main: false,
+        },
+    ];
+    app.sidebar_tree.refresh_section_worktrees(section_idx, &worktrees);
+    assert_eq!(app.sidebar_tree.sections[section_idx].items.len(), 2);
+    assert_eq!(app.sidebar_tree.sections[section_idx].items[0].display_name, "new-repo");
+    assert_eq!(app.sidebar_tree.sections[section_idx].items[1].display_name, "new-repo-feature");
+}
+
+#[test]
+fn command_palette_add_section_opens_dir_browser() {
+    let mut app = make_app(3);
+    app.execute_command(CommandId::AddSection);
+    assert!(app.dir_browser.is_some());
+    assert!(app.prompt.is_none());
+}
+
+#[test]
+fn backspace_on_section_header_opens_confirm_delete() {
+    let mut app = make_app(3);
+    // Add a second section so we can delete it
+    app.sidebar_tree.add_section("deletable".to_string(), None);
+    // Move cursor to the new section header
+    let section_count = app.sidebar_tree.sections.len();
+    // Find the visible index of the last section header
+    for (i, node) in app.sidebar_tree.visible.iter().enumerate() {
+        if matches!(node, darya::sidebar::tree::TreeNode::Section(si) if *si == section_count - 1) {
+            app.sidebar_tree.cursor = i;
+            break;
+        }
+    }
+    app.handle_event(&key(KeyCode::Backspace));
+    assert!(matches!(app.prompt, Some(Prompt::ConfirmDeleteSection { .. })));
+}
+
+#[test]
+fn backspace_on_default_section_shows_error() {
+    let mut app = make_app(3);
+    // Cursor starts at section 0 header
+    assert_eq!(app.sidebar_tree.cursor, 0);
+    app.handle_event(&key(KeyCode::Backspace));
+    assert!(app.prompt.is_none());
+    assert!(app.status_message.is_some());
+    assert!(app.status_message.as_ref().unwrap().contains("Cannot delete"));
+}
+
+#[test]
+fn confirm_delete_section_removes_it() {
+    let mut app = make_app(3);
+    app.sidebar_tree.add_section("to-delete".to_string(), Some(PathBuf::from("/tmp/del")));
+    assert_eq!(app.sidebar_tree.sections.len(), 2);
+
+    // Simulate confirming deletion
+    app.prompt = Some(Prompt::ConfirmDeleteSection {
+        section_name: "to-delete".to_string(),
+        section_idx: 1,
+    });
+    app.handle_event(&key(KeyCode::Char('y')));
+    assert_eq!(app.sidebar_tree.sections.len(), 1);
+    assert!(app.prompt.is_none());
+    assert!(app.status_message.as_ref().unwrap().contains("Deleted section"));
+}
+
+#[test]
+fn remove_section_returns_session_ids() {
+    let mut app = make_app(3);
+    app.sidebar_tree.add_section("with-sessions".to_string(), None);
+    let si = app.sidebar_tree.sections.len() - 1;
+    // Add an item with a session to the new section
+    use darya::sidebar::types::{SidebarItem, SessionSlot, SessionKind};
+    app.sidebar_tree.sections[si].items.push(SidebarItem {
+        path: PathBuf::from("/tmp/test"),
+        display_name: "test".to_string(),
+        branch: None,
+        is_main: false,
+        collapsed: true,
+        sessions: vec![SessionSlot {
+            kind: SessionKind::Claude,
+            label: "claude".to_string(),
+            session_id: Some("sess-123".to_string()),
+        }],
+    });
+    let removed = app.sidebar_tree.remove_section(si);
+    assert_eq!(removed, vec!["sess-123".to_string()]);
 }

@@ -6,6 +6,8 @@ pub struct Section {
     pub name: String,
     pub collapsed: bool,
     pub items: Vec<SidebarItem>,
+    /// Root directory for worktree discovery. None for the auto-generated section.
+    pub root_path: Option<PathBuf>,
 }
 
 /// A directory or worktree within a section.

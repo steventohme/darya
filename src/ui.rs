@@ -3,7 +3,9 @@ use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
-use crate::app::{App, InputMode, PanelFocus, Prompt, ViewKind};
+use ratatui::text::{Line, Span};
+
+use crate::app::{App, DirBrowser, InputMode, PanelFocus, Prompt, ViewKind};
 use crate::session::manager::SessionManager;
 use crate::widgets;
 
@@ -225,6 +227,11 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
         render_prompt(frame, size, prompt, &app.theme);
     }
 
+    // Render directory browser overlay if active
+    if let Some(ref browser) = app.dir_browser {
+        render_dir_browser(frame, size, browser, &app.theme);
+    }
+
     // Render help overlay if active
     if app.show_help {
         widgets::help_overlay::render(frame, size, app);
@@ -307,19 +314,97 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
                 .style(Style::default().fg(theme.fg).bg(theme.bg).add_modifier(Modifier::BOLD));
             frame.render_widget(text, inner);
         }
-        Prompt::CreateSection { input } => {
+        Prompt::ConfirmDeleteSection { section_name, .. } => {
             let block = Block::default()
-                .title(" New section name ")
+                .title(" Confirm Delete Section ")
                 .borders(Borders::ALL)
                 .border_type(BorderType::Thick)
-                .border_style(Style::default().fg(theme.prompt_border))
+                .border_style(Style::default().fg(theme.prompt_delete_border))
                 .style(Style::default().bg(theme.bg));
             let inner = block.inner(popup_area);
             frame.render_widget(block, popup_area);
 
-            let text = Paragraph::new(format!("{}█", input))
-                .style(Style::default().fg(theme.fg).bg(theme.bg).add_modifier(Modifier::BOLD));
+            let text = Paragraph::new(format!("Delete section '{}'? (y/N)", section_name))
+                .style(Style::default().fg(theme.fg).bg(theme.bg));
             frame.render_widget(text, inner);
         }
     }
+}
+
+fn render_dir_browser(frame: &mut Frame, area: Rect, browser: &DirBrowser, theme: &crate::config::Theme) {
+    let width = (area.width * 60 / 100).max(30).min(area.width.saturating_sub(4));
+    let height = (area.height * 70 / 100).max(10).min(area.height.saturating_sub(2));
+    let x = (area.width.saturating_sub(width)) / 2;
+    let y = (area.height.saturating_sub(height)) / 2;
+    let popup_area = Rect::new(x, y, width, height);
+
+    frame.render_widget(Clear, popup_area);
+
+    let block = Block::default()
+        .title(" Select directory ")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(theme.prompt_border))
+        .style(Style::default().bg(theme.bg));
+    let inner = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+
+    if inner.height < 2 {
+        return;
+    }
+
+    // List area (leave 1 row for footer hint)
+    let list_height = inner.height.saturating_sub(1) as usize;
+    let total = browser.entries.len();
+
+    // Scroll so selected item is visible
+    let scroll_offset = if total <= list_height {
+        0
+    } else if browser.selected < list_height / 2 {
+        0
+    } else if browser.selected + list_height / 2 >= total {
+        total.saturating_sub(list_height)
+    } else {
+        browser.selected.saturating_sub(list_height / 2)
+    };
+
+    let visible_entries = browser.entries.iter().enumerate()
+        .skip(scroll_offset)
+        .take(list_height);
+
+    for (i, (idx, entry)) in visible_entries.enumerate() {
+        let row_area = Rect::new(inner.x, inner.y + i as u16, inner.width, 1);
+        let is_selected = idx == browser.selected;
+        let indent = "  ".repeat(entry.depth);
+        let arrow = if browser.is_expanded(&entry.path) {
+            "\u{25be} " // ▾
+        } else {
+            "\u{25b8} " // ▸
+        };
+        let line_text = format!("{}{}{}", indent, arrow, entry.name);
+
+        let style = if is_selected {
+            Style::default()
+                .fg(theme.fg)
+                .bg(theme.highlight_bg)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.fg).bg(theme.bg)
+        };
+
+        let paragraph = Paragraph::new(line_text).style(style);
+        frame.render_widget(paragraph, row_area);
+    }
+
+    // Footer hint
+    let footer_area = Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1);
+    let footer = Line::from(vec![
+        Span::styled("Enter", Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD)),
+        Span::styled(": select  ", Style::default().fg(theme.fg_dim)),
+        Span::styled("Esc", Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD)),
+        Span::styled(": cancel  ", Style::default().fg(theme.fg_dim)),
+        Span::styled("h/l", Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD)),
+        Span::styled(": collapse/expand", Style::default().fg(theme.fg_dim)),
+    ]);
+    frame.render_widget(Paragraph::new(footer).style(Style::default().bg(theme.bg)), footer_area);
 }

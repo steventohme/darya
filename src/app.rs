@@ -147,8 +147,156 @@ pub enum Prompt {
     SearchInput { input: String },
     /// Add a named shell session slot
     AddShellSlot { input: String },
-    /// Create a new sidebar section
-    CreateSection { input: String },
+    /// Confirming section deletion
+    ConfirmDeleteSection { section_name: String, section_idx: usize },
+}
+
+/// An entry in the directory browser (a subdirectory).
+#[derive(Debug, Clone)]
+pub struct DirBrowserEntry {
+    pub path: PathBuf,
+    pub name: String,
+    pub depth: usize,
+}
+
+/// Modal directory browser for selecting a root directory when creating a section.
+pub struct DirBrowser {
+    pub entries: Vec<DirBrowserEntry>,
+    pub expanded: HashSet<PathBuf>,
+    pub selected: usize,
+}
+
+impl DirBrowser {
+    pub fn new(root: PathBuf) -> Self {
+        let mut browser = Self {
+            entries: Vec::new(),
+            expanded: HashSet::new(),
+            selected: 0,
+        };
+        // Start with the home dir expanded
+        browser.expanded.insert(root.clone());
+        browser.rebuild(&root);
+        browser
+    }
+
+    /// Rebuild the flat entry list from the expanded state.
+    fn rebuild(&mut self, root: &Path) {
+        self.entries.clear();
+        self.build_entries(root, 0);
+        if !self.entries.is_empty() && self.selected >= self.entries.len() {
+            self.selected = self.entries.len() - 1;
+        }
+    }
+
+    fn build_entries(&mut self, dir: &Path, depth: usize) {
+        let Ok(read_dir) = std::fs::read_dir(dir) else {
+            return;
+        };
+
+        let mut dirs: Vec<(String, PathBuf)> = Vec::new();
+        for entry in read_dir.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                continue;
+            }
+            let path = entry.path();
+            if path.is_dir() {
+                dirs.push((name, path));
+            }
+        }
+        dirs.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+
+        for (name, path) in dirs {
+            let is_expanded = self.expanded.contains(&path);
+            self.entries.push(DirBrowserEntry {
+                path: path.clone(),
+                name,
+                depth,
+            });
+            if is_expanded {
+                self.build_entries(&path, depth + 1);
+            }
+        }
+    }
+
+    pub fn move_up(&mut self) {
+        if self.entries.is_empty() {
+            return;
+        }
+        self.selected = if self.selected == 0 {
+            self.entries.len() - 1
+        } else {
+            self.selected - 1
+        };
+    }
+
+    pub fn move_down(&mut self) {
+        if self.entries.is_empty() {
+            return;
+        }
+        self.selected = (self.selected + 1) % self.entries.len();
+    }
+
+    /// Expand the selected directory (show its children).
+    pub fn expand(&mut self) {
+        if let Some(entry) = self.entries.get(self.selected) {
+            let path = entry.path.clone();
+            if !self.expanded.contains(&path) {
+                let root = self.entries.first().map(|e| {
+                    if e.depth == 0 {
+                        e.path.parent().unwrap_or(&e.path).to_path_buf()
+                    } else {
+                        e.path.clone()
+                    }
+                });
+                self.expanded.insert(path);
+                if let Some(root) = root {
+                    self.rebuild(&root);
+                }
+            }
+        }
+    }
+
+    /// Collapse the selected directory (hide its children).
+    pub fn collapse(&mut self) {
+        if let Some(entry) = self.entries.get(self.selected) {
+            let path = entry.path.clone();
+            if self.expanded.contains(&path) {
+                self.expanded.remove(&path);
+                let root = self.entries.first().map(|e| {
+                    if e.depth == 0 {
+                        e.path.parent().unwrap_or(&e.path).to_path_buf()
+                    } else {
+                        e.path.clone()
+                    }
+                });
+                if let Some(root) = root {
+                    self.rebuild(&root);
+                }
+            } else {
+                // Not expanded — jump to parent
+                let current_depth = entry.depth;
+                if current_depth > 0 {
+                    for i in (0..self.selected).rev() {
+                        if self.entries[i].depth < current_depth {
+                            self.selected = i;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Get the currently selected path.
+    pub fn selected_path(&self) -> Option<&PathBuf> {
+        self.entries.get(self.selected).map(|e| &e.path)
+    }
+
+    /// Check if a path is expanded.
+    pub fn is_expanded(&self, path: &Path) -> bool {
+        self.expanded.contains(path)
+    }
 }
 
 pub struct FileEntry {
@@ -1493,6 +1641,12 @@ pub struct App {
     pub pane_layout: Option<PaneLayout>,
     /// Shell command to run (default: $SHELL)
     pub shell_command: String,
+    /// Directory browser modal for section creation
+    pub dir_browser: Option<DirBrowser>,
+    /// Pending section refresh after creation: (section_idx, root_path)
+    pub pending_section_refresh: Option<(usize, PathBuf)>,
+    /// Session IDs that need cleanup in session_manager (after section deletion)
+    pub pending_removed_sessions: Vec<String>,
 }
 
 impl App {
@@ -1532,6 +1686,9 @@ impl App {
             session_command,
             pane_layout: None,
             shell_command,
+            dir_browser: None,
+            pending_section_refresh: None,
+            pending_removed_sessions: Vec::new(),
         }
     }
 
@@ -1743,6 +1900,12 @@ impl App {
             return;
         }
 
+        // Directory browser gets exclusive keyboard focus
+        if self.dir_browser.is_some() {
+            self.handle_dir_browser_key(key);
+            return;
+        }
+
         // Handle prompt input
         if self.prompt.is_some() {
             self.handle_prompt_key(key);
@@ -1819,20 +1982,69 @@ impl App {
                 KeyCode::Char(c) => { input.push(c); }
                 _ => {}
             },
-            Prompt::CreateSection { input } => match key.code {
-                KeyCode::Enter => {
-                    if !input.is_empty() {
-                        let name = input.clone();
-                        self.sidebar_tree.add_section(name.clone());
-                        self.prompt = None;
+            Prompt::ConfirmDeleteSection { section_idx, section_name } => match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
+                    let section_idx = *section_idx;
+                    let section_name = section_name.clone();
+                    let session_ids = self.sidebar_tree.remove_section(section_idx);
+                    for sid in &session_ids {
+                        self.attention_sessions.remove(sid);
+                        self.exited_sessions.remove(sid);
+                        self.activity.remove_session(sid);
+                        self.remove_session_from_panes(sid);
+                    }
+                    self.prompt = None;
+                    self.status_message = Some(format!("Deleted section '{}'", section_name));
+                    self.pending_removed_sessions = session_ids;
+                }
+                _ => {
+                    self.prompt = None;
+                }
+            },
+        }
+    }
+
+    fn handle_dir_browser_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.dir_browser = None;
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                if let Some(ref mut browser) = self.dir_browser {
+                    browser.move_down();
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if let Some(ref mut browser) = self.dir_browser {
+                    browser.move_up();
+                }
+            }
+            KeyCode::Char('l') | KeyCode::Right => {
+                if let Some(ref mut browser) = self.dir_browser {
+                    browser.expand();
+                }
+            }
+            KeyCode::Char('h') | KeyCode::Left => {
+                if let Some(ref mut browser) = self.dir_browser {
+                    browser.collapse();
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(ref browser) = self.dir_browser {
+                    if let Some(path) = browser.selected_path().cloned() {
+                        let name = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| "section".to_string());
+                        self.sidebar_tree.add_section(name.clone(), Some(path.clone()));
+                        let section_idx = self.sidebar_tree.sections.len() - 1;
+                        self.pending_section_refresh = Some((section_idx, path));
+                        self.dir_browser = None;
                         self.status_message = Some(format!("Created section '{}'", name));
                     }
                 }
-                KeyCode::Esc => { self.prompt = None; }
-                KeyCode::Backspace => { input.pop(); }
-                KeyCode::Char(c) => { input.push(c); }
-                _ => {}
-            },
+            }
+            _ => {}
         }
     }
 
@@ -2009,7 +2221,10 @@ impl App {
                 self.status_message = Some("Use Ctrl+C to close the active session".to_string());
             }
             CommandId::AddSection => {
-                self.prompt = Some(Prompt::CreateSection { input: String::new() });
+                let home = std::env::var("HOME")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|_| PathBuf::from("/"));
+                self.dir_browser = Some(DirBrowser::new(home));
             }
             CommandId::AddShellSlot => {
                 self.prompt = Some(Prompt::AddShellSlot { input: String::new() });
@@ -2152,10 +2367,29 @@ impl App {
                 });
             }
             KeyCode::Char('N') => {
-                // Create new section
-                self.prompt = Some(Prompt::CreateSection {
-                    input: String::new(),
-                });
+                // Open directory browser for section creation
+                let home = std::env::var("HOME")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|_| PathBuf::from("/"));
+                self.dir_browser = Some(DirBrowser::new(home));
+            }
+            KeyCode::Backspace => {
+                // Delete section when cursor is on a section header (not the first/auto section)
+                use crate::sidebar::tree::TreeNode;
+                if let Some(&TreeNode::Section(si)) = self.sidebar_tree.selected_node() {
+                    if si == 0 {
+                        self.status_message = Some("Cannot delete the default section".to_string());
+                    } else if self.sidebar_tree.sections.len() <= 1 {
+                        self.status_message = Some("Cannot delete the last section".to_string());
+                    } else {
+                        let name = self.sidebar_tree.sections[si].name.clone();
+                        self.prompt = Some(Prompt::ConfirmDeleteSection {
+                            section_name: name,
+                            section_idx: si,
+                        });
+                    }
+                }
+                // For non-section nodes, Backspace is handled by needs_session_close in main loop
             }
             KeyCode::Tab => {
                 self.toggle_focus();

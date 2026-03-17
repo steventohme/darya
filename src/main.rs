@@ -129,6 +129,14 @@ async fn main() -> color_eyre::Result<()> {
         let wt_list = wt_manager.list().unwrap_or_default();
         app.sidebar_tree = darya::sidebar::tree::SidebarTree::from_config(&sections_config, &wt_list);
     }
+    // Discover worktrees for sections with root_path
+    for si in 0..app.sidebar_tree.sections.len() {
+        if let Some(root) = app.sidebar_tree.sections[si].root_path.clone() {
+            if let Ok(wts) = darya::worktree::manager::list_worktrees_for_root(&root) {
+                app.sidebar_tree.refresh_section_worktrees(si, &wts);
+            }
+        }
+    }
     let (pty_rows, _pty_cols) = pty_size(&terminal);
     app.terminal_height = pty_rows;
     let (mut events, event_tx) = create_event_handler();
@@ -189,6 +197,8 @@ async fn run_loop(
                         app.command_palette = None;
                     } else if app.fuzzy_finder.is_some() {
                         app.fuzzy_finder = None;
+                    } else if app.dir_browser.is_some() {
+                        app.dir_browser = None;
                     } else if app.prompt.is_some() {
                         app.prompt = None;
                     } else if app.input_mode == InputMode::Editor {
@@ -513,6 +523,20 @@ async fn run_loop(
             }
 
             app.handle_event(&event);
+
+            // Handle pending section refresh (after dir browser creates a section)
+            if let Some((section_idx, root_path)) = app.pending_section_refresh.take() {
+                if let Ok(wts) = darya::worktree::manager::list_worktrees_for_root(&root_path) {
+                    app.sidebar_tree.refresh_section_worktrees(section_idx, &wts);
+                }
+            }
+
+            // Clean up sessions from deleted sections
+            if !app.pending_removed_sessions.is_empty() {
+                for sid in app.pending_removed_sessions.drain(..) {
+                    session_manager.remove(&sid);
+                }
+            }
 
             // Rewatch if the file explorer root changed (worktree switch)
             let current_root = &app.file_explorer.root;

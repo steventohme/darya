@@ -278,6 +278,8 @@ pub struct SectionItemToml {
 pub struct SectionToml {
     pub name: String,
     #[serde(default)]
+    pub root: Option<String>,
+    #[serde(default)]
     pub items: Vec<SectionItemToml>,
 }
 

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use super::types::Worktree;
@@ -78,6 +78,26 @@ impl WorktreeManager {
         }
         Ok(())
     }
+}
+
+/// Discover worktrees for an arbitrary root directory.
+/// Runs `git worktree list --porcelain` in the given directory.
+pub fn list_worktrees_for_root(root: &Path) -> Result<Vec<Worktree>> {
+    let output = Command::new("git")
+        .args(["worktree", "list", "--porcelain"])
+        .current_dir(root)
+        .output()
+        .map_err(|e| DaryaError::Git(format!("failed to run git worktree list: {}", e)))?;
+
+    if !output.status.success() {
+        return Err(DaryaError::Git(format!(
+            "git worktree list failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(parse_porcelain(&stdout, &root.to_path_buf()))
 }
 
 fn parse_porcelain(output: &str, repo_root: &PathBuf) -> Vec<Worktree> {
