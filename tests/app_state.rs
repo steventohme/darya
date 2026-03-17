@@ -466,6 +466,43 @@ fn needs_session_restart_false_without_exited() {
     assert!(!app.needs_session_restart(&key_event));
 }
 
+// ── needs_session_force_restart ────────────────────────────────
+
+#[test]
+fn needs_session_force_restart_on_shift_r_with_running_session() {
+    let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
+    assert!(app.needs_session_force_restart(&key_event));
+}
+
+#[test]
+fn needs_session_force_restart_on_shift_r_with_exited_session() {
+    let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
+    app.exited_sessions.insert(sid);
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
+    assert!(app.needs_session_force_restart(&key_event));
+}
+
+#[test]
+fn needs_session_force_restart_false_without_session() {
+    let mut app = make_app(2);
+    app.sidebar_tree.cursor = 1;
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
+    assert!(!app.needs_session_force_restart(&key_event));
+}
+
+#[test]
+fn needs_session_force_restart_false_in_terminal_mode() {
+    let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
+    app.input_mode = InputMode::Terminal;
+    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
+    assert!(!app.needs_session_force_restart(&key_event));
+}
+
 // ── needs_session_close ─────────────────────────────────────
 
 #[test]

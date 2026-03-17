@@ -476,6 +476,48 @@ fn process_event(
                     }
                 }
 
+                // Handle session force-restart on Shift+R (works on running or exited sessions)
+                else if app.needs_session_force_restart(key) {
+                    key_consumed = true;
+                    if let Some((kind, Some(old_id), wt_path)) = app.cursor_session_info().map(|(k, id, p)| (k, id.map(|s| s.to_string()), p.clone())) {
+                        let coords = app.sidebar_tree.cursor_session_coords();
+                        session_manager.remove(&old_id);
+                        app.sidebar_tree.clear_session_id(&old_id);
+                        app.attention_sessions.remove(&old_id);
+                        app.exited_sessions.remove(&old_id);
+                        app.activity.remove_session(&old_id);
+                        app.remove_session_from_panes(&old_id);
+
+                        let (rows, cols) = pty_size(terminal);
+                        let command = match kind {
+                            SessionKind::Claude => config::resolve_session_command(&wt_path, &app.session_command),
+                            SessionKind::Shell => config::resolve_shell_command(&wt_path, &app.shell_command),
+                        };
+                        match session_manager.spawn_session(wt_path, rows, cols, app.theme.mode, &command) {
+                            Ok(id) => {
+                                if let Some((si, ii, slot_idx)) = coords {
+                                    app.sidebar_tree.set_session_id(si, ii, slot_idx, id);
+                                }
+                                match kind {
+                                    SessionKind::Claude => app.focus_terminal_panel(),
+                                    SessionKind::Shell => {
+                                        app.panel_focus = app::PanelFocus::Right;
+                                        app.main_view = app::MainView::Shell;
+                                    }
+                                }
+                                app.input_mode = InputMode::Terminal;
+                                if command != CLAUDE_COMMAND && kind == SessionKind::Claude {
+                                    app.status_message = Some(format!("Restarted session ({})", command));
+                                }
+                            }
+                            Err(e) => {
+                                app.status_message =
+                                    Some(format!("Failed to restart session: {}", e));
+                            }
+                        }
+                    }
+                }
+
                 // Handle session close on Backspace
                 else if app.needs_session_close(key) {
                     key_consumed = true;

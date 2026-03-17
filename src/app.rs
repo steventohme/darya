@@ -2361,7 +2361,7 @@ impl App {
                 self.status_message = Some("Use Enter in worktree list to start a session".to_string());
             }
             CommandId::RestartSession => {
-                self.status_message = Some("Use 'r' in worktree list to restart an exited session".to_string());
+                self.status_message = Some("Use 'r' to restart exited session, Shift+R to force-restart any session".to_string());
             }
             CommandId::CloseSession => {
                 self.status_message = Some("Use Ctrl+C to close the active session".to_string());
@@ -3456,6 +3456,18 @@ impl App {
         self.cursor_session_id()
             .map(|id| self.exited_sessions.contains(id))
             .unwrap_or(false)
+    }
+
+    /// Check if cursor is on any session for force-restart on Shift+R.
+    pub fn needs_session_force_restart(&self, key: &KeyEvent) -> bool {
+        if key.code != KeyCode::Char('R')
+            || self.prompt.is_some()
+            || self.show_help
+            || self.input_mode != InputMode::Navigation
+        {
+            return false;
+        }
+        self.cursor_session_id().is_some()
     }
 
     /// Check if Enter should spawn/switch a session.

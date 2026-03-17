@@ -42,6 +42,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 ("a", "Add worktree"),
                 ("d", "Delete worktree"),
                 ("r", "Restart exited session"),
+                ("Shift+R", "Force-restart session"),
                 ("Shift+S", "Add shell slot"),
                 ("c", "Assign color"),
                 ("Shift+N", "Create section"),

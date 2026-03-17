@@ -18,6 +18,7 @@ expression: output
 ┃                   ┃ a           Add worktree                                 ┃                   ┃
 ┃                   ┃ d           Delete worktree                              ┃                   ┃
 ┃                   ┃ r           Restart exited session                       ┃                   ┃
+┃                   ┃ Shift+R     Force-restart session                        ┃                   ┃
 ┃                   ┃ Shift+S     Add shell slot                               ┃                   ┃
 ┃                   ┃ c           Assign color                                 ┃                   ┃
 ┃                   ┃ Shift+N     Create section                               ┃                   ┃
@@ -28,7 +29,6 @@ expression: output
 ┃                   ┃ q           Quit                                         ┃                   ┃
 ┃                   ┃ Ctrl+C      Close session / Quit                         ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
-┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
  [NAV] worktrees
