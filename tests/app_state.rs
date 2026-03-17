@@ -10,7 +10,7 @@ use darya::app::{
     InputMode, MainView, PaneContent, PanelFocus, Prompt, SidebarView, ViewKind,
     BlameLine, GitBlameState, GitLogEntry, GitLogState,
     format_relative_time,
-    CommandId, CommandPaletteState,
+    CommandId, CommandPaletteState, ColorTarget,
 };
 use darya::config;
 use darya::event::AppEvent;
@@ -2538,7 +2538,9 @@ fn remove_section_returns_session_ids() {
             kind: SessionKind::Claude,
             label: "claude".to_string(),
             session_id: Some("sess-123".to_string()),
+            color: None,
         }],
+        color: None,
     });
     let removed = app.sidebar_tree.remove_section(si);
     assert_eq!(removed, vec!["sess-123".to_string()]);
@@ -2602,4 +2604,88 @@ fn shift_pagedown_reduces_scroll_offset() {
     let page = app.terminal_height.saturating_sub(2) as usize;
     app.scroll_down(page);
     assert_eq!(app.active_scroll_offset(), 42);
+}
+
+// ── Color Picker ──────────────────────────────────────────────
+
+#[test]
+fn color_picker_opens_on_c_key() {
+    let mut app = helpers::make_app(2);
+    app.sidebar_tree.cursor = 1;
+    app.handle_event(&key(KeyCode::Char('c')));
+    assert!(matches!(app.prompt, Some(Prompt::ColorPicker { .. })));
+}
+
+#[test]
+fn color_picker_assigns_color_on_enter() {
+    use ratatui::style::Color;
+    let mut app = helpers::make_app(2);
+    app.sidebar_tree.cursor = 1;
+    app.handle_event(&key(KeyCode::Char('c')));
+    app.handle_event(&key(KeyCode::Right));
+    app.handle_event(&key(KeyCode::Enter));
+    assert!(app.prompt.is_none());
+    assert_eq!(app.sidebar_tree.sections[0].items[0].color, Some(Color::Rgb(0xE0, 0x7A, 0x2A)));
+}
+
+#[test]
+fn color_picker_clears_color() {
+    use ratatui::style::Color;
+    let mut app = helpers::make_app(2);
+    app.sidebar_tree.sections[0].items[0].color = Some(Color::Rgb(0xFF, 0x00, 0x00));
+    app.sidebar_tree.cursor = 1;
+    app.handle_event(&key(KeyCode::Char('c')));
+    app.handle_event(&key(KeyCode::Enter));
+    assert!(app.prompt.is_none());
+    assert_eq!(app.sidebar_tree.sections[0].items[0].color, None);
+}
+
+#[test]
+fn color_picker_escape_cancels() {
+    let mut app = helpers::make_app(2);
+    app.sidebar_tree.cursor = 1;
+    app.handle_event(&key(KeyCode::Char('c')));
+    assert!(app.prompt.is_some());
+    app.handle_event(&key(KeyCode::Esc));
+    assert!(app.prompt.is_none());
+}
+
+#[test]
+fn color_picker_on_section() {
+    use ratatui::style::Color;
+    let mut app = helpers::make_app(2);
+    app.sidebar_tree.cursor = 0;
+    app.handle_event(&key(KeyCode::Char('c')));
+    assert!(matches!(app.prompt, Some(Prompt::ColorPicker { target: ColorTarget::Section(0), .. })));
+    app.handle_event(&key(KeyCode::Right));
+    app.handle_event(&key(KeyCode::Right));
+    app.handle_event(&key(KeyCode::Right));
+    app.handle_event(&key(KeyCode::Enter));
+    assert_eq!(app.sidebar_tree.sections[0].color, Some(Color::Rgb(0xCC, 0x8A, 0x4E)));
+}
+
+#[test]
+fn color_roundtrip_through_toml() {
+    use ratatui::style::Color;
+    use darya::worktree::types::Worktree;
+
+    let mut app = helpers::make_app(1);
+    app.sidebar_tree.sections[0].color = Some(Color::Rgb(0xFF, 0x55, 0x33));
+    app.sidebar_tree.sections[0].items[0].color = Some(Color::Rgb(0x33, 0xCC, 0x33));
+
+    let config = app.sidebar_tree.to_sections_config();
+    assert_eq!(config.sections[0].color.as_deref(), Some("#FF5533"));
+    assert_eq!(config.sections[0].items[0].color.as_deref(), Some("#33CC33"));
+
+    let worktrees: Vec<Worktree> = app.sidebar_tree.sections[0].items.iter().map(|item| {
+        Worktree {
+            path: item.path.clone(),
+            name: item.display_name.clone(),
+            branch: item.branch.clone(),
+            is_main: item.is_main,
+        }
+    }).collect();
+    let tree = darya::sidebar::tree::SidebarTree::from_config(&config, &worktrees);
+    assert_eq!(tree.sections[0].color, Some(Color::Rgb(0xFF, 0x55, 0x33)));
+    assert_eq!(tree.sections[0].items[0].color, Some(Color::Rgb(0x33, 0xCC, 0x33)));
 }

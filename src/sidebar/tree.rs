@@ -44,7 +44,9 @@ impl SidebarTree {
                     kind: SessionKind::Claude,
                     label: "claude".to_string(),
                     session_id: None,
+                    color: None,
                 }],
+                color: None,
             })
             .collect();
 
@@ -53,6 +55,7 @@ impl SidebarTree {
             collapsed: false,
             items,
             root_path: None,
+            color: None,
         }];
 
         let mut tree = Self {
@@ -252,6 +255,7 @@ impl SidebarTree {
             collapsed: false,
             items: Vec::new(),
             root_path,
+            color: None,
         });
         self.rebuild_visible();
     }
@@ -294,6 +298,7 @@ impl SidebarTree {
                 kind,
                 label,
                 session_id: None,
+                color: None,
             });
             item.collapsed = false;
             self.rebuild_visible();
@@ -415,7 +420,9 @@ impl SidebarTree {
                         kind: SessionKind::Claude,
                         label: "claude".to_string(),
                         session_id: None,
+                        color: None,
                     }],
+                    color: None,
                 });
             }
         }
@@ -505,7 +512,7 @@ impl SidebarTree {
 
     /// Convert to config format for persistence.
     pub fn to_sections_config(&self) -> crate::config::SectionsConfig {
-        use crate::config::{SectionItemToml, SectionShellToml, SectionToml, SectionsConfig};
+        use crate::config::{SectionItemToml, SectionShellToml, SectionToml, SectionsConfig, color_to_hex};
         let sections = self.sections.iter().map(|section| {
             let items = section.items.iter().map(|item| {
                 let shells: Vec<SectionShellToml> = item.sessions.iter()
@@ -513,17 +520,20 @@ impl SidebarTree {
                     .map(|s| SectionShellToml {
                         label: s.label.clone(),
                         command: None,
+                        color: s.color.and_then(color_to_hex),
                     })
                     .collect();
                 SectionItemToml {
                     path: item.path.to_string_lossy().to_string(),
                     shells,
+                    color: item.color.and_then(color_to_hex),
                 }
             }).collect();
             SectionToml {
                 name: section.name.clone(),
                 root: section.root_path.as_ref().map(|p| p.to_string_lossy().to_string()),
                 items,
+                color: section.color.and_then(color_to_hex),
             }
         }).collect();
         SectionsConfig { sections }
@@ -531,6 +541,8 @@ impl SidebarTree {
 
     /// Load sections from config, merging with discovered worktrees.
     pub fn from_config(config: &crate::config::SectionsConfig, worktrees: &[Worktree]) -> Self {
+        use crate::config::parse_hex_color;
+
         if config.sections.is_empty() {
             return Self::from_worktrees(worktrees);
         }
@@ -544,6 +556,7 @@ impl SidebarTree {
                     kind: SessionKind::Claude,
                     label: "claude".to_string(),
                     session_id: None,
+                    color: None,
                 }];
                 // Add configured shell slots
                 for shell in &item_toml.shells {
@@ -551,6 +564,7 @@ impl SidebarTree {
                         kind: SessionKind::Shell,
                         label: shell.label.clone(),
                         session_id: None,
+                        color: shell.color.as_deref().and_then(parse_hex_color),
                     });
                 }
                 SidebarItem {
@@ -563,6 +577,7 @@ impl SidebarTree {
                     is_main: wt.map(|w| w.is_main).unwrap_or(false),
                     collapsed: true,
                     sessions,
+                    color: item_toml.color.as_deref().and_then(parse_hex_color),
                 }
             }).collect();
             Section {
@@ -570,6 +585,7 @@ impl SidebarTree {
                 collapsed: false,
                 items,
                 root_path: sect_toml.root.as_ref().map(PathBuf::from),
+                color: sect_toml.color.as_deref().and_then(parse_hex_color),
             }
         }).collect();
 

@@ -57,11 +57,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                 TreeNode::Section(si) => {
                     let section = &app.sidebar_tree.sections[*si];
                     let arrow = if section.collapsed { "\u{25B6}" } else { "\u{25BC}" };
+                    let name_color = section.color.unwrap_or(app.theme.fg);
                     let spans = vec![
                         Span::styled(
                             format!("{} {}", arrow, section.name),
                             Style::default()
-                                .fg(app.theme.fg)
+                                .fg(name_color)
                                 .add_modifier(Modifier::BOLD),
                         ),
                     ];
@@ -127,6 +128,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         app.theme.session_inactive
                     };
 
+                    let item_name_color = item.color.unwrap_or(app.theme.fg);
                     let mut spans = if is_exited {
                         let exited_color = app.theme.session_exited;
                         vec![
@@ -136,7 +138,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                             ),
                             Span::styled(
                                 item.display_name.clone(),
-                                Style::default().fg(app.theme.fg),
+                                Style::default().fg(item_name_color),
                             ),
                             Span::styled(
                                 format!(" [{}]", branch_str),
@@ -153,6 +155,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         ]
                     } else if needs_attention {
                         let attn = app.theme.session_attention;
+                        let attn_name = item.color.unwrap_or(attn);
                         vec![
                             Span::styled(
                                 format!("  {} {} {} ", hotkey, arrow, indicator),
@@ -160,7 +163,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                             ),
                             Span::styled(
                                 item.display_name.clone(),
-                                Style::default().fg(attn).add_modifier(Modifier::BOLD),
+                                Style::default().fg(attn_name).add_modifier(Modifier::BOLD),
                             ),
                             Span::styled(
                                 format!(" [{}]", branch_str),
@@ -179,7 +182,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                             ),
                             Span::styled(
                                 item.display_name.clone(),
-                                Style::default().fg(app.theme.fg),
+                                Style::default().fg(item_name_color),
                             ),
                             Span::styled(
                                 format!(" [{}]", branch_str),
@@ -228,6 +231,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         _ => "",
                     };
 
+                    let label_fg = slot.color.unwrap_or(status_color);
                     let spans = vec![
                         Span::styled(
                             format!("    {} ", icon),
@@ -235,7 +239,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         ),
                         Span::styled(
                             slot.label.clone(),
-                            Style::default().fg(status_color),
+                            Style::default().fg(label_fg),
                         ),
                         Span::styled(
                             status_suffix.to_string(),

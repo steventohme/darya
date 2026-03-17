@@ -53,6 +53,7 @@ pub fn set_shell_session(app: &mut App, item_idx: usize, session_id: &str) {
             kind: SessionKind::Shell,
             label: "shell".to_string(),
             session_id: Some(session_id.to_string()),
+            color: None,
         });
         app.sidebar_tree.rebuild_visible();
     }

@@ -5,9 +5,8 @@ expression: output
  darya
 ┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃│ ▼ my-project         ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
-┃    1 ▶ ○ my-project [m┃┃                                                                         ┃
-┃    2 ▶ ○ my-projec┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
-┃                   ┃ Navigation — Worktrees                                   ┃                   ┃
+┃    1 ▶ ○ my-projec┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
+┃    2 ▶ ○ my-projec┃ Navigation — Worktrees                                   ┃                   ┃
 ┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
 ┃                   ┃ Cmd+1: Worktrees  Cmd+2: Terminal  Cmd+3: Files  Cmd+4: E┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
@@ -20,6 +19,7 @@ expression: output
 ┃                   ┃ d           Delete worktree                              ┃                   ┃
 ┃                   ┃ r           Restart exited session                       ┃                   ┃
 ┃                   ┃ Shift+S     Add shell slot                               ┃                   ┃
+┃                   ┃ c           Assign color                                 ┃                   ┃
 ┃                   ┃ Shift+N     Create section                               ┃                   ┃
 ┃                   ┃ Backspace   Close/delete session/section                 ┃                   ┃
 ┃                   ┃ Tab         Switch panel                                 ┃                   ┃

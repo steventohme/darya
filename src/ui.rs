@@ -5,7 +5,7 @@ use ratatui::Frame;
 
 use ratatui::text::{Line, Span};
 
-use crate::app::{App, DirBrowser, InputMode, PanelFocus, Prompt, ViewKind};
+use crate::app::{App, DirBrowser, InputMode, PanelFocus, Prompt, ViewKind, PRESET_COLORS};
 use crate::session::manager::SessionManager;
 use crate::widgets;
 
@@ -249,8 +249,8 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
 }
 
 fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::config::Theme) {
-    let width = 50u16.min(area.width.saturating_sub(4));
-    let height = 3u16;
+    let width = if matches!(prompt, Prompt::ColorPicker { .. }) { 30u16 } else { 50u16 }.min(area.width.saturating_sub(4));
+    let height = if matches!(prompt, Prompt::ColorPicker { .. }) { 4u16 } else { 3u16 };
     let x = (area.width.saturating_sub(width)) / 2;
     let y = (area.height.saturating_sub(height)) / 2;
     let popup_area = Rect::new(x, y, width, height);
@@ -327,6 +327,53 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
             let text = Paragraph::new(format!("Delete section '{}'? (y/N)", section_name))
                 .style(Style::default().fg(theme.fg).bg(theme.bg));
             frame.render_widget(text, inner);
+        }
+        Prompt::ColorPicker { cursor, .. } => {
+            // Use the same popup_area as all other prompts
+            let block = Block::default()
+                .title(" Assign Color ")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
+                .border_style(Style::default().fg(theme.prompt_border))
+                .style(Style::default().bg(theme.bg));
+            let inner = block.inner(popup_area);
+            frame.render_widget(block, popup_area);
+
+            // Fit swatches into the inner width: each slot is 3 chars (" ██" or "[██")
+            // plus a closing bracket/space on the last one
+            let cols = 7u16;
+            let rows = ((PRESET_COLORS.len() as u16) + cols - 1) / cols;
+
+            let mut lines: Vec<Line> = Vec::new();
+            for row in 0..rows {
+                let mut spans: Vec<Span> = Vec::new();
+                for col in 0..cols {
+                    let idx = (row * cols + col) as usize;
+                    if idx >= PRESET_COLORS.len() { break; }
+                    let is_selected = idx == *cursor;
+                    let swatch = match PRESET_COLORS[idx] {
+                        None => "--",
+                        Some(_) => "\u{2588}\u{2588}",
+                    };
+                    let fg = PRESET_COLORS[idx].unwrap_or(theme.fg_dim);
+                    let swatch_style = Style::default().fg(fg).bg(theme.bg);
+                    let bracket_style = Style::default().fg(theme.fg).bg(theme.bg).add_modifier(Modifier::BOLD);
+                    let space_style = Style::default().bg(theme.bg);
+                    if is_selected {
+                        spans.push(Span::styled("[", bracket_style));
+                        spans.push(Span::styled(swatch, swatch_style));
+                        spans.push(Span::styled("]", bracket_style));
+                    } else {
+                        spans.push(Span::styled(" ", space_style));
+                        spans.push(Span::styled(swatch, swatch_style));
+                        spans.push(Span::styled(" ", space_style));
+                    }
+                }
+                lines.push(Line::from(spans));
+            }
+
+            let paragraph = Paragraph::new(lines).style(Style::default().bg(theme.bg));
+            frame.render_widget(paragraph, inner);
         }
     }
 }

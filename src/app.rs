@@ -6,10 +6,38 @@ use std::time::Instant;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Index2, Lines as EdtuiLines};
 
+use ratatui::style::Color;
+
 use crate::sidebar::tree::SidebarTree;
 use crate::sidebar::types::SessionKind;
 
 const IGNORED_NAMES: &[&str] = &["target", "node_modules", "__pycache__"];
+
+/// Which sidebar node a color is being assigned to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColorTarget {
+    Section(usize),
+    Item(usize, usize),
+    Session(usize, usize, usize),
+}
+
+/// Preset colors for the color picker (None = clear). 7 columns × 2 rows.
+pub const PRESET_COLORS: &[Option<Color>] = &[
+    None,                                        // clear
+    Some(Color::Rgb(0xE0, 0x7A, 0x2A)),         // amber (border accent)
+    Some(Color::Rgb(0xD4, 0x9A, 0x6A)),         // warm sand
+    Some(Color::Rgb(0xCC, 0x8A, 0x4E)),         // copper
+    Some(Color::Rgb(0xC4, 0x6B, 0x5E)),         // terracotta
+    Some(Color::Rgb(0xB0, 0x5A, 0x78)),         // dusty rose
+    Some(Color::Rgb(0x9A, 0x6E, 0xB0)),         // muted lavender
+    Some(Color::Rgb(0x72, 0xA5, 0xC5)),         // slate blue
+    Some(Color::Rgb(0x6B, 0xC2, 0xA5)),         // sage teal
+    Some(Color::Rgb(0x7A, 0xB0, 0x7A)),         // muted green
+    Some(Color::Rgb(0xA0, 0xB8, 0x70)),         // olive
+    Some(Color::Rgb(0xD4, 0xC4, 0x7A)),         // soft gold
+    Some(Color::Rgb(0xB0, 0xB0, 0xB0)),         // silver
+    Some(Color::Rgb(0x78, 0x88, 0x98)),         // cool gray
+];
 const MAX_FILE_SIZE: u64 = 1_048_576; // 1MB
 const MAX_PANES: usize = 3;
 
@@ -149,6 +177,8 @@ pub enum Prompt {
     AddShellSlot { input: String },
     /// Confirming section deletion
     ConfirmDeleteSection { section_name: String, section_idx: usize },
+    /// Color picker overlay
+    ColorPicker { target: ColorTarget, cursor: usize },
 }
 
 /// An entry in the directory browser (a subdirectory).
@@ -709,6 +739,7 @@ pub enum CommandId {
     Quit,
     AddSection,
     AddShellSlot,
+    AssignColor,
 }
 
 #[derive(Debug, Clone)]
@@ -752,6 +783,7 @@ impl CommandPaletteState {
             PaletteCommand { id: CommandId::Quit, name: "Quit".to_string(), keybinding: Some("q".to_string()) },
             PaletteCommand { id: CommandId::AddSection, name: "Sidebar: Add Section".to_string(), keybinding: Some("Shift+N".to_string()) },
             PaletteCommand { id: CommandId::AddShellSlot, name: "Sidebar: Add Shell Slot".to_string(), keybinding: Some("Shift+S".to_string()) },
+            PaletteCommand { id: CommandId::AssignColor, name: "Sidebar: Assign Color".to_string(), keybinding: Some("c".to_string()) },
         ];
         let results = all_commands.clone();
         Self {
@@ -2053,6 +2085,55 @@ impl App {
                     self.prompt = None;
                 }
             },
+            Prompt::ColorPicker { target, cursor } => match key.code {
+                KeyCode::Left | KeyCode::Char('h') => {
+                    if *cursor > 0 { *cursor -= 1; }
+                }
+                KeyCode::Right | KeyCode::Char('l') => {
+                    if *cursor + 1 < PRESET_COLORS.len() { *cursor += 1; }
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    // Grid is 7 columns
+                    if *cursor >= 7 { *cursor -= 7; }
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if *cursor + 7 < PRESET_COLORS.len() { *cursor += 7; }
+                }
+                KeyCode::Enter => {
+                    let color = PRESET_COLORS[*cursor];
+                    let target = *target;
+                    self.prompt = None;
+                    match target {
+                        ColorTarget::Section(si) => {
+                            if let Some(section) = self.sidebar_tree.sections.get_mut(si) {
+                                section.color = color;
+                            }
+                        }
+                        ColorTarget::Item(si, ii) => {
+                            if let Some(item) = self.sidebar_tree.sections.get_mut(si)
+                                .and_then(|s| s.items.get_mut(ii)) {
+                                item.color = color;
+                            }
+                        }
+                        ColorTarget::Session(si, ii, slot) => {
+                            if let Some(s) = self.sidebar_tree.sections.get_mut(si)
+                                .and_then(|s| s.items.get_mut(ii))
+                                .and_then(|item| item.sessions.get_mut(slot)) {
+                                s.color = color;
+                            }
+                        }
+                    }
+                    self.status_message = Some(if color.is_some() {
+                        "Color assigned".to_string()
+                    } else {
+                        "Color cleared".to_string()
+                    });
+                }
+                KeyCode::Esc => {
+                    self.prompt = None;
+                }
+                _ => {}
+            },
         }
     }
 
@@ -2281,6 +2362,17 @@ impl App {
             CommandId::AddShellSlot => {
                 self.prompt = Some(Prompt::AddShellSlot { input: String::new() });
             }
+            CommandId::AssignColor => {
+                use crate::sidebar::tree::TreeNode;
+                if let Some(&node) = self.sidebar_tree.selected_node() {
+                    let target = match node {
+                        TreeNode::Section(si) => ColorTarget::Section(si),
+                        TreeNode::Item(si, ii) => ColorTarget::Item(si, ii),
+                        TreeNode::Session(si, ii, slot) => ColorTarget::Session(si, ii, slot),
+                    };
+                    self.prompt = Some(Prompt::ColorPicker { target, cursor: 0 });
+                }
+            }
         }
     }
 
@@ -2424,6 +2516,18 @@ impl App {
                     .map(PathBuf::from)
                     .unwrap_or_else(|_| PathBuf::from("/"));
                 self.dir_browser = Some(DirBrowser::new(home));
+            }
+            KeyCode::Char('c') => {
+                // Open color picker for current node
+                use crate::sidebar::tree::TreeNode;
+                if let Some(&node) = self.sidebar_tree.selected_node() {
+                    let target = match node {
+                        TreeNode::Section(si) => ColorTarget::Section(si),
+                        TreeNode::Item(si, ii) => ColorTarget::Item(si, ii),
+                        TreeNode::Session(si, ii, slot) => ColorTarget::Session(si, ii, slot),
+                    };
+                    self.prompt = Some(Prompt::ColorPicker { target, cursor: 0 });
+                }
             }
             KeyCode::Backspace => {
                 // Delete section when cursor is on a section header (not the first/auto section)

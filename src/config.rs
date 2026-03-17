@@ -265,6 +265,8 @@ pub struct SectionShellToml {
     pub label: String,
     #[serde(default)]
     pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -272,6 +274,8 @@ pub struct SectionItemToml {
     pub path: String,
     #[serde(default)]
     pub shells: Vec<SectionShellToml>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -281,6 +285,8 @@ pub struct SectionToml {
     pub root: Option<String>,
     #[serde(default)]
     pub items: Vec<SectionItemToml>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -321,7 +327,7 @@ pub struct AppConfig {
 }
 
 /// Parse a hex color string like "#33FF33" or "33FF33" into a ratatui Color.
-fn parse_hex_color(s: &str) -> Option<Color> {
+pub fn parse_hex_color(s: &str) -> Option<Color> {
     let hex = s.strip_prefix('#').unwrap_or(s);
     if hex.len() != 6 {
         return None;
@@ -330,6 +336,14 @@ fn parse_hex_color(s: &str) -> Option<Color> {
     let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
     let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
     Some(Color::Rgb(r, g, b))
+}
+
+/// Convert a ratatui Color::Rgb to a hex string like "#RRGGBB".
+pub fn color_to_hex(color: Color) -> Option<String> {
+    match color {
+        Color::Rgb(r, g, b) => Some(format!("#{:02X}{:02X}{:02X}", r, g, b)),
+        _ => None,
+    }
 }
 
 /// Load config from `~/.config/darya/config.toml`, falling back to defaults.
