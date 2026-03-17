@@ -19,9 +19,9 @@ expression: output
 ┃                   ┃ a           Add worktree                                 ┃                   ┃
 ┃                   ┃ d           Delete worktree                              ┃                   ┃
 ┃                   ┃ r           Restart exited session                       ┃                   ┃
-┃                   ┃ S           Add shell slot                               ┃                   ┃
-┃                   ┃ N           Create section                               ┃                   ┃
-┃                   ┃ Backspace   Close session                                ┃                   ┃
+┃                   ┃ Shift+S     Add shell slot                               ┃                   ┃
+┃                   ┃ Shift+N     Create section                               ┃                   ┃
+┃                   ┃ Backspace   Close/delete session/section                 ┃                   ┃
 ┃                   ┃ Tab         Switch panel                                 ┃                   ┃
 ┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
 ┃                   ┃ Cmd+F       Project search                               ┃                   ┃
