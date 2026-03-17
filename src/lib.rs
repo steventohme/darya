@@ -3,6 +3,7 @@ pub mod config;
 pub mod error;
 pub mod event;
 pub mod session;
+pub mod sidebar;
 pub mod ui;
 pub mod watcher;
 pub mod widgets;
