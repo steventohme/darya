@@ -7,6 +7,9 @@ use ratatui::Frame;
 use crate::app::{App, GitFileStatus};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
+    // Lazily refresh git indicators only when the file explorer is visible
+    app.file_explorer.ensure_git_indicators();
+
     let root_display = app
         .file_explorer
         .root

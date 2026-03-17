@@ -189,6 +189,7 @@ fn snapshot_git_status_sidebar_mixed() {
         selected: 0,
         error: None,
         worktree_path: item_path(&app, 0),
+        stale: false,
     });
     app.sidebar_view = SidebarView::GitStatus;
     app.panel_focus = PanelFocus::Left;
@@ -315,6 +316,7 @@ fn snapshot_file_explorer_with_git_indicators() {
     app.file_explorer.git_indicators.insert("src/app.rs".to_string(), GitFileStatus::Modified);
     app.file_explorer.git_indicators.insert("README.md".to_string(), GitFileStatus::Untracked);
     app.file_explorer.git_indicators.insert("src/main.rs".to_string(), GitFileStatus::Added);
+    app.file_explorer.git_indicators_stale = false; // prevent ensure_git_indicators from clearing injected data
 
     app.sidebar_view = SidebarView::FileExplorer;
     app.panel_focus = PanelFocus::Left;
@@ -368,6 +370,7 @@ fn snapshot_git_blame_view() {
         scroll_offset: 0,
         visible_height: 20,
         worktree_path: item_path(&app, 0),
+        stale: false,
     });
     app.main_view = MainView::GitBlame;
     app.panel_focus = PanelFocus::Right;
@@ -408,6 +411,7 @@ fn snapshot_git_log_view() {
         visible_height: 20,
         worktree_path: item_path(&app, 0),
         file_filter: None,
+        stale: false,
     });
     app.main_view = MainView::GitLog;
     app.panel_focus = PanelFocus::Right;
@@ -436,6 +440,7 @@ fn snapshot_git_log_with_file_filter() {
         visible_height: 20,
         worktree_path: item_path(&app, 0),
         file_filter: Some("src/parser.rs".to_string()),
+        stale: false,
     });
     app.main_view = MainView::GitLog;
     app.panel_focus = PanelFocus::Right;

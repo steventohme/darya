@@ -10,7 +10,7 @@ use darya::app::{
     InputMode, MainView, PaneContent, PanelFocus, Prompt, SidebarView, ViewKind,
     BlameLine, GitBlameState, GitLogEntry, GitLogState,
     format_relative_time,
-    CommandId, CommandPaletteState, DirBrowser,
+    CommandId, CommandPaletteState,
 };
 use darya::config;
 use darya::event::AppEvent;
@@ -584,6 +584,7 @@ fn make_app_with_git_status(n: usize) -> darya::app::App {
         selected: 0,
         error: None,
         worktree_path: item_path(&app, 0),
+        stale: false,
     });
     app.sidebar_view = SidebarView::GitStatus;
     app.panel_focus = PanelFocus::Left;
@@ -939,6 +940,7 @@ fn selected_branch_info_returns_branch_and_counts() {
         selected: 0,
         error: None,
         worktree_path: item_path(&app, 0),
+        stale: false,
     });
     let (branch, untracked, modified) = app.selected_branch_info().unwrap();
     assert_eq!(branch, "main");
@@ -1331,23 +1333,24 @@ fn git_indicators_cleared_on_set_root() {
 
 #[test]
 fn file_changed_refreshes_git_indicators() {
-    // Ensure no panic on a non-git directory
+    // File change marks indicators stale for lazy refresh
     let tmp = tempfile::tempdir().unwrap();
     let mut app = make_app(2);
     app.file_explorer.set_root(tmp.path().to_path_buf());
+    app.file_explorer.git_indicators_stale = false; // pretend we already loaded
     app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.path().join("a.txt")] });
-    // Should not panic, indicators stay empty for non-git dir
-    assert!(app.file_explorer.git_indicators.is_empty());
+    assert!(app.file_explorer.git_indicators_stale);
 }
 
 #[test]
 fn files_created_or_deleted_refreshes_git_indicators() {
-    // Ensure no panic on a non-git directory
+    // File creation/deletion marks indicators stale for lazy refresh
     let tmp = tempfile::tempdir().unwrap();
     let mut app = make_app(2);
     app.file_explorer.set_root(tmp.path().to_path_buf());
+    app.file_explorer.git_indicators_stale = false;
     app.handle_event(&AppEvent::FilesCreatedOrDeleted);
-    assert!(app.file_explorer.git_indicators.is_empty());
+    assert!(app.file_explorer.git_indicators_stale);
 }
 
 // ── Git Blame View ──────────────────────────────────────────
@@ -1382,6 +1385,7 @@ fn make_app_with_blame(n: usize) -> darya::app::App {
         scroll_offset: 0,
         visible_height: 20,
         worktree_path: item_path(&app, 0),
+        stale: false,
     });
     app.main_view = MainView::GitBlame;
     app.panel_focus = PanelFocus::Right;
@@ -1492,6 +1496,7 @@ fn make_app_with_git_log(n: usize) -> darya::app::App {
         visible_height: 20,
         worktree_path: item_path(&app, 0),
         file_filter: None,
+        stale: false,
     });
     app.main_view = MainView::GitLog;
     app.panel_focus = PanelFocus::Right;
@@ -1835,18 +1840,21 @@ fn file_changed_refreshes_git_views() {
         scroll_offset: 0,
         visible_height: 20,
         worktree_path: item_path(&app, 0),
+        stale: false,
     });
     app.git_status = Some(GitStatusState {
         entries: vec![],
         selected: 0,
         error: None,
         worktree_path: item_path(&app, 0),
+        stale: false,
     });
-    // Should not panic — refresh silently keeps stale data on non-git paths
+    // File change marks views stale for lazy refresh on next render
     app.handle_event(&AppEvent::FileChanged { paths: vec![PathBuf::from("/tmp/foo.rs")] });
-    assert!(app.git_log.is_some());
-    assert!(app.git_blame.is_some());
-    assert!(app.git_status.is_some());
+    assert!(app.git_log.as_ref().unwrap().stale);
+    assert!(app.git_blame.as_ref().unwrap().stale);
+    assert!(app.git_status.as_ref().unwrap().stale);
+    assert!(app.file_explorer.git_indicators_stale);
 }
 
 #[test]
@@ -1865,18 +1873,21 @@ fn files_created_or_deleted_refreshes_git_views() {
         scroll_offset: 0,
         visible_height: 20,
         worktree_path: item_path(&app, 0),
+        stale: false,
     });
     app.git_status = Some(GitStatusState {
         entries: vec![],
         selected: 0,
         error: None,
         worktree_path: item_path(&app, 0),
+        stale: false,
     });
-    // Should not panic — refresh silently keeps stale data on non-git paths
+    // File creation/deletion marks views stale for lazy refresh on next render
     app.handle_event(&AppEvent::FilesCreatedOrDeleted);
-    assert!(app.git_log.is_some());
-    assert!(app.git_blame.is_some());
-    assert!(app.git_status.is_some());
+    assert!(app.git_log.as_ref().unwrap().stale);
+    assert!(app.git_blame.as_ref().unwrap().stale);
+    assert!(app.git_status.as_ref().unwrap().stale);
+    assert!(app.file_explorer.git_indicators_stale);
 }
 
 // ── Shell View ──────────────────────────────────────────────

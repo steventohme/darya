@@ -312,6 +312,8 @@ pub struct FileExplorerState {
     pub expanded: HashSet<PathBuf>,
     pub root: PathBuf,
     pub git_indicators: HashMap<String, GitFileStatus>,
+    /// Whether git indicators need to be recomputed before next render.
+    pub git_indicators_stale: bool,
 }
 
 impl FileExplorerState {
@@ -322,9 +324,9 @@ impl FileExplorerState {
             expanded: HashSet::new(),
             root,
             git_indicators: HashMap::new(),
+            git_indicators_stale: true,
         };
         state.refresh();
-        state.refresh_git_indicators();
         state
     }
 
@@ -454,6 +456,7 @@ impl FileExplorerState {
 
     /// Refresh the git indicator cache by running `git status` on the root.
     pub fn refresh_git_indicators(&mut self) {
+        self.git_indicators_stale = false;
         self.git_indicators.clear();
         let Ok(entries) = run_git_status(&self.root) else {
             return;
@@ -477,7 +480,16 @@ impl FileExplorerState {
             self.expanded.clear();
             self.selected = 0;
             self.refresh();
+            self.git_indicators.clear();
+            self.git_indicators_stale = true;
+        }
+    }
+
+    /// Ensure git indicators are up-to-date. Call before rendering.
+    pub fn ensure_git_indicators(&mut self) {
+        if self.git_indicators_stale {
             self.refresh_git_indicators();
+            self.git_indicators_stale = false;
         }
     }
 }
@@ -738,8 +750,8 @@ impl CommandPaletteState {
             PaletteCommand { id: CommandId::ClosePane, name: "Close Pane".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.close_pane)) },
             PaletteCommand { id: CommandId::ToggleHelp, name: "Toggle Help".to_string(), keybinding: Some("?".to_string()) },
             PaletteCommand { id: CommandId::Quit, name: "Quit".to_string(), keybinding: Some("q".to_string()) },
-            PaletteCommand { id: CommandId::AddSection, name: "Sidebar: Add Section".to_string(), keybinding: Some("N".to_string()) },
-            PaletteCommand { id: CommandId::AddShellSlot, name: "Sidebar: Add Shell Slot".to_string(), keybinding: Some("S".to_string()) },
+            PaletteCommand { id: CommandId::AddSection, name: "Sidebar: Add Section".to_string(), keybinding: Some("Shift+N".to_string()) },
+            PaletteCommand { id: CommandId::AddShellSlot, name: "Sidebar: Add Shell Slot".to_string(), keybinding: Some("Shift+S".to_string()) },
         ];
         let results = all_commands.clone();
         Self {
@@ -933,6 +945,7 @@ pub struct GitStatusState {
     pub selected: usize,
     pub error: Option<String>,
     pub worktree_path: PathBuf,
+    pub stale: bool,
 }
 
 impl GitStatusState {
@@ -941,10 +954,22 @@ impl GitStatusState {
             Ok(entries) => (entries, None),
             Err(e) => (Vec::new(), Some(e)),
         };
-        Self { entries, selected: 0, error, worktree_path }
+        Self { entries, selected: 0, error, worktree_path, stale: false }
+    }
+
+    pub fn mark_stale(&mut self) {
+        self.stale = true;
+    }
+
+    /// Refresh only if stale. Call before rendering.
+    pub fn ensure_fresh(&mut self) {
+        if self.stale {
+            self.refresh();
+        }
     }
 
     pub fn refresh(&mut self) {
+        self.stale = false;
         match run_git_status(&self.worktree_path) {
             Ok(entries) => {
                 self.entries = entries;
@@ -1200,6 +1225,7 @@ pub struct GitBlameState {
     pub scroll_offset: usize,
     pub visible_height: usize,
     pub worktree_path: PathBuf,
+    pub stale: bool,
 }
 
 impl GitBlameState {
@@ -1212,7 +1238,18 @@ impl GitBlameState {
         self.scroll_offset = (self.scroll_offset + n).min(max_scroll);
     }
 
+    pub fn mark_stale(&mut self) {
+        self.stale = true;
+    }
+
+    pub fn ensure_fresh(&mut self) {
+        if self.stale {
+            self.refresh();
+        }
+    }
+
     pub fn refresh(&mut self) {
+        self.stale = false;
         match run_git_blame(&self.file_path, &self.worktree_path) {
             Ok(lines) => {
                 self.lines = lines;
@@ -1329,6 +1366,7 @@ pub struct GitLogState {
     pub visible_height: usize,
     pub worktree_path: PathBuf,
     pub file_filter: Option<String>,
+    pub stale: bool,
 }
 
 impl GitLogState {
@@ -1352,7 +1390,18 @@ impl GitLogState {
         self.entries.get(self.selected)
     }
 
+    pub fn mark_stale(&mut self) {
+        self.stale = true;
+    }
+
+    pub fn ensure_fresh(&mut self) {
+        if self.stale {
+            self.refresh();
+        }
+    }
+
     pub fn refresh(&mut self) {
+        self.stale = false;
         match run_git_log(&self.worktree_path, self.file_filter.as_deref()) {
             Ok(entries) => {
                 self.entries = entries;
@@ -1844,28 +1893,28 @@ impl App {
                         }
                     }
                 }
-                self.file_explorer.refresh_git_indicators();
+                self.file_explorer.git_indicators_stale = true;
                 if let Some(ref mut gs) = self.git_status {
-                    gs.refresh();
+                    gs.mark_stale();
                 }
                 if let Some(ref mut gl) = self.git_log {
-                    gl.refresh();
+                    gl.mark_stale();
                 }
                 if let Some(ref mut gb) = self.git_blame {
-                    gb.refresh();
+                    gb.mark_stale();
                 }
             }
             AppEvent::FilesCreatedOrDeleted => {
                 self.file_explorer.refresh();
-                self.file_explorer.refresh_git_indicators();
+                self.file_explorer.git_indicators_stale = true;
                 if let Some(ref mut gs) = self.git_status {
-                    gs.refresh();
+                    gs.mark_stale();
                 }
                 if let Some(ref mut gl) = self.git_log {
-                    gl.refresh();
+                    gl.mark_stale();
                 }
                 if let Some(ref mut gb) = self.git_blame {
-                    gb.refresh();
+                    gb.mark_stale();
                 }
             }
             AppEvent::Tick => {
@@ -2824,6 +2873,7 @@ impl App {
                     scroll_offset: 0,
                     visible_height: 24,
                     worktree_path: root,
+                    stale: false,
                 });
                 self.set_main_view(MainView::GitBlame);
             }
@@ -2854,6 +2904,7 @@ impl App {
                     visible_height: 24,
                     worktree_path: root,
                     file_filter,
+                    stale: false,
                 });
                 self.set_main_view(MainView::GitLog);
             }

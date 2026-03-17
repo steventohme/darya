@@ -7,6 +7,10 @@ use ratatui::Frame;
 use crate::app::App;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
+    if let Some(ref mut gb) = app.git_blame {
+        gb.ensure_fresh();
+    }
+
     let border_style = if is_focused {
         Style::default().fg(app.theme.border_active)
     } else {
