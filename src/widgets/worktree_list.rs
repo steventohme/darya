@@ -6,6 +6,8 @@ use ratatui::Frame;
 
 use crate::app::App;
 use crate::config::Theme;
+use crate::sidebar::tree::TreeNode;
+use crate::sidebar::types::SessionKind;
 
 /// Linearly interpolate between two RGB colors. `t` ranges 0.0 (color a) to 1.0 (color b).
 fn lerp_color(a: ratatui::style::Color, b: ratatui::style::Color, t: f32) -> ratatui::style::Color {
@@ -24,179 +26,225 @@ fn lerp_color(a: ratatui::style::Color, b: ratatui::style::Color, t: f32) -> rat
 }
 
 /// Build 5 styled spans for the Knight Rider scanner animation.
-/// Diamond head with gradient trail that fades behind.
 fn build_animation_spans(trail: [u8; 5], theme: &Theme) -> Vec<Span<'static>> {
-    // 4-level gradient: dim → bright (session_active)
     let colors = [
-        lerp_color(theme.fg_dim, theme.session_active, 0.0),   // level 0: dim
-        lerp_color(theme.fg_dim, theme.session_active, 0.35),  // level 1
-        lerp_color(theme.fg_dim, theme.session_active, 0.65),  // level 2
-        theme.session_active,                                    // level 3: full bright
+        lerp_color(theme.fg_dim, theme.session_active, 0.0),
+        lerp_color(theme.fg_dim, theme.session_active, 0.35),
+        lerp_color(theme.fg_dim, theme.session_active, 0.65),
+        theme.session_active,
     ];
 
     trail
         .iter()
         .map(|&level| {
             let color = colors[level as usize];
-            let ch = if level >= 2 { "\u{25C6}" } else { "\u{00B7}" }; // ◆ or ·
+            let ch = if level >= 2 { "\u{25C6}" } else { "\u{00B7}" };
             Span::styled(ch, Style::default().fg(color))
         })
         .collect()
 }
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
-    // Derive repo name from the main worktree's directory name
-    let repo_name = app
-        .worktrees
-        .iter()
-        .find(|wt| wt.is_main)
-        .map(|wt| wt.name.as_str())
-        .unwrap_or("repo");
+    // Track which item index we're on (for hotkey labels)
+    let mut item_counter: usize = 0;
 
     let items: Vec<ListItem> = app
-        .worktrees
+        .sidebar_tree
+        .visible
         .iter()
-        .enumerate()
-        .map(|(i, wt)| {
-            let session_id = app.session_ids.get(&wt.path);
-            let shell_id = app.shell_session_ids.get(&wt.path);
-            let has_session = session_id.is_some();
-            let has_shell = shell_id.is_some();
-            let is_exited = session_id
-                .map(|id| app.exited_sessions.contains(id))
-                .unwrap_or(false);
-            let needs_attention = session_id
-                .map(|id| app.attention_sessions.contains(id))
-                .unwrap_or(false);
-            let is_animating = !is_exited
-                && session_id
-                    .map(|id| app.activity.is_active(id))
-                    .unwrap_or(false);
-            let indicator = if is_exited {
-                "\u{2715}"
-            } else if has_session {
-                "\u{25CF}"
-            } else {
-                "\u{25CB}"
-            };
-            let shell_indicator = if has_shell {
-                let shell_exited = shell_id
-                    .map(|id| app.exited_sessions.contains(id))
-                    .unwrap_or(false);
-                if shell_exited { " \u{2715}$" } else { " $" }
-            } else {
-                ""
-            };
+        .map(|node| {
+            match node {
+                TreeNode::Section(si) => {
+                    let section = &app.sidebar_tree.sections[*si];
+                    let arrow = if section.collapsed { "\u{25B6}" } else { "\u{25BC}" };
+                    let spans = vec![
+                        Span::styled(
+                            format!("{} {}", arrow, section.name),
+                            Style::default()
+                                .fg(app.theme.fg)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                    ];
+                    ListItem::new(Line::from(spans))
+                }
+                TreeNode::Item(si, ii) => {
+                    let item = &app.sidebar_tree.sections[*si].items[*ii];
+                    let arrow = if item.collapsed { "\u{25B6}" } else { "\u{25BC}" };
 
-            let branch_str = wt
-                .branch
-                .as_deref()
-                .unwrap_or("detached");
+                    // Find Claude session status for the indicator
+                    let claude_slot = item.sessions.iter().find(|s| s.kind == SessionKind::Claude);
+                    let session_id = claude_slot.and_then(|s| s.session_id.as_deref());
+                    let has_session = session_id.is_some();
+                    let is_exited = session_id
+                        .map(|id| app.exited_sessions.contains(id))
+                        .unwrap_or(false);
+                    let needs_attention = session_id
+                        .map(|id| app.attention_sessions.contains(id))
+                        .unwrap_or(false);
+                    let is_animating = !is_exited
+                        && session_id
+                            .map(|id| app.activity.is_active(id))
+                            .unwrap_or(false);
 
-            let exited_marker = if is_exited { " [exited]" } else { "" };
+                    let indicator = if is_exited {
+                        "\u{2715}"
+                    } else if has_session {
+                        "\u{25CF}"
+                    } else {
+                        "\u{25CB}"
+                    };
 
-            // Hotkey label: 1-9 for first 9, 0 for 10th
-            let hotkey = if i < 9 {
-                format!("{}", i + 1)
-            } else if i == 9 {
-                "0".to_string()
-            } else {
-                " ".to_string()
-            };
+                    let branch_str = item.branch.as_deref().unwrap_or("detached");
+                    let exited_marker = if is_exited { " [exited]" } else { "" };
 
-            let indicator_color = if is_exited {
-                app.theme.session_exited
-            } else if needs_attention {
-                app.theme.session_attention
-            } else if has_session {
-                app.theme.session_active
-            } else {
-                app.theme.session_inactive
-            };
+                    // Hotkey label: 1-9 for first 9 items, 0 for 10th
+                    let hotkey = if item_counter < 9 {
+                        format!("{}", item_counter + 1)
+                    } else if item_counter == 9 {
+                        "0".to_string()
+                    } else {
+                        " ".to_string()
+                    };
+                    item_counter += 1;
 
-            let mut spans = if is_exited {
-                let exited_color = app.theme.session_exited;
-                vec![
-                    Span::styled(
-                        format!("{} {} ", hotkey, indicator),
-                        Style::default().fg(exited_color).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        repo_name.to_string(),
-                        Style::default().fg(app.theme.fg),
-                    ),
-                    Span::styled(
-                        format!(" [{}]", branch_str),
-                        Style::default().fg(app.theme.fg_dim),
-                    ),
-                    Span::styled(
-                        exited_marker.to_string(),
-                        Style::default().fg(exited_color).add_modifier(Modifier::DIM),
-                    ),
-                    Span::styled(
-                        shell_indicator.to_string(),
-                        Style::default().fg(app.theme.fg_dim),
-                    ),
-                ]
-            } else if needs_attention {
-                let attn = app.theme.session_attention;
-                vec![
-                    Span::styled(
-                        format!("{} {} ", hotkey, indicator),
-                        Style::default().fg(attn).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        repo_name.to_string(),
-                        Style::default().fg(attn).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        format!(" [{}]", branch_str),
-                        Style::default().fg(attn),
-                    ),
-                    Span::styled(
-                        shell_indicator.to_string(),
-                        Style::default().fg(app.theme.fg_dim),
-                    ),
-                ]
-            } else {
-                vec![
-                    Span::styled(
-                        format!("{} {} ", hotkey, indicator),
-                        Style::default().fg(indicator_color),
-                    ),
-                    Span::styled(
-                        repo_name.to_string(),
-                        Style::default().fg(app.theme.fg),
-                    ),
-                    Span::styled(
-                        format!(" [{}]", branch_str),
-                        Style::default().fg(app.theme.fg_dim),
-                    ),
-                    Span::styled(
-                        shell_indicator.to_string(),
-                        Style::default().fg(app.theme.fg_dim),
-                    ),
-                ]
-            };
+                    // Shell session count
+                    let shell_count = item.sessions.iter()
+                        .filter(|s| s.kind == SessionKind::Shell && s.session_id.is_some())
+                        .count();
+                    let shell_indicator = if shell_count > 0 {
+                        format!(" $×{}", shell_count)
+                    } else {
+                        String::new()
+                    };
 
-            // Right-align bouncing animation if session is actively producing output
-            if is_animating {
-                // Content area: total width - 2 (borders) - 2 (highlight symbol "▶ ")
-                let content_width = (area.width as usize).saturating_sub(4);
-                // Text width: "{hotkey} {indicator} " (4) + repo_name + " [{branch}]" (3+branch)
-                //             + optional " [exited]" (9)
-                let text_width = 4 + repo_name.len() + 3 + branch_str.len()
-                    + if is_exited { 9 } else { 0 };
-                let anim_width = 5; // 5 animation characters
-                let right_margin = 1;
-                let padding = content_width.saturating_sub(text_width + anim_width + right_margin);
+                    let indicator_color = if is_exited {
+                        app.theme.session_exited
+                    } else if needs_attention {
+                        app.theme.session_attention
+                    } else if has_session {
+                        app.theme.session_active
+                    } else {
+                        app.theme.session_inactive
+                    };
 
-                spans.push(Span::raw(" ".repeat(padding)));
-                let trail = app.activity.trail(session_id.unwrap());
-                spans.extend(build_animation_spans(trail, &app.theme));
+                    let mut spans = if is_exited {
+                        let exited_color = app.theme.session_exited;
+                        vec![
+                            Span::styled(
+                                format!("  {} {} {} ", hotkey, arrow, indicator),
+                                Style::default().fg(exited_color).add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(
+                                item.display_name.clone(),
+                                Style::default().fg(app.theme.fg),
+                            ),
+                            Span::styled(
+                                format!(" [{}]", branch_str),
+                                Style::default().fg(app.theme.fg_dim),
+                            ),
+                            Span::styled(
+                                exited_marker.to_string(),
+                                Style::default().fg(exited_color).add_modifier(Modifier::DIM),
+                            ),
+                            Span::styled(
+                                shell_indicator,
+                                Style::default().fg(app.theme.fg_dim),
+                            ),
+                        ]
+                    } else if needs_attention {
+                        let attn = app.theme.session_attention;
+                        vec![
+                            Span::styled(
+                                format!("  {} {} {} ", hotkey, arrow, indicator),
+                                Style::default().fg(attn).add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(
+                                item.display_name.clone(),
+                                Style::default().fg(attn).add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(
+                                format!(" [{}]", branch_str),
+                                Style::default().fg(attn),
+                            ),
+                            Span::styled(
+                                shell_indicator,
+                                Style::default().fg(app.theme.fg_dim),
+                            ),
+                        ]
+                    } else {
+                        vec![
+                            Span::styled(
+                                format!("  {} {} {} ", hotkey, arrow, indicator),
+                                Style::default().fg(indicator_color),
+                            ),
+                            Span::styled(
+                                item.display_name.clone(),
+                                Style::default().fg(app.theme.fg),
+                            ),
+                            Span::styled(
+                                format!(" [{}]", branch_str),
+                                Style::default().fg(app.theme.fg_dim),
+                            ),
+                            Span::styled(
+                                shell_indicator,
+                                Style::default().fg(app.theme.fg_dim),
+                            ),
+                        ]
+                    };
+
+                    // Right-align bouncing animation
+                    if is_animating {
+                        let content_width = (area.width as usize).saturating_sub(4);
+                        let text_width = 8 + item.display_name.len() + 3 + branch_str.len()
+                            + if is_exited { 9 } else { 0 };
+                        let anim_width = 5;
+                        let right_margin = 1;
+                        let padding = content_width.saturating_sub(text_width + anim_width + right_margin);
+
+                        spans.push(Span::raw(" ".repeat(padding)));
+                        let trail = app.activity.trail(session_id.unwrap());
+                        spans.extend(build_animation_spans(trail, &app.theme));
+                    }
+
+                    ListItem::new(Line::from(spans))
+                }
+                TreeNode::Session(si, ii, slot_idx) => {
+                    let slot = &app.sidebar_tree.sections[*si].items[*ii].sessions[*slot_idx];
+                    let (icon, label_color) = match slot.kind {
+                        SessionKind::Claude => ("\u{25CF}", app.theme.session_active), // ●
+                        SessionKind::Shell => ("$", app.theme.fg_dim),
+                    };
+
+                    let status_color = match &slot.session_id {
+                        Some(id) if app.exited_sessions.contains(id.as_str()) => app.theme.session_exited,
+                        Some(id) if app.attention_sessions.contains(id.as_str()) => app.theme.session_attention,
+                        Some(_) => label_color,
+                        None => app.theme.fg_dim,
+                    };
+
+                    let status_suffix = match &slot.session_id {
+                        Some(id) if app.exited_sessions.contains(id.as_str()) => " [exited]",
+                        None => " (not started)",
+                        _ => "",
+                    };
+
+                    let spans = vec![
+                        Span::styled(
+                            format!("    {} ", icon),
+                            Style::default().fg(status_color),
+                        ),
+                        Span::styled(
+                            slot.label.clone(),
+                            Style::default().fg(status_color),
+                        ),
+                        Span::styled(
+                            status_suffix.to_string(),
+                            Style::default().fg(app.theme.fg_dim),
+                        ),
+                    ];
+                    ListItem::new(Line::from(spans))
+                }
             }
-
-            ListItem::new(Line::from(spans))
         })
         .collect();
 
@@ -219,9 +267,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                 .bg(app.theme.highlight_bg)
                 .add_modifier(Modifier::BOLD),
         )
-        .highlight_symbol("\u{25B6} ");
+        .highlight_symbol("\u{2502} ");
 
     let mut state = ListState::default();
-    state.select(Some(app.selected_worktree));
+    state.select(Some(app.sidebar_tree.cursor));
     frame.render_stateful_widget(list, area, &mut state);
 }
