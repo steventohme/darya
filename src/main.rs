@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, Write as _};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -15,9 +15,10 @@ use ratatui::layout::Rect;
 use ratatui::Terminal;
 
 use darya::app::{self, App, InputMode};
-use darya::config::{self, KeybindingsConfig};
+use darya::config::{self, KeybindingsConfig, CLAUDE_COMMAND};
 use darya::event::{self, create_event_handler, AppEvent};
 use darya::session::manager::SessionManager;
+use darya::sidebar::types::SessionKind;
 use darya::ui;
 use darya::watcher::FileWatcher;
 use darya::worktree::manager::WorktreeManager;
@@ -43,18 +44,13 @@ fn pty_size(terminal: &Terminal<CrosstermBackend<io::Stdout>>) -> (u16, u16) {
 }
 
 /// Compute per-pane PTY sizes for split layout. Returns (session_id, rows, cols) tuples.
+/// Only includes Terminal/Shell panes (they have PTY sessions).
 fn pane_sizes(
     terminal: &Terminal<CrosstermBackend<io::Stdout>>,
     app: &App,
 ) -> Vec<(String, u16, u16)> {
     let size = terminal.size().unwrap_or_default();
-    // Check the view-appropriate pane layout
-    let layout_ref = if app.main_view == darya::app::MainView::Shell {
-        app.shell_pane_layout.as_ref()
-    } else {
-        app.pane_layout.as_ref()
-    };
-    if let Some(layout) = layout_ref {
+    if let Some(ref layout) = app.pane_layout {
         if layout.panes.len() > 1 {
             let rects = ui::compute_pane_rects(size.into(), layout.panes.len());
             let block = ratatui::widgets::Block::default()
@@ -64,9 +60,11 @@ fn pane_sizes(
                 .panes
                 .iter()
                 .enumerate()
-                .map(|(i, sid)| {
-                    let inner = block.inner(rects[i]);
-                    (sid.clone(), inner.height.max(1), inner.width.max(1))
+                .filter_map(|(i, content)| {
+                    content.session_id().map(|sid| {
+                        let inner = block.inner(rects[i]);
+                        (sid.to_string(), inner.height.max(1), inner.width.max(1))
+                    })
                 })
                 .collect();
         }
@@ -125,6 +123,12 @@ async fn main() -> color_eyre::Result<()> {
     let session_command = app_config.session_command;
     let shell_command = app_config.shell_command;
     let mut app = App::new(worktrees, theme, terminal_start_bottom, keybindings, session_command, shell_command);
+
+    // Load sections config if it exists, merge with discovered worktrees
+    if let Some(sections_config) = config::load_sections() {
+        let wt_list = wt_manager.list().unwrap_or_default();
+        app.sidebar_tree = darya::sidebar::tree::SidebarTree::from_config(&sections_config, &wt_list);
+    }
     let (pty_rows, _pty_cols) = pty_size(&terminal);
     app.terminal_height = pty_rows;
     let (mut events, event_tx) = create_event_handler();
@@ -149,6 +153,9 @@ async fn main() -> color_eyre::Result<()> {
         &event_tx,
     )
     .await;
+
+    // Save sections config before exit
+    config::save_sections(&app.sidebar_tree.to_sections_config());
 
     // Restore terminal and Claude theme (normal exit path)
     restore_terminal();
@@ -193,19 +200,11 @@ async fn run_loop(
                         app.input_mode = InputMode::Navigation;
                     } else if let Some(session_id) = app.focused_session_id().cloned() {
                         session_manager.remove(&session_id);
-                        app.session_ids.retain(|_, v| v != &session_id);
-                        app.shell_session_ids.retain(|_, v| v != &session_id);
+                        app.sidebar_tree.clear_session_id(&session_id);
                         app.attention_sessions.remove(&session_id);
                         app.exited_sessions.remove(&session_id);
                         app.activity.remove_session(&session_id);
                         app.remove_session_from_panes(&session_id);
-                        app.remove_shell_session_from_panes(&session_id);
-                        if app.active_session_id.as_deref() == Some(&session_id) {
-                            app.active_session_id = None;
-                        }
-                        if app.active_shell_session_id.as_deref() == Some(&session_id) {
-                            app.active_shell_session_id = None;
-                        }
                         app.input_mode = InputMode::Navigation;
                         app.status_message = Some("Session closed".to_string());
                     } else {
@@ -249,10 +248,12 @@ async fn run_loop(
                         Ok(()) => {
                             app.prompt = None;
                             if let Ok(worktrees) = wt_manager.list() {
-                                // Select the newly created worktree (last in list)
-                                let new_idx = worktrees.len().saturating_sub(1);
                                 app.refresh_worktrees(worktrees);
-                                app.selected_worktree = new_idx;
+                                // Jump to last item (newly created)
+                                let item_count = app.sidebar_tree.all_items().len();
+                                if item_count > 0 {
+                                    app.sidebar_tree.jump_to_nth_item(item_count - 1);
+                                }
                             }
                             app.status_message =
                                 Some(format!("Created worktree '{}'", branch_name));
@@ -265,37 +266,31 @@ async fn run_loop(
                 }
                 // Handle worktree deletion
                 else if app.wants_delete_worktree(key) {
-                    if let Some(wt) = app.worktrees.get(app.selected_worktree).cloned() {
-                        // Clean up Claude session if it exists
-                        if let Some(session_id) = app.session_ids.remove(&wt.path) {
-                            session_manager.remove(&session_id);
-                            app.attention_sessions.remove(&session_id);
-                            app.exited_sessions.remove(&session_id);
-                            app.activity.remove_session(&session_id);
-                            app.remove_session_from_panes(&session_id);
-                            if app.active_session_id.as_deref() == Some(&session_id) {
-                                app.active_session_id = None;
+                    if let Some(item) = app.sidebar_tree.selected_item().cloned() {
+                        // Clean up all sessions for this item
+                        for slot in &item.sessions {
+                            if let Some(ref session_id) = slot.session_id {
+                                session_manager.remove(session_id);
+                                app.attention_sessions.remove(session_id);
+                                app.exited_sessions.remove(session_id);
+                                app.activity.remove_session(session_id);
+                                app.remove_session_from_panes(session_id);
                             }
                         }
-                        // Clean up shell session if it exists
-                        if let Some(session_id) = app.shell_session_ids.remove(&wt.path) {
-                            session_manager.remove(&session_id);
-                            app.attention_sessions.remove(&session_id);
-                            app.exited_sessions.remove(&session_id);
-                            app.activity.remove_session(&session_id);
-                            app.remove_shell_session_from_panes(&session_id);
-                            if app.active_shell_session_id.as_deref() == Some(&session_id) {
-                                app.active_shell_session_id = None;
+                        // Clear session IDs in tree
+                        for slot in &item.sessions {
+                            if let Some(ref session_id) = slot.session_id {
+                                app.sidebar_tree.clear_session_id(session_id);
                             }
                         }
-                        match wt_manager.remove(&wt.path) {
+                        match wt_manager.remove(&item.path) {
                             Ok(()) => {
                                 app.prompt = None;
                                 if let Ok(worktrees) = wt_manager.list() {
                                     app.refresh_worktrees(worktrees);
                                 }
                                 app.status_message =
-                                    Some(format!("Deleted worktree '{}'", wt.name));
+                                    Some(format!("Deleted worktree '{}'", item.display_name));
                             }
                             Err(e) => {
                                 app.prompt = None;
@@ -304,19 +299,46 @@ async fn run_loop(
                         }
                     }
                 }
-                // Handle session spawning on Enter in sidebar
+                // Handle unified session spawning on Enter
                 else if app.needs_session_spawn(key) {
-                    if let Some(wt_path) = app.selected_worktree_path().cloned() {
-                        if !app.session_ids.contains_key(&wt_path) {
+                    if let Some((kind, existing_id, wt_path)) = app.cursor_session_info().map(|(k, id, p)| (k, id.map(|s| s.to_string()), p.clone())) {
+                        if let Some(id) = existing_id {
+                            // Session already exists, just switch to it
+                            app.attention_sessions.remove(&id);
+                            match kind {
+                                SessionKind::Claude => {
+                                    app.focus_terminal_panel();
+                                }
+                                SessionKind::Shell => {
+                                    app.panel_focus = app::PanelFocus::Right;
+                                    app.main_view = app::MainView::Shell;
+                                }
+                            }
+                            app.input_mode = InputMode::Terminal;
+                        } else {
+                            // No session yet — spawn one
                             let (rows, cols) = pty_size(terminal);
-                            let command = config::resolve_session_command(&wt_path, &app.session_command);
+                            let command = match kind {
+                                SessionKind::Claude => config::resolve_session_command(&wt_path, &app.session_command),
+                                SessionKind::Shell => config::resolve_shell_command(&wt_path, &app.shell_command),
+                            };
                             match session_manager.spawn_session(wt_path.clone(), rows, cols, app.theme.mode, &command) {
                                 Ok(id) => {
-                                    app.session_ids.insert(wt_path, id.clone());
-                                    app.active_session_id = Some(id);
-                                    app.focus_terminal_panel();
+                                    // Set session ID on the correct slot
+                                    if let Some((si, ii, slot_idx)) = app.sidebar_tree.cursor_session_coords() {
+                                        app.sidebar_tree.set_session_id(si, ii, slot_idx, id.clone());
+                                    }
+                                    match kind {
+                                        SessionKind::Claude => {
+                                            app.focus_terminal_panel();
+                                        }
+                                        SessionKind::Shell => {
+                                            app.panel_focus = app::PanelFocus::Right;
+                                            app.main_view = app::MainView::Shell;
+                                        }
+                                    }
                                     app.input_mode = InputMode::Terminal;
-                                    if command != config::CLAUDE_COMMAND {
+                                    if command != CLAUDE_COMMAND && kind == SessionKind::Claude {
                                         app.status_message = Some(format!("Started session ({})", command));
                                     }
                                 }
@@ -325,45 +347,39 @@ async fn run_loop(
                                         Some(format!("Failed to start session: {}", e));
                                 }
                             }
-                        } else {
-                            // Session already exists, just switch to it
-                            if let Some(id) = app.session_ids.get(&wt_path).cloned() {
-                                app.attention_sessions.remove(&id);
-                                app.active_session_id = Some(id);
-                                app.focus_terminal_panel();
-                                app.input_mode = InputMode::Terminal;
-                            }
                         }
                     }
                 }
 
                 // Handle session restart on 'r' for exited sessions
                 else if app.needs_session_restart(key) {
-                    if let Some(wt_path) = app.selected_worktree_path().cloned() {
-                        if let Some(old_id) = app.session_ids.remove(&wt_path) {
-                            session_manager.remove(&old_id);
-                            app.attention_sessions.remove(&old_id);
-                            app.exited_sessions.remove(&old_id);
-                            app.activity.remove_session(&old_id);
-                            if app.active_session_id.as_deref() == Some(&old_id) {
-                                app.active_session_id = None;
-                            }
-                        }
+                    if let Some((kind, Some(old_id), wt_path)) = app.cursor_session_info().map(|(k, id, p)| (k, id.map(|s| s.to_string()), p.clone())) {
+                        let coords = app.sidebar_tree.cursor_session_coords();
+                        session_manager.remove(&old_id);
+                        app.sidebar_tree.clear_session_id(&old_id);
+                        app.attention_sessions.remove(&old_id);
+                        app.exited_sessions.remove(&old_id);
+                        app.activity.remove_session(&old_id);
+
                         let (rows, cols) = pty_size(terminal);
-                        let command = config::resolve_session_command(&wt_path, &app.session_command);
-                        match session_manager.spawn_session(
-                            wt_path.clone(),
-                            rows,
-                            cols,
-                            app.theme.mode,
-                            &command,
-                        ) {
+                        let command = match kind {
+                            SessionKind::Claude => config::resolve_session_command(&wt_path, &app.session_command),
+                            SessionKind::Shell => config::resolve_shell_command(&wt_path, &app.shell_command),
+                        };
+                        match session_manager.spawn_session(wt_path, rows, cols, app.theme.mode, &command) {
                             Ok(id) => {
-                                app.session_ids.insert(wt_path, id.clone());
-                                app.active_session_id = Some(id);
-                                app.focus_terminal_panel();
+                                if let Some((si, ii, slot_idx)) = coords {
+                                    app.sidebar_tree.set_session_id(si, ii, slot_idx, id);
+                                }
+                                match kind {
+                                    SessionKind::Claude => app.focus_terminal_panel(),
+                                    SessionKind::Shell => {
+                                        app.panel_focus = app::PanelFocus::Right;
+                                        app.main_view = app::MainView::Shell;
+                                    }
+                                }
                                 app.input_mode = InputMode::Terminal;
-                                if command != config::CLAUDE_COMMAND {
+                                if command != CLAUDE_COMMAND && kind == SessionKind::Claude {
                                     app.status_message = Some(format!("Started session ({})", command));
                                 }
                             }
@@ -377,100 +393,14 @@ async fn run_loop(
 
                 // Handle session close on Backspace
                 else if app.needs_session_close(key) {
-                    if let Some(wt_path) = app.selected_worktree_path().cloned() {
-                        if let Some(session_id) = app.session_ids.remove(&wt_path) {
-                            session_manager.remove(&session_id);
-                            app.attention_sessions.remove(&session_id);
-                            app.exited_sessions.remove(&session_id);
-                            app.activity.remove_session(&session_id);
-                            app.remove_session_from_panes(&session_id);
-                            if app.active_session_id.as_deref() == Some(&session_id) {
-                                app.active_session_id = None;
-                            }
-                            app.status_message = Some("Session closed".to_string());
-                        }
-                    }
-                }
-
-                // Handle shell session spawning on Enter in Shell view
-                else if app.needs_shell_spawn(key) {
-                    if let Some(wt_path) = app.selected_worktree_path().cloned() {
-                        if !app.shell_session_ids.contains_key(&wt_path) {
-                            let (rows, cols) = pty_size(terminal);
-                            let command = config::resolve_shell_command(&wt_path, &app.shell_command);
-                            match session_manager.spawn_session(wt_path.clone(), rows, cols, app.theme.mode, &command) {
-                                Ok(id) => {
-                                    app.shell_session_ids.insert(wt_path, id.clone());
-                                    app.active_shell_session_id = Some(id);
-                                    app.panel_focus = app::PanelFocus::Right;
-                                    app.input_mode = InputMode::Terminal;
-                                }
-                                Err(e) => {
-                                    app.status_message =
-                                        Some(format!("Failed to start shell: {}", e));
-                                }
-                            }
-                        } else {
-                            // Shell already exists, just switch to it
-                            if let Some(id) = app.shell_session_ids.get(&wt_path).cloned() {
-                                app.attention_sessions.remove(&id);
-                                app.active_shell_session_id = Some(id);
-                                app.panel_focus = app::PanelFocus::Right;
-                                app.input_mode = InputMode::Terminal;
-                            }
-                        }
-                    }
-                }
-
-                // Handle shell session restart on 'r' for exited shell sessions
-                else if app.needs_shell_restart(key) {
-                    if let Some(wt_path) = app.selected_worktree_path().cloned() {
-                        if let Some(old_id) = app.shell_session_ids.remove(&wt_path) {
-                            session_manager.remove(&old_id);
-                            app.attention_sessions.remove(&old_id);
-                            app.exited_sessions.remove(&old_id);
-                            app.activity.remove_session(&old_id);
-                            if app.active_shell_session_id.as_deref() == Some(&old_id) {
-                                app.active_shell_session_id = None;
-                            }
-                        }
-                        let (rows, cols) = pty_size(terminal);
-                        let command = config::resolve_shell_command(&wt_path, &app.shell_command);
-                        match session_manager.spawn_session(
-                            wt_path.clone(),
-                            rows,
-                            cols,
-                            app.theme.mode,
-                            &command,
-                        ) {
-                            Ok(id) => {
-                                app.shell_session_ids.insert(wt_path, id.clone());
-                                app.active_shell_session_id = Some(id);
-                                app.panel_focus = app::PanelFocus::Right;
-                                app.input_mode = InputMode::Terminal;
-                            }
-                            Err(e) => {
-                                app.status_message =
-                                    Some(format!("Failed to restart shell: {}", e));
-                            }
-                        }
-                    }
-                }
-
-                // Handle shell session close on Backspace
-                else if app.needs_shell_close(key) {
-                    if let Some(wt_path) = app.selected_worktree_path().cloned() {
-                        if let Some(session_id) = app.shell_session_ids.remove(&wt_path) {
-                            session_manager.remove(&session_id);
-                            app.attention_sessions.remove(&session_id);
-                            app.exited_sessions.remove(&session_id);
-                            app.activity.remove_session(&session_id);
-                            app.remove_shell_session_from_panes(&session_id);
-                            if app.active_shell_session_id.as_deref() == Some(&session_id) {
-                                app.active_shell_session_id = None;
-                            }
-                            app.status_message = Some("Shell closed".to_string());
-                        }
+                    if let Some(session_id) = app.cursor_session_id().map(|s| s.to_string()) {
+                        session_manager.remove(&session_id);
+                        app.sidebar_tree.clear_session_id(&session_id);
+                        app.attention_sessions.remove(&session_id);
+                        app.exited_sessions.remove(&session_id);
+                        app.activity.remove_session(&session_id);
+                        app.remove_session_from_panes(&session_id);
+                        app.status_message = Some("Session closed".to_string());
                     }
                 }
 
@@ -490,7 +420,7 @@ async fn run_loop(
 
                 // Close pane — intercept in ANY mode when panes exist
                 // (prevents Ctrl+W from reaching PTY as delete-word)
-                if (app.pane_layout.is_some() || app.shell_pane_layout.is_some())
+                if app.pane_layout.is_some()
                     && KeybindingsConfig::matches(&app.keybindings.close_pane, key.modifiers, key.code)
                 {
                     app.input_mode = InputMode::Navigation;
@@ -546,36 +476,21 @@ async fn run_loop(
                 // Collect all pane session IDs that need custom sizing
                 let mut paned_sids: Vec<String> = Vec::new();
 
-                // Resize Claude terminal panes
+                // Resize panes (only Terminal/Shell have PTY sessions)
                 if let Some(ref layout) = app.pane_layout {
                     if layout.panes.len() > 1 {
                         let pane_rects = ui::compute_pane_rects(full_size, layout.panes.len());
                         let block = ratatui::widgets::Block::default()
                             .borders(ratatui::widgets::Borders::ALL)
                             .border_type(ratatui::widgets::BorderType::Thick);
-                        for (i, sid) in layout.panes.iter().enumerate() {
-                            let inner = block.inner(pane_rects[i]);
-                            if let Some(session) = session_manager.get_mut(sid) {
-                                let _ = session.resize(inner.height.max(1), inner.width.max(1));
+                        for (i, content) in layout.panes.iter().enumerate() {
+                            if let Some(sid) = content.session_id() {
+                                let inner = block.inner(pane_rects[i]);
+                                if let Some(session) = session_manager.get_mut(sid) {
+                                    let _ = session.resize(inner.height.max(1), inner.width.max(1));
+                                }
+                                paned_sids.push(sid.to_string());
                             }
-                            paned_sids.push(sid.clone());
-                        }
-                    }
-                }
-
-                // Resize shell panes
-                if let Some(ref layout) = app.shell_pane_layout {
-                    if layout.panes.len() > 1 {
-                        let pane_rects = ui::compute_pane_rects(full_size, layout.panes.len());
-                        let block = ratatui::widgets::Block::default()
-                            .borders(ratatui::widgets::Borders::ALL)
-                            .border_type(ratatui::widgets::BorderType::Thick);
-                        for (i, sid) in layout.panes.iter().enumerate() {
-                            let inner = block.inner(pane_rects[i]);
-                            if let Some(session) = session_manager.get_mut(sid) {
-                                let _ = session.resize(inner.height.max(1), inner.width.max(1));
-                            }
-                            paned_sids.push(sid.clone());
                         }
                     }
                 }
@@ -589,6 +504,12 @@ async fn run_loop(
                         rect.width.max(1),
                     );
                 }
+            }
+
+            // Send OS notification via iTerm2 OSC 9 + BEL for dock bounce
+            if let Some(msg) = app.notification_for_event(&event) {
+                let _ = write!(terminal.backend_mut(), "\x1b]9;{}\x07\x07", msg);
+                let _ = terminal.backend_mut().flush();
             }
 
             app.handle_event(&event);

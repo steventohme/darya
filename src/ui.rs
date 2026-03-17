@@ -108,27 +108,32 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     let left_focused = app.panel_focus == PanelFocus::Left;
     render_view(frame, main_chunks[0], app.sidebar_view.to_view_kind(), app, session_manager, left_focused);
 
-    // Right panel (main) — split panes for terminal/shell, full panel for everything else
+    // Right panel (main) — split panes or full panel
     let right_focused = app.panel_focus == PanelFocus::Right;
-    let active_pane_layout = match app.main_view {
-        crate::app::MainView::Terminal => app.pane_layout.as_ref(),
-        crate::app::MainView::Shell => app.shell_pane_layout.as_ref(),
-        _ => None,
-    };
-    if let Some(layout) = active_pane_layout {
+    // Snapshot pane info to avoid borrow conflicts with mutable render calls
+    let pane_snapshot: Option<Vec<(crate::app::PaneContent, bool)>> = app.pane_layout.as_ref().and_then(|layout| {
         if layout.panes.len() > 1 {
-            // Split rendering
-            let pane_rects = compute_pane_rects(size, layout.panes.len());
-            for (i, pane_rect) in pane_rects.iter().enumerate() {
-                if let Some(session_id) = layout.panes.get(i) {
-                    let pane_focused = right_focused && i == layout.focused;
+            Some(layout.panes.iter().enumerate().map(|(i, c)| {
+                (c.clone(), right_focused && i == layout.focused)
+            }).collect())
+        } else {
+            None
+        }
+    });
+    if let Some(panes) = pane_snapshot {
+        let pane_rects = compute_pane_rects(size, panes.len());
+        for (i, (content, pane_focused)) in panes.iter().enumerate() {
+            match content {
+                crate::app::PaneContent::Terminal(session_id)
+                | crate::app::PaneContent::Shell(session_id) => {
                     widgets::terminal_panel::render_session(
-                        frame, *pane_rect, app, session_manager, session_id, pane_focused,
+                        frame, pane_rects[i], app, session_manager, session_id, *pane_focused,
                     );
                 }
+                crate::app::PaneContent::Editor => {
+                    widgets::editor::render(frame, pane_rects[i], app, *pane_focused);
+                }
             }
-        } else {
-            render_view(frame, main_chunks[1], app.main_view.to_view_kind(), app, session_manager, right_focused);
         }
     } else {
         render_view(frame, main_chunks[1], app.main_view.to_view_kind(), app, session_manager, right_focused);
@@ -277,6 +282,34 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
         Prompt::SearchInput { input } => {
             let block = Block::default()
                 .title(" Search project (ripgrep) ")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
+                .border_style(Style::default().fg(theme.prompt_border))
+                .style(Style::default().bg(theme.bg));
+            let inner = block.inner(popup_area);
+            frame.render_widget(block, popup_area);
+
+            let text = Paragraph::new(format!("{}█", input))
+                .style(Style::default().fg(theme.fg).bg(theme.bg).add_modifier(Modifier::BOLD));
+            frame.render_widget(text, inner);
+        }
+        Prompt::AddShellSlot { input } => {
+            let block = Block::default()
+                .title(" New shell slot (label) ")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
+                .border_style(Style::default().fg(theme.prompt_border))
+                .style(Style::default().bg(theme.bg));
+            let inner = block.inner(popup_area);
+            frame.render_widget(block, popup_area);
+
+            let text = Paragraph::new(format!("{}█", input))
+                .style(Style::default().fg(theme.fg).bg(theme.bg).add_modifier(Modifier::BOLD));
+            frame.render_widget(text, inner);
+        }
+        Prompt::CreateSection { input } => {
+            let block = Block::default()
+                .title(" New section name ")
                 .borders(Borders::ALL)
                 .border_type(BorderType::Thick)
                 .border_style(Style::default().fg(theme.prompt_border))

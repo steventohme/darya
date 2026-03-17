@@ -137,8 +137,8 @@ pub fn render_session(
 
 /// Render the single-pane terminal panel (backward compatible entry point).
 pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &SessionManager, is_focused: bool) {
-    if let Some(ref session_id) = app.active_session_id {
-        render_session(frame, area, app, session_manager, session_id, is_focused);
+    if let Some(session_id) = app.active_session_id().map(|s| s.to_string()) {
+        render_session(frame, area, app, session_manager, &session_id, is_focused);
     } else {
         // No active session — show placeholder with border
         let border_style = if is_focused {
@@ -163,8 +163,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &Sessio
 
 /// Render the single-pane shell panel.
 pub fn render_shell(frame: &mut Frame, area: Rect, app: &App, session_manager: &SessionManager, is_focused: bool) {
-    if let Some(ref session_id) = app.active_shell_session_id {
-        render_session(frame, area, app, session_manager, session_id, is_focused);
+    if let Some(session_id) = app.active_shell_session_id().map(|s| s.to_string()) {
+        render_session(frame, area, app, session_manager, &session_id, is_focused);
     } else {
         let border_style = if is_focused {
             Style::default().fg(app.theme.border_active)
