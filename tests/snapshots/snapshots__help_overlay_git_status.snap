@@ -13,14 +13,14 @@ expression: output
 ┃                   ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
 ┃                   ┃ Navigation — Git Status                                  ┃                   ┃
 ┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
-┃                   ┃ Ctrl+1: Worktrees  Ctrl+2: Terminal  Ctrl+3: Files  Ctrl+┃                   ┃
+┃                   ┃ Cmd+1: Worktrees  Cmd+2: Terminal  Cmd+3: Files  Cmd+4: E┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃ j/k, ↑/↓    Navigate files                               ┃                   ┃
 ┃                   ┃ Enter, d    View diff                                    ┃                   ┃
 ┃                   ┃ 1-9, 0      Jump to worktree                             ┃                   ┃
 ┃                   ┃ Tab         Switch panel                                 ┃                   ┃
-┃                   ┃ Ctrl+P      Fuzzy file finder                            ┃                   ┃
-┃                   ┃ Ctrl+F      Project search                               ┃                   ┃
+┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
+┃                   ┃ Cmd+F       Project search                               ┃                   ┃
 ┃                   ┃ q           Quit                                         ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
 ┃                       ┃┃                                                                         ┃
@@ -31,4 +31,4 @@ expression: output
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- [NAV] git                                           main
+ [NAV] git

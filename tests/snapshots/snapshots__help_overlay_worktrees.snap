@@ -4,31 +4,31 @@ expression: output
 ---
  darya
 ┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃▶ 1 ○ my-project [main]┃┃  Press Enter on a worktree to start a Claude Code session               ┃
-┃  2 ○ my-project [featu┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
-┃                   ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
+┃│ ▼ my-project         ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
+┃    1 ▶ ○ my-project [m┃┃                                                                         ┃
+┃    2 ▶ ○ my-projec┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
 ┃                   ┃ Navigation — Worktrees                                   ┃                   ┃
 ┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
-┃                   ┃ Ctrl+1: Worktrees  Ctrl+2: Terminal  Ctrl+3: Files  Ctrl+┃                   ┃
+┃                   ┃ Cmd+1: Worktrees  Cmd+2: Terminal  Cmd+3: Files  Cmd+4: E┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
-┃                   ┃ j/k, ↑/↓    Navigate worktrees                           ┃                   ┃
-┃                   ┃ 1-9, 0      Jump to worktree                             ┃                   ┃
-┃                   ┃ Enter       Start / focus session                        ┃                   ┃
+┃                   ┃ j/k, ↑/↓    Navigate tree                                ┃                   ┃
+┃                   ┃ 1-9, 0      Jump to item                                 ┃                   ┃
+┃                   ┃ Enter       Toggle collapse / start session              ┃                   ┃
+┃                   ┃ l/→         Expand / enter                               ┃                   ┃
+┃                   ┃ h/←         Collapse / parent                            ┃                   ┃
 ┃                   ┃ a           Add worktree                                 ┃                   ┃
 ┃                   ┃ d           Delete worktree                              ┃                   ┃
 ┃                   ┃ r           Restart exited session                       ┃                   ┃
+┃                   ┃ S           Add shell slot                               ┃                   ┃
+┃                   ┃ N           Create section                               ┃                   ┃
+┃                   ┃ Backspace   Close session                                ┃                   ┃
 ┃                   ┃ Tab         Switch panel                                 ┃                   ┃
-┃                   ┃ Ctrl+P      Fuzzy file finder                            ┃                   ┃
-┃                   ┃ Ctrl+F      Project search                               ┃                   ┃
+┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
+┃                   ┃ Cmd+F       Project search                               ┃                   ┃
 ┃                   ┃ q           Quit                                         ┃                   ┃
 ┃                   ┃ Ctrl+C      Close session / Quit                         ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- [NAV] worktrees                                        main
+ [NAV] worktrees

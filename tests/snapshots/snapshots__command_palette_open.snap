@@ -4,31 +4,31 @@ expression: output
 ---
  darya
 ┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃▶ 1 ○ my-project [main]┃┃  Press Enter on a worktree to start a Claude Code session               ┃
-┃  2 ○ my-project [featu┃┃                                                                         ┃
-┃  3 ○ my-project [f┏ Command Palette ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
-┃                   ┃> █                                                       ┃                   ┃
-┃                   ┃View: Worktrees                                     Ctrl+1┃                   ┃
-┃                   ┃View: Terminal                                      Ctrl+2┃                   ┃
-┃                   ┃View: Files                                         Ctrl+3┃                   ┃
-┃                   ┃View: Editor                                        Ctrl+4┃                   ┃
-┃                   ┃View: Search                                        Ctrl+5┃                   ┃
-┃                   ┃View: Git Status                                    Ctrl+6┃                   ┃
-┃                   ┃View: Git Blame                                     Ctrl+7┃                   ┃
-┃                   ┃View: Git Log                                       Ctrl+8┃                   ┃
-┃                   ┃View: Shell                                         Ctrl+9┃                   ┃
+┃│ ▼ my-project         ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
+┃    1 ▶ ○ my-project [m┃┃                                                                         ┃
+┃    2 ▶ ○ my-projec┏ Command Palette ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
+┃    3 ▶ ○ my-projec┃> █                                                       ┃                   ┃
+┃                   ┃View: Worktrees                                      Cmd+1┃                   ┃
+┃                   ┃View: Terminal                                       Cmd+2┃                   ┃
+┃                   ┃View: Files                                          Cmd+3┃                   ┃
+┃                   ┃View: Editor                                         Cmd+4┃                   ┃
+┃                   ┃View: Search                                         Cmd+5┃                   ┃
+┃                   ┃View: Git Status                                     Cmd+6┃                   ┃
+┃                   ┃View: Git Blame                                      Cmd+7┃                   ┃
+┃                   ┃View: Git Log                                        Cmd+8┃                   ┃
+┃                   ┃View: Shell                                          Cmd+9┃                   ┃
 ┃                   ┃Session: Start                                            ┃                   ┃
 ┃                   ┃Session: Restart                                          ┃                   ┃
 ┃                   ┃Session: Close                                            ┃                   ┃
-┃                   ┃Find File                                           Ctrl+P┃                   ┃
-┃                   ┃Search Project                                      Ctrl+F┃                   ┃
+┃                   ┃Find File                                            Cmd+P┃                   ┃
+┃                   ┃Search Project                                       Cmd+F┃                   ┃
 ┃                   ┃Refresh Git Status                                        ┃                   ┃
-┃                   ┃Split Pane                                          Ctrl+\┃                   ┃
-┃                   ┃Close Pane                                          Ctrl+W┃                   ┃
-┃                   ┃Toggle Help                                              ?┃                   ┃
+┃                   ┃Split: Same Type                                     Cmd+\┃                   ┃
+┃                   ┃Split: Terminal                                           ┃                   ┃
+┃                   ┃Split: Shell                                              ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- [NAV] worktrees                                        main
+ [NAV] worktrees

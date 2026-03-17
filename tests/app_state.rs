@@ -7,7 +7,7 @@ use crossterm::event::KeyCode;
 use darya::app::{
     is_edtui_compatible, status_priority, EditorViewState,
     GitStatusCategory, GitStatusEntry, GitStatusState, GitFileStatus,
-    InputMode, MainView, PanelFocus, Prompt, SidebarView, ViewKind,
+    InputMode, MainView, PaneContent, PanelFocus, Prompt, SidebarView, ViewKind,
     BlameLine, GitBlameState, GitLogEntry, GitLogState,
     format_relative_time,
     CommandId, CommandPaletteState,
@@ -15,72 +15,76 @@ use darya::app::{
 use darya::config;
 use darya::event::AppEvent;
 
-use helpers::{key, ctrl_key, make_app, make_app_with_session, make_app_with_two_sessions};
+use helpers::{key, cmd_key, make_app, make_app_with_session, make_app_with_two_sessions, selected_item_index, set_session, set_shell_session, active_session_id, active_shell_session_id, item_path};
 
 // ── Navigation ──────────────────────────────────────────────
 
 #[test]
 fn nav_j_moves_worktree_selection_down() {
     let mut app = make_app(3);
-    assert_eq!(app.selected_worktree, 0);
+    // cursor starts at 0 (section header); j moves to item 0 (cursor=1)
     app.handle_event(&key(KeyCode::Char('j')));
-    assert_eq!(app.selected_worktree, 1);
+    assert_eq!(selected_item_index(&app), Some(0));
     app.handle_event(&key(KeyCode::Char('j')));
-    assert_eq!(app.selected_worktree, 2);
+    assert_eq!(selected_item_index(&app), Some(1));
 }
 
 #[test]
 fn nav_k_moves_worktree_selection_up() {
     let mut app = make_app(3);
-    app.selected_worktree = 2;
+    // Move cursor to item 2 (cursor=3)
+    app.sidebar_tree.cursor = 3;
     app.handle_event(&key(KeyCode::Char('k')));
-    assert_eq!(app.selected_worktree, 1);
+    assert_eq!(selected_item_index(&app), Some(1));
 }
 
 #[test]
 fn nav_j_wraps_around() {
     let mut app = make_app(3);
-    app.selected_worktree = 2;
+    // Move cursor to last item (cursor=3, which is item 2)
+    app.sidebar_tree.cursor = 3;
     app.handle_event(&key(KeyCode::Char('j')));
-    assert_eq!(app.selected_worktree, 0);
+    // Wraps to beginning (section header, cursor=0)
+    assert_eq!(app.sidebar_tree.cursor, 0);
 }
 
 #[test]
 fn nav_k_wraps_around() {
     let mut app = make_app(3);
-    assert_eq!(app.selected_worktree, 0);
+    // cursor=0 (section header); k wraps to last visible node
     app.handle_event(&key(KeyCode::Char('k')));
-    assert_eq!(app.selected_worktree, 2);
+    assert_eq!(selected_item_index(&app), Some(2));
 }
 
 #[test]
 fn nav_down_arrow_works_like_j() {
     let mut app = make_app(3);
     app.handle_event(&key(KeyCode::Down));
-    assert_eq!(app.selected_worktree, 1);
+    assert_eq!(selected_item_index(&app), Some(0));
 }
 
 #[test]
 fn nav_number_keys_jump_to_worktree() {
     let mut app = make_app(5);
     app.handle_event(&key(KeyCode::Char('3')));
-    assert_eq!(app.selected_worktree, 2);
+    assert_eq!(selected_item_index(&app), Some(2));
     app.handle_event(&key(KeyCode::Char('1')));
-    assert_eq!(app.selected_worktree, 0);
+    assert_eq!(selected_item_index(&app), Some(0));
 }
 
 #[test]
 fn nav_zero_jumps_to_tenth_worktree() {
     let mut app = make_app(11);
     app.handle_event(&key(KeyCode::Char('0')));
-    assert_eq!(app.selected_worktree, 9);
+    assert_eq!(selected_item_index(&app), Some(9));
 }
 
 #[test]
 fn nav_number_beyond_count_is_noop() {
     let mut app = make_app(2);
+    let before = app.sidebar_tree.cursor;
     app.handle_event(&key(KeyCode::Char('5')));
-    assert_eq!(app.selected_worktree, 0); // unchanged
+    assert_eq!(app.sidebar_tree.cursor, before); // unchanged
 }
 
 // ── Mode transitions ────────────────────────────────────────
@@ -88,6 +92,8 @@ fn nav_number_beyond_count_is_noop() {
 #[test]
 fn terminal_mode_tab_returns_to_nav() {
     let mut app = make_app_with_session(3);
+    // Move cursor to item 0 so active_session_id works
+    app.sidebar_tree.cursor = 1;
     app.input_mode = InputMode::Terminal;
     app.panel_focus = PanelFocus::Right;
     app.handle_event(&key(KeyCode::Tab));
@@ -98,6 +104,7 @@ fn terminal_mode_tab_returns_to_nav() {
 #[test]
 fn enter_terminal_mode_from_terminal_nav() {
     let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
     // Focus right panel showing terminal
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
@@ -110,10 +117,11 @@ fn enter_terminal_mode_from_terminal_nav() {
 #[test]
 fn cannot_enter_terminal_without_active_session() {
     let mut app = make_app(3);
+    app.sidebar_tree.cursor = 1; // item 0, no session
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     // No active session
-    assert!(app.active_session_id.is_none());
+    assert!(active_session_id(&app).is_none());
     app.handle_event(&key(KeyCode::Char('i')));
     assert_eq!(app.input_mode, InputMode::Navigation);
 }
@@ -121,7 +129,8 @@ fn cannot_enter_terminal_without_active_session() {
 #[test]
 fn cannot_enter_terminal_on_exited_session() {
     let mut app = make_app_with_session(3);
-    let sid = app.active_session_id.clone().unwrap();
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
     app.exited_sessions.insert(sid);
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
@@ -132,45 +141,45 @@ fn cannot_enter_terminal_on_exited_session() {
 // ── Panel switching ─────────────────────────────────────────
 
 #[test]
-fn ctrl_1_sets_sidebar_worktrees() {
+fn cmd_1_sets_sidebar_worktrees() {
     let mut app = make_app(3);
     app.sidebar_view = SidebarView::FileExplorer;
     app.panel_focus = PanelFocus::Right;
-    app.handle_event(&ctrl_key('1'));
+    app.handle_event(&cmd_key('1'));
     assert_eq!(app.sidebar_view, SidebarView::Worktrees);
     assert_eq!(app.panel_focus, PanelFocus::Left);
 }
 
 #[test]
-fn ctrl_2_sets_main_terminal() {
+fn cmd_2_sets_main_terminal() {
     let mut app = make_app(3);
     app.main_view = MainView::Editor;
     app.panel_focus = PanelFocus::Left;
-    app.handle_event(&ctrl_key('2'));
+    app.handle_event(&cmd_key('2'));
     assert_eq!(app.main_view, MainView::Terminal);
     assert_eq!(app.panel_focus, PanelFocus::Right);
 }
 
 #[test]
-fn ctrl_3_sets_sidebar_files() {
+fn cmd_3_sets_sidebar_files() {
     let mut app = make_app(3);
-    app.handle_event(&ctrl_key('3'));
+    app.handle_event(&cmd_key('3'));
     assert_eq!(app.sidebar_view, SidebarView::FileExplorer);
     assert_eq!(app.panel_focus, PanelFocus::Left);
 }
 
 #[test]
-fn ctrl_4_sets_main_editor() {
+fn cmd_4_sets_main_editor() {
     let mut app = make_app(3);
-    app.handle_event(&ctrl_key('4'));
+    app.handle_event(&cmd_key('4'));
     assert_eq!(app.main_view, MainView::Editor);
     assert_eq!(app.panel_focus, PanelFocus::Right);
 }
 
 #[test]
-fn ctrl_5_sets_sidebar_search() {
+fn cmd_5_sets_sidebar_search() {
     let mut app = make_app(3);
-    app.handle_event(&ctrl_key('5'));
+    app.handle_event(&cmd_key('5'));
     assert_eq!(app.sidebar_view, SidebarView::Search);
     assert_eq!(app.panel_focus, PanelFocus::Left);
 }
@@ -189,7 +198,8 @@ fn tab_toggles_focus() {
 #[test]
 fn session_exited_kicks_to_nav() {
     let mut app = make_app_with_session(2);
-    let sid = app.active_session_id.clone().unwrap();
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
     app.input_mode = InputMode::Terminal;
     app.handle_event(&AppEvent::SessionExited {
         session_id: sid.clone(),
@@ -201,6 +211,7 @@ fn session_exited_kicks_to_nav() {
 #[test]
 fn session_exited_other_session_no_mode_change() {
     let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
     app.input_mode = InputMode::Terminal;
     app.handle_event(&AppEvent::SessionExited {
         session_id: "other-session".to_string(),
@@ -211,7 +222,8 @@ fn session_exited_other_session_no_mode_change() {
 #[test]
 fn session_bell_marks_attention_unless_active_and_terminal() {
     let mut app = make_app_with_session(2);
-    let sid = app.active_session_id.clone().unwrap();
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
 
     // In terminal mode viewing the session — no attention
     app.input_mode = InputMode::Terminal;
@@ -231,6 +243,7 @@ fn session_bell_marks_attention_unless_active_and_terminal() {
 #[test]
 fn session_bell_other_session_always_marks_attention() {
     let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
     app.input_mode = InputMode::Terminal;
     let other = "other-session".to_string();
     app.handle_event(&AppEvent::SessionBell {
@@ -292,7 +305,8 @@ fn prompt_backspace_removes_char() {
 #[test]
 fn d_on_non_main_worktree_opens_confirm_delete() {
     let mut app = make_app(3);
-    app.selected_worktree = 1; // non-main
+    // Move cursor to item 1 (non-main worktree), cursor position = 2
+    app.sidebar_tree.cursor = 2;
     app.handle_event(&key(KeyCode::Char('d')));
     assert!(matches!(app.prompt, Some(Prompt::ConfirmDelete { .. })));
 }
@@ -300,7 +314,8 @@ fn d_on_non_main_worktree_opens_confirm_delete() {
 #[test]
 fn d_on_main_worktree_shows_error() {
     let mut app = make_app(3);
-    app.selected_worktree = 0; // main
+    // Move cursor to item 0 (main worktree), cursor position = 1
+    app.sidebar_tree.cursor = 1;
     app.handle_event(&key(KeyCode::Char('d')));
     assert!(app.prompt.is_none());
     assert!(app
@@ -351,9 +366,9 @@ fn resize_event_is_noop() {
 #[test]
 fn tick_event_is_noop() {
     let mut app = make_app(3);
-    let before = app.selected_worktree;
+    let before = app.sidebar_tree.cursor;
     app.handle_event(&AppEvent::Tick);
-    assert_eq!(app.selected_worktree, before);
+    assert_eq!(app.sidebar_tree.cursor, before);
 }
 
 // ── Scroll ──────────────────────────────────────────────────
@@ -361,6 +376,7 @@ fn tick_event_is_noop() {
 #[test]
 fn scroll_up_and_down() {
     let mut app = make_app_with_session(1);
+    app.sidebar_tree.cursor = 1;
     assert_eq!(app.active_scroll_offset(), 0);
     app.scroll_up(10);
     assert_eq!(app.active_scroll_offset(), 10);
@@ -373,6 +389,7 @@ fn scroll_up_and_down() {
 #[test]
 fn scroll_up_caps_at_1000() {
     let mut app = make_app_with_session(1);
+    app.sidebar_tree.cursor = 1;
     app.scroll_up(2000);
     assert_eq!(app.active_scroll_offset(), 1000);
 }
@@ -380,6 +397,7 @@ fn scroll_up_caps_at_1000() {
 #[test]
 fn reset_scroll_clears_offset() {
     let mut app = make_app_with_session(1);
+    app.sidebar_tree.cursor = 1;
     app.scroll_up(50);
     assert_eq!(app.active_scroll_offset(), 50);
     app.reset_scroll();
@@ -391,6 +409,7 @@ fn reset_scroll_clears_offset() {
 #[test]
 fn tab_from_worktrees_with_active_session_enters_terminal_mode() {
     let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Left;
     app.sidebar_view = SidebarView::Worktrees;
     app.main_view = MainView::Terminal;
@@ -414,7 +433,8 @@ fn tab_from_worktrees_without_session_stays_nav() {
 
 #[test]
 fn needs_session_spawn_on_enter_in_worktree_view() {
-    let app = make_app(2);
+    let mut app = make_app(2);
+    app.sidebar_tree.cursor = 1; // on an item
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
     assert!(app.needs_session_spawn(&key_event));
 }
@@ -422,6 +442,7 @@ fn needs_session_spawn_on_enter_in_worktree_view() {
 #[test]
 fn needs_session_spawn_false_when_prompt_active() {
     let mut app = make_app(2);
+    app.sidebar_tree.cursor = 1;
     app.prompt = Some(Prompt::CreateWorktree { input: String::new() });
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
     assert!(!app.needs_session_spawn(&key_event));
@@ -430,7 +451,8 @@ fn needs_session_spawn_false_when_prompt_active() {
 #[test]
 fn needs_session_restart_on_r_with_exited_session() {
     let mut app = make_app_with_session(2);
-    let sid = app.active_session_id.clone().unwrap();
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
     app.exited_sessions.insert(sid);
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('r'), crossterm::event::KeyModifiers::NONE);
     assert!(app.needs_session_restart(&key_event));
@@ -438,7 +460,8 @@ fn needs_session_restart_on_r_with_exited_session() {
 
 #[test]
 fn needs_session_restart_false_without_exited() {
-    let app = make_app_with_session(2);
+    let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('r'), crossterm::event::KeyModifiers::NONE);
     assert!(!app.needs_session_restart(&key_event));
 }
@@ -447,14 +470,16 @@ fn needs_session_restart_false_without_exited() {
 
 #[test]
 fn needs_session_close_on_backspace_with_session() {
-    let app = make_app_with_session(2);
+    let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
     assert!(app.needs_session_close(&key_event));
 }
 
 #[test]
 fn needs_session_close_false_without_session() {
-    let app = make_app(2);
+    let mut app = make_app(2);
+    app.sidebar_tree.cursor = 1;
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
     assert!(!app.needs_session_close(&key_event));
 }
@@ -462,6 +487,7 @@ fn needs_session_close_false_without_session() {
 #[test]
 fn needs_session_close_false_in_terminal_mode() {
     let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
     app.input_mode = InputMode::Terminal;
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
     assert!(!app.needs_session_close(&key_event));
@@ -470,6 +496,7 @@ fn needs_session_close_false_in_terminal_mode() {
 #[test]
 fn needs_session_close_false_when_prompt_active() {
     let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
     app.prompt = Some(Prompt::CreateWorktree { input: String::new() });
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
     assert!(!app.needs_session_close(&key_event));
@@ -520,17 +547,18 @@ fn wants_delete_worktree_false_on_n() {
 // ── Git Status view switching ───────────────────────────────
 
 #[test]
-fn ctrl_6_sets_sidebar_git_status() {
+fn cmd_6_sets_sidebar_git_status() {
     let mut app = make_app(3);
     app.sidebar_view = SidebarView::Worktrees;
     app.panel_focus = PanelFocus::Right;
-    app.handle_event(&ctrl_key('6'));
+    app.handle_event(&cmd_key('6'));
     assert_eq!(app.sidebar_view, SidebarView::GitStatus);
     assert_eq!(app.panel_focus, PanelFocus::Left);
 }
 
 fn make_app_with_git_status(n: usize) -> darya::app::App {
     let mut app = make_app(n);
+    app.sidebar_tree.cursor = 1; // select item 0
     // Set up a mock git status state with test entries
     app.git_status = Some(GitStatusState {
         entries: vec![
@@ -555,7 +583,7 @@ fn make_app_with_git_status(n: usize) -> darya::app::App {
         ],
         selected: 0,
         error: None,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
     });
     app.sidebar_view = SidebarView::GitStatus;
     app.panel_focus = PanelFocus::Left;
@@ -602,7 +630,7 @@ fn tab_toggles_focus_from_git_status() {
 fn number_keys_jump_worktree_from_git_status() {
     let mut app = make_app_with_git_status(3);
     app.handle_event(&key(KeyCode::Char('2')));
-    assert_eq!(app.selected_worktree, 1);
+    assert_eq!(selected_item_index(&app), Some(1));
     // git_status cleared on worktree switch
     assert!(app.git_status.is_none());
 }
@@ -630,9 +658,9 @@ fn q_quits_from_diff_view() {
 #[test]
 fn l_cycles_sidebar_forward() {
     let mut app = make_app(3);
-    assert_eq!(app.sidebar_view, SidebarView::Worktrees);
-    app.handle_event(&key(KeyCode::Char('l')));
-    assert_eq!(app.sidebar_view, SidebarView::FileExplorer);
+    // h/l cycle sidebar views except in Worktrees view (where they expand/collapse)
+    // Start from FileExplorer to test cycling
+    app.sidebar_view = SidebarView::FileExplorer;
     app.handle_event(&key(KeyCode::Char('l')));
     assert_eq!(app.sidebar_view, SidebarView::Search);
     app.handle_event(&key(KeyCode::Char('l')));
@@ -644,11 +672,20 @@ fn l_cycles_sidebar_forward() {
 #[test]
 fn h_cycles_sidebar_backward() {
     let mut app = make_app(3);
+    // Start from FileExplorer to test cycling (h/l don't cycle in Worktrees view)
+    app.sidebar_view = SidebarView::FileExplorer;
+    app.handle_event(&key(KeyCode::Char('h')));
     assert_eq!(app.sidebar_view, SidebarView::Worktrees);
-    app.handle_event(&key(KeyCode::Char('h')));
-    assert_eq!(app.sidebar_view, SidebarView::GitStatus);
-    app.handle_event(&key(KeyCode::Char('h')));
-    assert_eq!(app.sidebar_view, SidebarView::Search);
+}
+
+#[test]
+fn l_expands_tree_in_worktrees_view() {
+    let mut app = make_app(3);
+    assert_eq!(app.sidebar_view, SidebarView::Worktrees);
+    // Cursor starts on section header; l should expand (already expanded) and move to first child
+    app.handle_event(&key(KeyCode::Char('l')));
+    // Should still be in worktrees view (not cycle to FileExplorer)
+    assert_eq!(app.sidebar_view, SidebarView::Worktrees);
 }
 
 #[test]
@@ -668,7 +705,8 @@ fn h_l_no_effect_on_right_panel() {
 #[test]
 fn pty_output_activates_animation_after_tick() {
     let mut app = make_app_with_session(2);
-    let sid = app.active_session_id.clone().unwrap();
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
     assert!(!app.activity.is_active(&sid));
     // Output + tick (no recent input) → active
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
@@ -679,7 +717,8 @@ fn pty_output_activates_animation_after_tick() {
 #[test]
 fn output_suppressed_after_user_input() {
     let mut app = make_app_with_session(2);
-    let sid = app.active_session_id.clone().unwrap();
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
     // Simulate user typing: mark_input then echo arrives as PtyOutput
     app.activity.mark_input(&sid);
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
@@ -691,7 +730,8 @@ fn output_suppressed_after_user_input() {
 #[test]
 fn tick_advances_animation_trail() {
     let mut app = make_app_with_session(2);
-    let sid = app.active_session_id.clone().unwrap();
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
     app.handle_event(&AppEvent::Tick);
     let trail_before = app.activity.trail(&sid);
@@ -707,7 +747,8 @@ fn tick_advances_animation_trail() {
 #[test]
 fn animation_scanner_cycle() {
     let mut app = make_app_with_session(2);
-    let sid = app.active_session_id.clone().unwrap();
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
     // Initial output to start animation
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
     app.handle_event(&AppEvent::Tick);
@@ -732,7 +773,8 @@ fn animation_scanner_cycle() {
     // Verify trail at a mid-forward frame (frame index 2, head at pos 2)
     // Reset by creating fresh app
     let mut app2 = make_app_with_session(2);
-    let sid2 = app2.active_session_id.clone().unwrap();
+    app2.sidebar_tree.cursor = 1;
+    let sid2 = active_session_id(&app2).unwrap().to_string();
     app2.handle_event(&AppEvent::PtyOutput { session_id: sid2.clone() });
     app2.handle_event(&AppEvent::Tick);
     // Advance 2 frames (head should be at pos 2)
@@ -750,7 +792,8 @@ fn animation_scanner_cycle() {
 #[test]
 fn session_exited_cleans_up_animation() {
     let mut app = make_app_with_session(2);
-    let sid = app.active_session_id.clone().unwrap();
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
     app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
     app.handle_event(&AppEvent::Tick);
     assert!(app.activity.is_active(&sid));
@@ -761,12 +804,12 @@ fn session_exited_cleans_up_animation() {
 #[test]
 fn animation_independent_per_session() {
     let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
     // Add a second session for the second worktree
-    let wt2_path = app.worktrees[1].path.clone();
     let sid2 = "test-session-2".to_string();
-    app.session_ids.insert(wt2_path, sid2.clone());
+    set_session(&mut app, 1, &sid2);
 
-    let sid1 = app.active_session_id.clone().unwrap();
+    let sid1 = active_session_id(&app).unwrap().to_string();
 
     // Only activate session 1
     app.handle_event(&AppEvent::PtyOutput { session_id: sid1.clone() });
@@ -851,12 +894,9 @@ fn is_edtui_compatible_helper() {
 #[test]
 fn running_session_count_excludes_exited() {
     let mut app = make_app(3);
-    let p0 = app.worktrees[0].path.clone();
-    let p1 = app.worktrees[1].path.clone();
-    let p2 = app.worktrees[2].path.clone();
-    app.session_ids.insert(p0, "s0".to_string());
-    app.session_ids.insert(p1, "s1".to_string());
-    app.session_ids.insert(p2, "s2".to_string());
+    set_session(&mut app, 0, "s0");
+    set_session(&mut app, 1, "s1");
+    set_session(&mut app, 2, "s2");
     app.exited_sessions.insert("s1".to_string());
     assert_eq!(app.running_session_count(), 2);
 }
@@ -864,12 +904,9 @@ fn running_session_count_excludes_exited() {
 #[test]
 fn exited_session_count_only_counts_exited() {
     let mut app = make_app(3);
-    let p0 = app.worktrees[0].path.clone();
-    let p1 = app.worktrees[1].path.clone();
-    let p2 = app.worktrees[2].path.clone();
-    app.session_ids.insert(p0, "s0".to_string());
-    app.session_ids.insert(p1, "s1".to_string());
-    app.session_ids.insert(p2, "s2".to_string());
+    set_session(&mut app, 0, "s0");
+    set_session(&mut app, 1, "s1");
+    set_session(&mut app, 2, "s2");
     app.exited_sessions.insert("s1".to_string());
     assert_eq!(app.exited_session_count(), 1);
 }
@@ -877,6 +914,7 @@ fn exited_session_count_only_counts_exited() {
 #[test]
 fn selected_branch_info_returns_branch_and_counts() {
     let mut app = make_app(2);
+    app.sidebar_tree.cursor = 1; // select item 0
     app.git_status = Some(GitStatusState {
         entries: vec![
             GitStatusEntry {
@@ -900,7 +938,7 @@ fn selected_branch_info_returns_branch_and_counts() {
         ],
         selected: 0,
         error: None,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
     });
     let (branch, untracked, modified) = app.selected_branch_info().unwrap();
     assert_eq!(branch, "main");
@@ -910,7 +948,8 @@ fn selected_branch_info_returns_branch_and_counts() {
 
 #[test]
 fn selected_branch_info_without_git_status_returns_zeros() {
-    let app = make_app(2);
+    let mut app = make_app(2);
+    app.sidebar_tree.cursor = 1; // select item 0
     let (branch, untracked, modified) = app.selected_branch_info().unwrap();
     assert_eq!(branch, "main");
     assert_eq!(untracked, 0);
@@ -1035,6 +1074,7 @@ fn resolve_session_command_falls_back_on_invalid_toml() {
 #[test]
 fn split_add_pane_creates_layout() {
     let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     assert!(app.pane_layout.is_none());
@@ -1043,13 +1083,14 @@ fn split_add_pane_creates_layout() {
     assert_eq!(layout.panes.len(), 2);
     assert_eq!(layout.focused, 0);
     // First pane is the active session, second is the next available
-    assert_eq!(layout.panes[0], "test-session-1");
-    assert_eq!(layout.panes[1], "test-session-2");
+    assert_eq!(layout.panes[0], darya::app::PaneContent::Terminal("test-session-1".to_string()));
+    assert_eq!(layout.panes[1], darya::app::PaneContent::Terminal("test-session-2".to_string()));
 }
 
 #[test]
 fn split_add_pane_fails_without_other_sessions() {
     let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     // Only one session exists
@@ -1061,9 +1102,9 @@ fn split_add_pane_fails_without_other_sessions() {
 #[test]
 fn split_add_pane_caps_at_three() {
     let mut app = make_app_with_two_sessions(4);
+    app.sidebar_tree.cursor = 1;
     // Add a third session
-    let wt2 = app.worktrees[2].path.clone();
-    app.session_ids.insert(wt2, "test-session-3".to_string());
+    set_session(&mut app, 2, "test-session-3");
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
 
@@ -1077,21 +1118,22 @@ fn split_add_pane_caps_at_three() {
 #[test]
 fn close_focused_pane_collapses_to_single() {
     let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     app.split_add_pane();
     assert!(app.pane_layout.is_some());
     app.close_focused_pane();
     assert!(app.pane_layout.is_none());
-    // active_session_id should be set to remaining session
-    assert!(app.active_session_id.is_some());
+    // active_session_id should still be available via sidebar tree
+    assert!(active_session_id(&app).is_some());
 }
 
 #[test]
 fn close_focused_pane_adjusts_focus() {
     let mut app = make_app_with_two_sessions(4);
-    let wt2 = app.worktrees[2].path.clone();
-    app.session_ids.insert(wt2, "test-session-3".to_string());
+    app.sidebar_tree.cursor = 1;
+    set_session(&mut app, 2, "test-session-3");
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     app.split_add_pane();
@@ -1108,6 +1150,7 @@ fn close_focused_pane_adjusts_focus() {
 #[test]
 fn cycle_pane_focus_wraps() {
     let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     app.split_add_pane();
@@ -1128,6 +1171,7 @@ fn cycle_pane_focus_wraps() {
 #[test]
 fn focused_session_id_single_vs_split() {
     let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
 
@@ -1144,8 +1188,8 @@ fn focused_session_id_single_vs_split() {
 #[test]
 fn is_session_visible_split_mode() {
     let mut app = make_app_with_two_sessions(4);
-    let wt2 = app.worktrees[2].path.clone();
-    app.session_ids.insert(wt2, "test-session-3".to_string());
+    app.sidebar_tree.cursor = 1;
+    set_session(&mut app, 2, "test-session-3");
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     app.split_add_pane();
@@ -1158,6 +1202,7 @@ fn is_session_visible_split_mode() {
 #[test]
 fn split_preserves_across_view_switch() {
     let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     app.split_add_pane();
@@ -1170,17 +1215,24 @@ fn split_preserves_across_view_switch() {
 }
 
 #[test]
-fn split_requires_terminal_view() {
+fn split_from_editor_view_works() {
     let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Editor;
-    assert!(!app.split_add_pane());
-    assert!(app.status_message.as_ref().unwrap().contains("terminal view"));
+    // Editor can split with another editor pane
+    assert!(app.split_add_pane());
+    let layout = app.pane_layout.as_ref().unwrap();
+    assert_eq!(layout.panes.len(), 2);
+    // Both panes should be Editor
+    assert_eq!(layout.panes[0], darya::app::PaneContent::Editor);
+    assert_eq!(layout.panes[1], darya::app::PaneContent::Editor);
 }
 
 #[test]
 fn remove_session_from_panes_collapses() {
     let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     app.split_add_pane();
@@ -1189,12 +1241,13 @@ fn remove_session_from_panes_collapses() {
     app.remove_session_from_panes("test-session-2");
     // Should collapse to single since only 1 pane remains
     assert!(app.pane_layout.is_none());
-    assert_eq!(app.active_session_id.as_deref(), Some("test-session-1"));
+    assert_eq!(active_session_id(&app).unwrap(), "test-session-1");
 }
 
 #[test]
 fn tab_cycles_panes_then_sidebar_in_terminal_nav() {
     let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     app.input_mode = InputMode::Navigation;
@@ -1222,6 +1275,7 @@ fn tab_cycles_panes_then_sidebar_in_terminal_nav() {
 #[test]
 fn tab_cycles_panes_in_terminal_mode() {
     let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     app.input_mode = InputMode::Terminal;
@@ -1243,6 +1297,7 @@ fn tab_cycles_panes_in_terminal_mode() {
 fn tab_no_panes_behaves_as_before() {
     // Without split, Tab in terminal mode toggles to left panel
     let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
     app.input_mode = InputMode::Terminal;
     app.panel_focus = PanelFocus::Right;
     assert!(app.pane_layout.is_none());
@@ -1320,12 +1375,13 @@ fn make_blame_lines() -> Vec<BlameLine> {
 
 fn make_app_with_blame(n: usize) -> darya::app::App {
     let mut app = make_app(n);
+    app.sidebar_tree.cursor = 1; // select item 0
     app.git_blame = Some(GitBlameState {
         file_path: "src/main.rs".to_string(),
         lines: make_blame_lines(),
         scroll_offset: 0,
         visible_height: 20,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
     });
     app.main_view = MainView::GitBlame;
     app.panel_focus = PanelFocus::Right;
@@ -1372,7 +1428,7 @@ fn git_blame_q_quits() {
 fn git_blame_number_jumps_worktree() {
     let mut app = make_app_with_blame(3);
     app.handle_event(&key(KeyCode::Char('2')));
-    assert_eq!(app.selected_worktree, 1);
+    assert_eq!(selected_item_index(&app), Some(1));
     // Blame cleared on worktree switch
     assert!(app.git_blame.is_none());
 }
@@ -1428,12 +1484,13 @@ fn make_log_entries() -> Vec<GitLogEntry> {
 
 fn make_app_with_git_log(n: usize) -> darya::app::App {
     let mut app = make_app(n);
+    app.sidebar_tree.cursor = 1; // select item 0
     app.git_log = Some(GitLogState {
         entries: make_log_entries(),
         selected: 0,
         scroll_offset: 0,
         visible_height: 20,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
         file_filter: None,
     });
     app.main_view = MainView::GitLog;
@@ -1492,24 +1549,25 @@ fn git_log_q_quits() {
 fn git_log_number_jumps_worktree() {
     let mut app = make_app_with_git_log(3);
     app.handle_event(&key(KeyCode::Char('2')));
-    assert_eq!(app.selected_worktree, 1);
+    assert_eq!(selected_item_index(&app), Some(1));
     // Log cleared on worktree switch
     assert!(app.git_log.is_none());
 }
 
 #[test]
-fn ctrl_7_opens_git_blame_view() {
+fn cmd_7_opens_git_blame_view() {
     // Without an editor open, should show status message
     let mut app = make_app(3);
-    app.handle_event(&ctrl_key('7'));
+    app.handle_event(&cmd_key('7'));
     assert!(app.status_message.as_ref().unwrap().contains("No file open"));
 }
 
 #[test]
-fn ctrl_8_opens_git_log_view() {
+fn cmd_8_opens_git_log_view() {
     let mut app = make_app(3);
+    app.sidebar_tree.cursor = 1; // select item 0 so worktree path is available
     // This will try to run git log on a non-git dir, should show error
-    app.handle_event(&ctrl_key('8'));
+    app.handle_event(&cmd_key('8'));
     // Either it succeeds (if in a git repo) or shows an error
     assert!(app.main_view == MainView::GitLog || app.status_message.is_some());
 }
@@ -1518,6 +1576,7 @@ fn ctrl_8_opens_git_log_view() {
 fn b_in_editor_readonly_opens_blame() {
     // Without a real git repo, this will fail gracefully
     let mut app = make_app_with_editor(2);
+    app.sidebar_tree.cursor = 1; // select item 0 so worktree path is available
     app.input_mode = InputMode::Navigation;
     app.handle_event(&key(KeyCode::Char('b')));
     // Should either open blame or show error (no git repo)
@@ -1731,6 +1790,7 @@ fn command_palette_execute_view_git_status() {
 #[test]
 fn command_palette_execute_refresh_git_status() {
     let mut app = make_app(3);
+    app.sidebar_tree.cursor = 1; // select item 0 so worktree path is available
     app.execute_command(CommandId::RefreshGitStatus);
     assert!(app.status_message.as_ref().unwrap().contains("refreshed"));
 }
@@ -1774,13 +1834,13 @@ fn file_changed_refreshes_git_views() {
         }],
         scroll_offset: 0,
         visible_height: 20,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
     });
     app.git_status = Some(GitStatusState {
         entries: vec![],
         selected: 0,
         error: None,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
     });
     // Should not panic — refresh silently keeps stale data on non-git paths
     app.handle_event(&AppEvent::FileChanged { paths: vec![PathBuf::from("/tmp/foo.rs")] });
@@ -1804,13 +1864,13 @@ fn files_created_or_deleted_refreshes_git_views() {
         }],
         scroll_offset: 0,
         visible_height: 20,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
     });
     app.git_status = Some(GitStatusState {
         entries: vec![],
         selected: 0,
         error: None,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
     });
     // Should not panic — refresh silently keeps stale data on non-git paths
     app.handle_event(&AppEvent::FilesCreatedOrDeleted);
@@ -1823,22 +1883,19 @@ fn files_created_or_deleted_refreshes_git_views() {
 
 fn make_app_with_shell_session(n: usize) -> darya::app::App {
     let mut app = make_app(n);
-    if let Some(wt) = app.worktrees.first() {
-        let session_id = "test-shell-1".to_string();
-        app.shell_session_ids.insert(wt.path.clone(), session_id.clone());
-        app.active_shell_session_id = Some(session_id);
-    }
+    app.sidebar_tree.cursor = 1; // select item 0
+    set_shell_session(&mut app, 0, "test-shell-1");
     app.main_view = MainView::Shell;
     app.panel_focus = PanelFocus::Right;
     app
 }
 
 #[test]
-fn ctrl_9_sets_main_shell() {
+fn cmd_9_sets_main_shell() {
     let mut app = make_app(3);
     app.main_view = MainView::Terminal;
     app.panel_focus = PanelFocus::Left;
-    app.handle_event(&ctrl_key('9'));
+    app.handle_event(&cmd_key('9'));
     assert_eq!(app.main_view, MainView::Shell);
     assert_eq!(app.panel_focus, PanelFocus::Right);
 }
@@ -1854,33 +1911,35 @@ fn shell_view_kind_is_shell() {
 #[test]
 fn shell_session_spawn_signal() {
     let mut app = make_app(3);
+    app.sidebar_tree.cursor = 1;
     app.main_view = MainView::Shell;
     app.panel_focus = PanelFocus::Right;
     app.input_mode = InputMode::Navigation;
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
-    assert!(app.needs_shell_spawn(&key_event));
+    // needs_session_spawn now handles shell view too
+    assert!(app.needs_session_spawn(&key_event));
 }
 
 #[test]
 fn shell_spawn_false_in_terminal_view() {
     let mut app = make_app(3);
+    app.sidebar_tree.cursor = 1;
     app.main_view = MainView::Terminal;
     app.panel_focus = PanelFocus::Right;
     app.input_mode = InputMode::Navigation;
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
-    assert!(!app.needs_shell_spawn(&key_event));
+    // needs_session_spawn returns true for Terminal view too, since it handles all session spawning
+    assert!(app.needs_session_spawn(&key_event));
 }
 
 #[test]
 fn shell_and_claude_sessions_coexist() {
     let mut app = make_app(3);
-    let wt_path = app.worktrees[0].path.clone();
-    // Claude session
-    app.session_ids.insert(wt_path.clone(), "claude-1".to_string());
-    app.active_session_id = Some("claude-1".to_string());
-    // Shell session
-    app.shell_session_ids.insert(wt_path, "shell-1".to_string());
-    app.active_shell_session_id = Some("shell-1".to_string());
+    app.sidebar_tree.cursor = 1;
+    // Claude session on item 0
+    set_session(&mut app, 0, "claude-1");
+    // Shell session on item 0
+    set_shell_session(&mut app, 0, "shell-1");
 
     // In terminal view, focused_session_id returns claude session
     app.main_view = MainView::Terminal;
@@ -1900,32 +1959,32 @@ fn focused_session_id_returns_shell_in_shell_view() {
 #[test]
 fn focused_session_id_returns_none_for_claude_in_shell_view() {
     let mut app = make_app(3);
+    app.sidebar_tree.cursor = 1;
     // No shell session, but we're in shell view
     app.main_view = MainView::Shell;
     assert_eq!(app.focused_session_id(), None);
     // Add claude session — shouldn't be returned in shell view
-    let wt_path = app.worktrees[0].path.clone();
-    app.session_ids.insert(wt_path, "claude-1".to_string());
-    app.active_session_id = Some("claude-1".to_string());
+    set_session(&mut app, 0, "claude-1");
     assert_eq!(app.focused_session_id(), None);
 }
 
 #[test]
 fn shell_session_restart_signal() {
     let mut app = make_app_with_shell_session(3);
-    let sid = app.active_shell_session_id.clone().unwrap();
+    let sid = active_shell_session_id(&app).unwrap().to_string();
     app.exited_sessions.insert(sid);
     app.input_mode = InputMode::Navigation;
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('r'), crossterm::event::KeyModifiers::NONE);
-    assert!(app.needs_shell_restart(&key_event));
+    // needs_session_restart now handles all session types
+    assert!(app.needs_session_restart(&key_event));
 }
 
 #[test]
 fn shell_session_close_signal() {
     let app = make_app_with_shell_session(3);
     let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
-    // needs_shell_close checks main_view == Shell and nav mode
-    assert!(app.needs_shell_close(&key_event));
+    // needs_session_close now handles all session types
+    assert!(app.needs_session_close(&key_event));
 }
 
 #[test]
@@ -1948,14 +2007,12 @@ fn worktree_name_for_shell_session() {
 #[test]
 fn switch_worktree_updates_shell_session() {
     let mut app = make_app(3);
-    let wt0 = app.worktrees[0].path.clone();
-    let wt1 = app.worktrees[1].path.clone();
-    app.shell_session_ids.insert(wt0, "shell-0".to_string());
-    app.shell_session_ids.insert(wt1, "shell-1".to_string());
-    app.active_shell_session_id = Some("shell-0".to_string());
+    app.sidebar_tree.cursor = 1; // item 0
+    set_shell_session(&mut app, 0, "shell-0");
+    set_shell_session(&mut app, 1, "shell-1");
 
-    app.handle_event(&key(KeyCode::Char('2'))); // jump to worktree 1
-    assert_eq!(app.active_shell_session_id.as_deref(), Some("shell-1"));
+    app.handle_event(&key(KeyCode::Char('2'))); // jump to item 1
+    assert_eq!(active_shell_session_id(&app), Some("shell-1"));
 }
 
 #[test]
@@ -1995,4 +2052,295 @@ fn resolve_shell_command_reads_local_override() {
     .unwrap();
     let result = config::resolve_shell_command(dir.path(), "/bin/sh");
     assert_eq!(result, "/usr/local/bin/fish");
+}
+
+// ── Mixed-Content Pane Splitting ────────────────────────────
+
+fn make_app_with_shell_and_terminal(n: usize) -> darya::app::App {
+    let mut app = make_app(n);
+    app.sidebar_tree.cursor = 1; // select item 0
+    // Claude terminal session on item 0
+    set_session(&mut app, 0, "terminal-1");
+    // Shell session on item 0
+    set_shell_session(&mut app, 0, "shell-1");
+    // Second terminal session on item 1
+    set_session(&mut app, 1, "terminal-2");
+    app
+}
+
+#[test]
+fn split_terminal_with_editor() {
+    let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    // Split adds editor pane alongside terminal
+    assert!(app.split_add_pane_with(PaneContent::Editor));
+    let layout = app.pane_layout.as_ref().unwrap();
+    assert_eq!(layout.panes.len(), 2);
+    assert_eq!(layout.panes[0], PaneContent::Terminal("test-session-1".to_string()));
+    assert_eq!(layout.panes[1], PaneContent::Editor);
+}
+
+#[test]
+fn split_terminal_with_shell() {
+    let mut app = make_app_with_shell_and_terminal(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    assert!(app.split_add_pane_with(PaneContent::Shell("shell-1".to_string())));
+    let layout = app.pane_layout.as_ref().unwrap();
+    assert_eq!(layout.panes.len(), 2);
+    assert_eq!(layout.panes[0], PaneContent::Terminal("terminal-1".to_string()));
+    assert_eq!(layout.panes[1], PaneContent::Shell("shell-1".to_string()));
+}
+
+#[test]
+fn split_editor_with_terminal() {
+    let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Editor;
+
+    assert!(app.split_add_pane_with(PaneContent::Terminal("test-session-1".to_string())));
+    let layout = app.pane_layout.as_ref().unwrap();
+    assert_eq!(layout.panes.len(), 2);
+    assert_eq!(layout.panes[0], PaneContent::Editor);
+    assert_eq!(layout.panes[1], PaneContent::Terminal("test-session-1".to_string()));
+}
+
+#[test]
+fn focused_view_reflects_pane_content() {
+    let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    // Add editor pane
+    app.split_add_pane_with(PaneContent::Editor);
+
+    // Focused on terminal pane (index 0)
+    assert_eq!(app.focused_view(), ViewKind::Terminal);
+
+    // Switch to editor pane (index 1)
+    app.cycle_pane_focus_next();
+    assert_eq!(app.focused_view(), ViewKind::Editor);
+}
+
+#[test]
+fn close_mixed_pane_sets_correct_main_view() {
+    let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    // Split terminal + editor
+    app.split_add_pane_with(PaneContent::Editor);
+    assert!(app.pane_layout.is_some());
+
+    // Focus terminal pane (index 0) and close it
+    app.pane_layout.as_mut().unwrap().focused = 0;
+    app.close_focused_pane();
+
+    // Remaining pane is Editor, so main_view should be Editor
+    assert!(app.pane_layout.is_none());
+    assert_eq!(app.main_view, MainView::Editor);
+}
+
+#[test]
+fn close_mixed_pane_shell_remains() {
+    let mut app = make_app_with_shell_and_terminal(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    // Split terminal + shell
+    app.split_add_pane_with(PaneContent::Shell("shell-1".to_string()));
+
+    // Close terminal pane (focused = 0)
+    app.close_focused_pane();
+
+    assert!(app.pane_layout.is_none());
+    assert_eq!(app.main_view, MainView::Shell);
+    assert_eq!(active_shell_session_id(&app), Some("shell-1"));
+}
+
+#[test]
+fn tab_cycles_mixed_panes() {
+    let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    app.input_mode = InputMode::Navigation;
+
+    // Add editor pane alongside terminal
+    app.split_add_pane_with(PaneContent::Editor);
+
+    // Start at pane 0 (terminal)
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
+    assert_eq!(app.focused_view(), ViewKind::Terminal);
+
+    // Tab → pane 1 (editor), enters terminal mode (but it's an editor, so stays Nav)
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
+    // Editor pane — enter_terminal_if_focused should NOT enter terminal mode
+    assert_eq!(app.input_mode, InputMode::Navigation);
+    assert_eq!(app.focused_view(), ViewKind::Editor);
+
+    // Tab from last pane → left panel
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.panel_focus, PanelFocus::Left);
+}
+
+#[test]
+fn tab_in_terminal_mode_to_editor_pane_switches_mode() {
+    let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    app.input_mode = InputMode::Terminal;
+
+    // Add editor pane
+    app.split_add_pane_with(PaneContent::Editor);
+
+    // Tab from terminal mode on pane 0 → pane 1 (editor)
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
+    // Should switch to Navigation since editor pane doesn't support Terminal mode
+    assert_eq!(app.input_mode, InputMode::Navigation);
+}
+
+#[test]
+fn focused_session_id_none_for_editor_pane() {
+    let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    app.split_add_pane_with(PaneContent::Editor);
+    // Focus editor pane
+    app.cycle_pane_focus_next();
+    assert_eq!(app.focused_session_id(), None);
+}
+
+#[test]
+fn split_editor_command_from_palette() {
+    let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    app.execute_command(CommandId::SplitEditor);
+    let layout = app.pane_layout.as_ref().unwrap();
+    assert_eq!(layout.panes.len(), 2);
+    assert_eq!(layout.panes[1], PaneContent::Editor);
+}
+
+#[test]
+fn split_terminal_command_from_palette() {
+    let mut app = make_app_with_shell_and_terminal(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    // SplitTerminal should find "terminal-2" (next available)
+    app.execute_command(CommandId::SplitTerminal);
+    let layout = app.pane_layout.as_ref().unwrap();
+    assert_eq!(layout.panes.len(), 2);
+    assert_eq!(layout.panes[1], PaneContent::Terminal("terminal-2".to_string()));
+}
+
+#[test]
+fn split_shell_command_from_palette() {
+    let mut app = make_app_with_shell_and_terminal(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    // SplitShell uses current shell session when it's the only one
+    app.execute_command(CommandId::SplitShell);
+    let layout = app.pane_layout.as_ref().unwrap();
+    assert_eq!(layout.panes.len(), 2);
+    assert_eq!(layout.panes[1], PaneContent::Shell("shell-1".to_string()));
+}
+
+#[test]
+fn remove_session_from_mixed_panes() {
+    let mut app = make_app_with_session(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    // Terminal + Editor
+    app.split_add_pane_with(PaneContent::Editor);
+    assert_eq!(app.pane_layout.as_ref().unwrap().panes.len(), 2);
+
+    // Remove the terminal session
+    app.remove_session_from_panes("test-session-1");
+    // Should collapse, remaining is Editor
+    assert!(app.pane_layout.is_none());
+    assert_eq!(app.main_view, MainView::Editor);
+}
+
+#[test]
+fn is_session_visible_in_mixed_panes() {
+    let mut app = make_app_with_shell_and_terminal(3);
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    // Terminal + Shell in split
+    app.split_add_pane_with(PaneContent::Shell("shell-1".to_string()));
+
+    assert!(app.is_session_visible("terminal-1"));
+    assert!(app.is_session_visible("shell-1"));
+    assert!(!app.is_session_visible("terminal-2"));
+}
+
+// ── Notifications ──────────────────────────────────────────
+
+#[test]
+fn notification_for_bell_when_not_viewing() {
+    let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
+    // User is in navigation mode (not viewing terminal)
+    app.input_mode = InputMode::Navigation;
+    let sid = active_session_id(&app).unwrap().to_string();
+    let event = AppEvent::SessionBell { session_id: sid };
+    let notif = app.notification_for_event(&event);
+    assert!(notif.is_some());
+    assert!(notif.unwrap().contains("needs attention"));
+}
+
+#[test]
+fn notification_for_bell_when_viewing() {
+    let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
+    // User is actively viewing the session in terminal mode
+    app.input_mode = InputMode::Terminal;
+    let sid = active_session_id(&app).unwrap().to_string();
+    let event = AppEvent::SessionBell { session_id: sid };
+    assert!(app.notification_for_event(&event).is_none());
+}
+
+#[test]
+fn notification_for_exit() {
+    let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
+    let event = AppEvent::SessionExited { session_id: sid };
+    let notif = app.notification_for_event(&event);
+    assert!(notif.is_some());
+    let msg = notif.unwrap();
+    assert!(msg.contains("my-project"));
+    assert!(msg.contains("session exited"));
+}
+
+#[test]
+fn notification_none_for_other_events() {
+    let app = make_app(2);
+    assert!(app.notification_for_event(&AppEvent::Tick).is_none());
+    assert!(app.notification_for_event(&AppEvent::Resize(80, 24)).is_none());
+    assert!(app
+        .notification_for_event(&AppEvent::PtyOutput {
+            session_id: "foo".to_string(),
+        })
+        .is_none());
 }

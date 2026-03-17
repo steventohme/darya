@@ -4,24 +4,24 @@ expression: output
 ---
  darya
 ┏ Worktrees ━━━━━━━━━━━━┓┏ Diff ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃▶ 1 ○ my-project [main]┃┃  Select a file from Git Status to view diff                             ┃
-┃  2 ○ my-project [featu┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
+┃│ ▼ my-project         ┃┃  Select a file from Git Status to view diff                             ┃
+┃    1 ▶ ○ my-project [m┃┃                                                                         ┃
+┃    2 ▶ ○ my-project-fe┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                   ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
 ┃                   ┃ Navigation — Diff View                                   ┃                   ┃
 ┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
-┃                   ┃ Ctrl+1: Worktrees  Ctrl+2: Terminal  Ctrl+3: Files  Ctrl+┃                   ┃
+┃                   ┃ Cmd+1: Worktrees  Cmd+2: Terminal  Cmd+3: Files  Cmd+4: E┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃ j/k, ↑/↓    Scroll line                                  ┃                   ┃
 ┃                   ┃ PgUp/PgDn   Scroll page                                  ┃                   ┃
 ┃                   ┃ Esc         Back to terminal                             ┃                   ┃
 ┃                   ┃ 1-9, 0      Jump to worktree                             ┃                   ┃
 ┃                   ┃ Tab         Switch panel                                 ┃                   ┃
-┃                   ┃ Ctrl+P      Fuzzy file finder                            ┃                   ┃
-┃                   ┃ Ctrl+F      Project search                               ┃                   ┃
+┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
+┃                   ┃ Cmd+F       Project search                               ┃                   ┃
 ┃                   ┃ q           Quit                                         ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
 ┃                       ┃┃                                                                         ┃
@@ -31,4 +31,4 @@ expression: output
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- [NAV] diff                                          main
+ [NAV] diff

@@ -6,13 +6,13 @@ use ratatui::Terminal;
 use darya::app::{
     App, BlameLine, CommandPaletteState, DiffLine, DiffLineKind, DiffViewState, FileExplorerState,
     GitFileStatus, GitLogEntry, GitLogState, GitBlameState,
-    GitStatusCategory, GitStatusEntry, GitStatusState, InputMode, MainView, PaneLayout,
+    GitStatusCategory, GitStatusEntry, GitStatusState, InputMode, MainView, PaneContent, PaneLayout,
     PanelFocus, SidebarView,
 };
 use darya::config::{KeybindingsConfig, Theme};
 use darya::session::manager::SessionManager;
 
-use helpers::make_worktrees;
+use helpers::{make_worktrees, item_path, set_session};
 
 /// Render the full UI frame into a string buffer for snapshot comparison.
 fn render_to_string(app: &mut App, session_manager: &SessionManager, width: u16, height: u16) -> String {
@@ -60,14 +60,11 @@ fn make_session_manager() -> SessionManager {
 #[test]
 fn snapshot_worktree_list_3_items() {
     let mut app = make_test_app(3);
-    // Add session state to make it interesting
-    let wt0_path = app.worktrees[0].path.clone();
-    let wt2_path = app.worktrees[2].path.clone();
-    app.session_ids.insert(wt0_path, "session-0".to_string());
-    app.session_ids.insert(wt2_path, "session-2".to_string());
-    app.active_session_id = Some("session-0".to_string());
+    // Move cursor to item 0 (past the section header)
+    app.sidebar_tree.jump_to_nth_item(0);
+    set_session(&mut app, 0, "session-0");
+    set_session(&mut app, 2, "session-2");
     app.exited_sessions.insert("session-2".to_string());
-    app.selected_worktree = 0;
 
     let sm = make_session_manager();
     let output = render_to_string(&mut app, &sm, 100, 20);
@@ -115,13 +112,11 @@ fn snapshot_status_bar_with_message() {
 #[test]
 fn snapshot_status_bar_with_sessions() {
     let mut app = make_test_app(3);
-    let wt0_path = app.worktrees[0].path.clone();
-    let wt1_path = app.worktrees[1].path.clone();
-    let wt2_path = app.worktrees[2].path.clone();
-    app.session_ids.insert(wt0_path, "s0".to_string());
-    app.session_ids.insert(wt1_path, "s1".to_string());
-    app.session_ids.insert(wt2_path, "s2".to_string());
-    app.active_session_id = Some("s0".to_string());
+    // Move cursor to item 0 so active_session_id returns "s0"
+    app.sidebar_tree.jump_to_nth_item(0);
+    set_session(&mut app, 0, "s0");
+    set_session(&mut app, 1, "s1");
+    set_session(&mut app, 2, "s2");
     app.exited_sessions.insert("s2".to_string());
 
     let sm = make_session_manager();
@@ -193,7 +188,7 @@ fn snapshot_git_status_sidebar_mixed() {
         ],
         selected: 0,
         error: None,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
     });
     app.sidebar_view = SidebarView::GitStatus;
     app.panel_focus = PanelFocus::Left;
@@ -262,15 +257,13 @@ fn snapshot_help_overlay_diff_view() {
 #[test]
 fn snapshot_split_two_panes() {
     let mut app = make_test_app(3);
-    let wt0 = app.worktrees[0].path.clone();
-    let wt1 = app.worktrees[1].path.clone();
-    app.session_ids.insert(wt0, "s0".to_string());
-    app.session_ids.insert(wt1, "s1".to_string());
-    app.active_session_id = Some("s0".to_string());
+    app.sidebar_tree.jump_to_nth_item(0);
+    set_session(&mut app, 0, "s0");
+    set_session(&mut app, 1, "s1");
     app.main_view = MainView::Terminal;
     app.panel_focus = PanelFocus::Right;
     app.pane_layout = Some(PaneLayout {
-        panes: vec!["s0".to_string(), "s1".to_string()],
+        panes: vec![PaneContent::Terminal("s0".to_string()), PaneContent::Terminal("s1".to_string())],
         focused: 0,
     });
 
@@ -282,16 +275,14 @@ fn snapshot_split_two_panes() {
 #[test]
 fn snapshot_split_focused_pane_highlighted() {
     let mut app = make_test_app(3);
-    let wt0 = app.worktrees[0].path.clone();
-    let wt1 = app.worktrees[1].path.clone();
-    app.session_ids.insert(wt0, "s0".to_string());
-    app.session_ids.insert(wt1, "s1".to_string());
-    app.active_session_id = Some("s0".to_string());
+    app.sidebar_tree.jump_to_nth_item(0);
+    set_session(&mut app, 0, "s0");
+    set_session(&mut app, 1, "s1");
     app.main_view = MainView::Terminal;
     app.panel_focus = PanelFocus::Right;
     // Focus is on second pane
     app.pane_layout = Some(PaneLayout {
-        panes: vec!["s0".to_string(), "s1".to_string()],
+        panes: vec![PaneContent::Terminal("s0".to_string()), PaneContent::Terminal("s1".to_string())],
         focused: 1,
     });
 
@@ -376,7 +367,7 @@ fn snapshot_git_blame_view() {
         ],
         scroll_offset: 0,
         visible_height: 20,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
     });
     app.main_view = MainView::GitBlame;
     app.panel_focus = PanelFocus::Right;
@@ -415,7 +406,7 @@ fn snapshot_git_log_view() {
         selected: 0,
         scroll_offset: 0,
         visible_height: 20,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
         file_filter: None,
     });
     app.main_view = MainView::GitLog;
@@ -443,7 +434,7 @@ fn snapshot_git_log_with_file_filter() {
         selected: 0,
         scroll_offset: 0,
         visible_height: 20,
-        worktree_path: app.worktrees[0].path.clone(),
+        worktree_path: item_path(&app, 0),
         file_filter: Some("src/parser.rs".to_string()),
     });
     app.main_view = MainView::GitLog;

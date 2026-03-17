@@ -342,12 +342,18 @@ fn keybindings_matches_negative_wrong_key() {
 }
 
 #[test]
-fn keybindings_matches_superset_modifiers() {
-    // If binding requires CONTROL, pressing CONTROL+SHIFT should still match
+fn keybindings_requires_exact_modifiers() {
+    // Ctrl+Shift+1 should NOT match a Ctrl+1 binding (prevents Ctrl+Shift+P triggering Ctrl+P)
     let binding = (KeyModifiers::CONTROL, KeyCode::Char('1'));
-    assert!(KeybindingsConfig::matches(
+    assert!(!KeybindingsConfig::matches(
         &binding,
         KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        KeyCode::Char('1')
+    ));
+    // Exact match should still work
+    assert!(KeybindingsConfig::matches(
+        &binding,
+        KeyModifiers::CONTROL,
         KeyCode::Char('1')
     ));
 }

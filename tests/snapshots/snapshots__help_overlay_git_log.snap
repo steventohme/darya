@@ -4,24 +4,24 @@ expression: output
 ---
  darya
 ┏ Worktrees ━━━━━━━━━━━━┓┏ Git Log — no data ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃▶ 1 ○ my-project [main]┃┃                                                                         ┃
-┃  2 ○ my-project [featu┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
+┃│ ▼ my-project         ┃┃                                                                         ┃
+┃    1 ▶ ○ my-project [m┃┃                                                                         ┃
+┃    2 ▶ ○ my-project-fe┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                   ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
 ┃                   ┃ Navigation — Git Log                                     ┃                   ┃
 ┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
-┃                   ┃ Ctrl+1: Worktrees  Ctrl+2: Terminal  Ctrl+3: Files  Ctrl+┃                   ┃
+┃                   ┃ Cmd+1: Worktrees  Cmd+2: Terminal  Cmd+3: Files  Cmd+4: E┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃ j/k, ↑/↓    Navigate commits                             ┃                   ┃
 ┃                   ┃ Enter       View commit diff                             ┃                   ┃
 ┃                   ┃ Esc         Back to terminal                             ┃                   ┃
 ┃                   ┃ 1-9, 0      Jump to worktree                             ┃                   ┃
 ┃                   ┃ Tab         Switch panel                                 ┃                   ┃
-┃                   ┃ Ctrl+P      Fuzzy file finder                            ┃                   ┃
-┃                   ┃ Ctrl+F      Project search                               ┃                   ┃
+┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
+┃                   ┃ Cmd+F       Project search                               ┃                   ┃
 ┃                   ┃ q           Quit                                         ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
 ┃                       ┃┃                                                                         ┃
@@ -31,4 +31,4 @@ expression: output
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- [NAV] log                                           main
+ [NAV] log

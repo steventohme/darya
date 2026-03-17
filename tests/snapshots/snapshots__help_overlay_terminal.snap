@@ -4,24 +4,24 @@ expression: output
 ---
  darya
 ┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃▶ 1 ○ my-project [main]┃┃  Press Enter on a worktree to start a Claude Code session               ┃
-┃  2 ○ my-project [featu┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
+┃│ ▼ my-project         ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
+┃    1 ▶ ○ my-project [m┃┃                                                                         ┃
+┃    2 ▶ ○ my-project-fe┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                   ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
 ┃                   ┃ Navigation — Terminal                                    ┃                   ┃
 ┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
-┃                   ┃ Ctrl+1: Worktrees  Ctrl+2: Terminal  Ctrl+3: Files  Ctrl+┃                   ┃
+┃                   ┃ Cmd+1: Worktrees  Cmd+2: Terminal  Cmd+3: Files  Cmd+4: E┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃ i, Enter    Enter terminal mode                          ┃                   ┃
 ┃                   ┃ PgUp/PgDn   Scroll output                                ┃                   ┃
-┃                   ┃ Ctrl+\      Split pane                                   ┃                   ┃
-┃                   ┃ Ctrl+W      Close pane                                   ┃                   ┃
+┃                   ┃ Cmd+\       Split: same type                             ┃                   ┃
+┃                   ┃ Cmd+W       Close pane                                   ┃                   ┃
+┃                   ┃             Palette: Split Terminal/Shell/Editor         ┃                   ┃
 ┃                   ┃ 1-9, 0      Jump to worktree                             ┃                   ┃
 ┃                   ┃ Tab         Cycle panes / switch panel                   ┃                   ┃
-┃                   ┃ Ctrl+P      Fuzzy file finder                            ┃                   ┃
-┃                   ┃ Ctrl+F      Project search                               ┃                   ┃
+┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
+┃                   ┃ Cmd+F       Project search                               ┃                   ┃
 ┃                   ┃ q           Quit                                         ┃                   ┃
 ┃                   ┃ Ctrl+C      Close session / Quit                         ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
@@ -31,4 +31,4 @@ expression: output
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- [NAV] terminal                                        main
+ [NAV] terminal
