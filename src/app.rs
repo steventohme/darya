@@ -6,14 +6,43 @@ use std::time::Instant;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Index2, Lines as EdtuiLines};
 
+use crate::sidebar::tree::SidebarTree;
+use crate::sidebar::types::SessionKind;
+
 const IGNORED_NAMES: &[&str] = &["target", "node_modules", "__pycache__"];
 const MAX_FILE_SIZE: u64 = 1_048_576; // 1MB
 const MAX_PANES: usize = 3;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum PaneContent {
+    Terminal(String),  // Claude session ID
+    Shell(String),     // Shell session ID
+    Editor,            // File editor (uses app.editor state)
+}
+
+impl PaneContent {
+    /// Extract the session ID if this pane contains a terminal or shell.
+    pub fn session_id(&self) -> Option<&str> {
+        match self {
+            PaneContent::Terminal(id) | PaneContent::Shell(id) => Some(id),
+            PaneContent::Editor => None,
+        }
+    }
+
+    /// Derive the ViewKind for this pane content.
+    pub fn to_view_kind(&self) -> ViewKind {
+        match self {
+            PaneContent::Terminal(_) => ViewKind::Terminal,
+            PaneContent::Shell(_) => ViewKind::Shell,
+            PaneContent::Editor => ViewKind::Editor,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PaneLayout {
-    pub panes: Vec<String>,  // session IDs, left to right, max 3
-    pub focused: usize,       // index into panes — input goes here
+    pub panes: Vec<PaneContent>,  // pane contents, left to right, max 3
+    pub focused: usize,            // index into panes — input goes here
 }
 
 use crate::config::{KeybindingsConfig, Theme};
@@ -116,6 +145,10 @@ pub enum Prompt {
     ConfirmDelete { worktree_name: String },
     /// Project search input
     SearchInput { input: String },
+    /// Add a named shell session slot
+    AddShellSlot { input: String },
+    /// Create a new sidebar section
+    CreateSection { input: String },
 }
 
 pub struct FileEntry {
@@ -508,9 +541,14 @@ pub enum CommandId {
     ProjectSearch,
     RefreshGitStatus,
     SplitPane,
+    SplitTerminal,
+    SplitShell,
+    SplitEditor,
     ClosePane,
     ToggleHelp,
     Quit,
+    AddSection,
+    AddShellSlot,
 }
 
 #[derive(Debug, Clone)]
@@ -545,10 +583,15 @@ impl CommandPaletteState {
             PaletteCommand { id: CommandId::FuzzyFinder, name: "Find File".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.fuzzy_finder)) },
             PaletteCommand { id: CommandId::ProjectSearch, name: "Search Project".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.project_search)) },
             PaletteCommand { id: CommandId::RefreshGitStatus, name: "Refresh Git Status".to_string(), keybinding: None },
-            PaletteCommand { id: CommandId::SplitPane, name: "Split Pane".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.split_pane)) },
+            PaletteCommand { id: CommandId::SplitPane, name: "Split: Same Type".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.split_pane)) },
+            PaletteCommand { id: CommandId::SplitTerminal, name: "Split: Terminal".to_string(), keybinding: None },
+            PaletteCommand { id: CommandId::SplitShell, name: "Split: Shell".to_string(), keybinding: None },
+            PaletteCommand { id: CommandId::SplitEditor, name: "Split: Editor".to_string(), keybinding: None },
             PaletteCommand { id: CommandId::ClosePane, name: "Close Pane".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.close_pane)) },
             PaletteCommand { id: CommandId::ToggleHelp, name: "Toggle Help".to_string(), keybinding: Some("?".to_string()) },
             PaletteCommand { id: CommandId::Quit, name: "Quit".to_string(), keybinding: Some("q".to_string()) },
+            PaletteCommand { id: CommandId::AddSection, name: "Sidebar: Add Section".to_string(), keybinding: Some("N".to_string()) },
+            PaletteCommand { id: CommandId::AddShellSlot, name: "Sidebar: Add Shell Slot".to_string(), keybinding: Some("S".to_string()) },
         ];
         let results = all_commands.clone();
         Self {
@@ -1419,12 +1462,8 @@ pub struct App {
     pub sidebar_view: SidebarView,
     pub main_view: MainView,
     pub keybindings: KeybindingsConfig,
-    pub worktrees: Vec<Worktree>,
-    pub selected_worktree: usize,
-    /// Maps worktree path -> session ID for worktrees with active sessions
-    pub session_ids: HashMap<PathBuf, String>,
-    /// Currently active session ID (the one being displayed)
-    pub active_session_id: Option<String>,
+    /// Hierarchical sidebar tree (sections → items → session slots)
+    pub sidebar_tree: SidebarTree,
     /// Active prompt overlay (if any)
     pub prompt: Option<Prompt>,
     /// Sessions that have received a bell (needs attention)
@@ -1452,14 +1491,8 @@ pub struct App {
     pub activity: ActivityAnimation,
     pub session_command: String,
     pub pane_layout: Option<PaneLayout>,
-    /// Maps worktree path -> shell session ID
-    pub shell_session_ids: HashMap<PathBuf, String>,
-    /// Currently active shell session ID
-    pub active_shell_session_id: Option<String>,
     /// Shell command to run (default: $SHELL)
     pub shell_command: String,
-    /// Pane layout for shell view (independent of terminal pane layout)
-    pub shell_pane_layout: Option<PaneLayout>,
 }
 
 impl App {
@@ -1468,6 +1501,7 @@ impl App {
             .first()
             .map(|wt| wt.path.clone())
             .unwrap_or_else(|| PathBuf::from("."));
+        let sidebar_tree = SidebarTree::from_worktrees(&worktrees);
         Self {
             running: true,
             input_mode: InputMode::Navigation,
@@ -1475,10 +1509,7 @@ impl App {
             sidebar_view: SidebarView::Worktrees,
             main_view: MainView::Terminal,
             keybindings,
-            worktrees,
-            selected_worktree: 0,
-            session_ids: HashMap::new(),
-            active_session_id: None,
+            sidebar_tree,
             attention_sessions: HashSet::new(),
             exited_sessions: HashSet::new(),
             prompt: None,
@@ -1500,17 +1531,46 @@ impl App {
             activity: ActivityAnimation::new(),
             session_command,
             pane_layout: None,
-            shell_session_ids: HashMap::new(),
-            active_shell_session_id: None,
             shell_command,
-            shell_pane_layout: None,
         }
+    }
+
+    // ── Backward-compat accessors ──
+
+    /// Get the path of the currently selected item.
+    pub fn selected_worktree_path(&self) -> Option<&PathBuf> {
+        self.sidebar_tree.selected_item().map(|item| &item.path)
+    }
+
+    /// Get the currently active Claude session ID (derived from sidebar tree cursor).
+    pub fn active_session_id(&self) -> Option<&str> {
+        // Check cursor position for a Claude session
+        let item = self.sidebar_tree.selected_item()?;
+        item.sessions.iter()
+            .find(|s| s.kind == SessionKind::Claude)
+            .and_then(|s| s.session_id.as_deref())
+    }
+
+    /// Get the currently active shell session ID (derived from sidebar tree cursor).
+    pub fn active_shell_session_id(&self) -> Option<&str> {
+        let item = self.sidebar_tree.selected_item()?;
+        item.sessions.iter()
+            .find(|s| s.kind == SessionKind::Shell)
+            .and_then(|s| s.session_id.as_deref())
     }
 
     pub fn focused_view(&self) -> ViewKind {
         match self.panel_focus {
             PanelFocus::Left => self.sidebar_view.to_view_kind(),
-            PanelFocus::Right => self.main_view.to_view_kind(),
+            PanelFocus::Right => {
+                // In split mode, derive from focused pane content
+                if let Some(ref layout) = self.pane_layout {
+                    if let Some(content) = layout.panes.get(layout.focused) {
+                        return content.to_view_kind();
+                    }
+                }
+                self.main_view.to_view_kind()
+            }
         }
     }
 
@@ -1542,9 +1602,6 @@ impl App {
                 if let Some(ref mut layout) = self.pane_layout {
                     layout.focused = 0;
                 }
-                if let Some(ref mut layout) = self.shell_pane_layout {
-                    layout.focused = 0;
-                }
                 PanelFocus::Right
             }
             PanelFocus::Right => PanelFocus::Left,
@@ -1552,10 +1609,29 @@ impl App {
     }
 
     /// If we just focused the main panel showing Terminal/Shell with an active non-exited session, enter terminal mode.
+    /// For Editor panes in split mode, stays in Navigation.
     fn enter_terminal_if_focused(&mut self) {
-        if self.panel_focus == PanelFocus::Right
-            && (self.main_view == MainView::Terminal || self.main_view == MainView::Shell)
-        {
+        if self.panel_focus != PanelFocus::Right {
+            return;
+        }
+        // In split mode, check focused pane content type
+        if let Some(ref layout) = self.pane_layout {
+            match layout.panes.get(layout.focused) {
+                Some(PaneContent::Terminal(_)) | Some(PaneContent::Shell(_)) => {
+                    if let Some(id) = self.focused_session_id().cloned() {
+                        self.attention_sessions.remove(&id);
+                        if !self.exited_sessions.contains(&id) {
+                            self.input_mode = InputMode::Terminal;
+                            self.reset_scroll();
+                        }
+                    }
+                }
+                _ => {} // Editor pane or empty — stay in Navigation
+            }
+            return;
+        }
+        // No split: check main_view
+        if self.main_view == MainView::Terminal || self.main_view == MainView::Shell {
             if let Some(id) = self.focused_session_id().cloned() {
                 self.attention_sessions.remove(&id);
                 if !self.exited_sessions.contains(&id) {
@@ -1575,7 +1651,7 @@ impl App {
             }
             AppEvent::SessionBell { session_id } => {
                 // Only mark as needing attention if it's not the currently viewed session in terminal mode
-                if !(self.active_session_id.as_deref() == Some(session_id)
+                if !(self.focused_session_id().map(|s| s.as_str()) == Some(session_id)
                     && self.input_mode == InputMode::Terminal)
                 {
                     self.attention_sessions.insert(session_id.clone());
@@ -1585,7 +1661,7 @@ impl App {
                 self.exited_sessions.insert(session_id.clone());
                 self.activity.remove_session(session_id);
                 // If user is in terminal mode on this session, kick to nav mode
-                if self.active_session_id.as_deref() == Some(session_id)
+                if self.focused_session_id().map(|s| s.as_str()) == Some(session_id)
                     && self.input_mode == InputMode::Terminal
                 {
                     self.input_mode = InputMode::Navigation;
@@ -1729,6 +1805,34 @@ impl App {
                 }
                 _ => {}
             },
+            Prompt::AddShellSlot { input } => match key.code {
+                KeyCode::Enter => {
+                    if !input.is_empty() {
+                        let label = input.clone();
+                        self.sidebar_tree.add_session_slot(SessionKind::Shell, label.clone());
+                        self.prompt = None;
+                        self.status_message = Some(format!("Added shell slot '{}'", label));
+                    }
+                }
+                KeyCode::Esc => { self.prompt = None; }
+                KeyCode::Backspace => { input.pop(); }
+                KeyCode::Char(c) => { input.push(c); }
+                _ => {}
+            },
+            Prompt::CreateSection { input } => match key.code {
+                KeyCode::Enter => {
+                    if !input.is_empty() {
+                        let name = input.clone();
+                        self.sidebar_tree.add_section(name.clone());
+                        self.prompt = None;
+                        self.status_message = Some(format!("Created section '{}'", name));
+                    }
+                }
+                KeyCode::Esc => { self.prompt = None; }
+                KeyCode::Backspace => { input.pop(); }
+                KeyCode::Char(c) => { input.push(c); }
+                _ => {}
+            },
         }
     }
 
@@ -1837,8 +1941,8 @@ impl App {
             CommandId::ViewEditor => self.set_main_view(MainView::Editor),
             CommandId::ViewSearch => self.set_sidebar_view(SidebarView::Search),
             CommandId::ViewGitStatus => {
-                if let Some(wt) = self.worktrees.get(self.selected_worktree) {
-                    let path = wt.path.clone();
+                if let Some(item) = self.sidebar_tree.selected_item() {
+                    let path = item.path.clone();
                     self.git_status = Some(GitStatusState::new(path));
                 }
                 self.set_sidebar_view(SidebarView::GitStatus);
@@ -1856,14 +1960,35 @@ impl App {
                 self.input_mode = InputMode::Navigation;
             }
             CommandId::RefreshGitStatus => {
-                if let Some(wt) = self.worktrees.get(self.selected_worktree) {
-                    let path = wt.path.clone();
+                if let Some(item) = self.sidebar_tree.selected_item() {
+                    let path = item.path.clone();
                     self.git_status = Some(GitStatusState::new(path));
                     self.status_message = Some("Git status refreshed".to_string());
                 }
             }
             CommandId::SplitPane => {
                 self.split_add_pane();
+            }
+            CommandId::SplitTerminal => {
+                if let Some(id) = self.find_next_terminal_session() {
+                    self.split_add_pane_with(PaneContent::Terminal(id));
+                } else if let Some(id) = self.active_session_id().map(|s| s.to_string()) {
+                    self.split_add_pane_with(PaneContent::Terminal(id));
+                } else {
+                    self.status_message = Some("No terminal sessions available".to_string());
+                }
+            }
+            CommandId::SplitShell => {
+                if let Some(id) = self.find_next_shell_session() {
+                    self.split_add_pane_with(PaneContent::Shell(id));
+                } else if let Some(id) = self.active_shell_session_id().map(|s| s.to_string()) {
+                    self.split_add_pane_with(PaneContent::Shell(id));
+                } else {
+                    self.status_message = Some("No shell sessions available".to_string());
+                }
+            }
+            CommandId::SplitEditor => {
+                self.split_add_pane_with(PaneContent::Editor);
             }
             CommandId::ClosePane => {
                 self.close_focused_pane();
@@ -1882,6 +2007,12 @@ impl App {
             }
             CommandId::CloseSession => {
                 self.status_message = Some("Use Ctrl+C to close the active session".to_string());
+            }
+            CommandId::AddSection => {
+                self.prompt = Some(Prompt::CreateSection { input: String::new() });
+            }
+            CommandId::AddShellSlot => {
+                self.prompt = Some(Prompt::AddShellSlot { input: String::new() });
             }
         }
     }
@@ -1906,8 +2037,8 @@ impl App {
         }
         if KeybindingsConfig::matches(&kb.git_status, key.modifiers, key.code) {
             // Refresh git status on activation
-            if let Some(wt) = self.worktrees.get(self.selected_worktree) {
-                let path = wt.path.clone();
+            if let Some(item) = self.sidebar_tree.selected_item() {
+                let path = item.path.clone();
                 self.git_status = Some(GitStatusState::new(path));
             }
             self.set_sidebar_view(SidebarView::GitStatus); return;
@@ -1930,8 +2061,9 @@ impl App {
             self.show_help = false;
             return;
         }
-        // h/l cycle sidebar views when left panel is focused
-        if self.panel_focus == PanelFocus::Left {
+        // h/l cycle sidebar views when left panel is focused (except in Worktrees view
+        // where h/l do expand/collapse in the tree)
+        if self.panel_focus == PanelFocus::Left && self.sidebar_view != SidebarView::Worktrees {
             if key.code == KeyCode::Char('l') {
                 self.sidebar_view = self.sidebar_view.next();
                 return;
@@ -1959,27 +2091,38 @@ impl App {
         match key.code {
             KeyCode::Char('q') => self.running = false,
             KeyCode::Char('j') | KeyCode::Down => {
-                if !self.worktrees.is_empty() {
-                    self.selected_worktree =
-                        (self.selected_worktree + 1) % self.worktrees.len();
-                    self.switch_to_selected_session();
-                }
+                self.sidebar_tree.move_down();
+                self.switch_to_selected_session();
             }
             KeyCode::Char('k') | KeyCode::Up => {
-                if !self.worktrees.is_empty() {
-                    self.selected_worktree = if self.selected_worktree == 0 {
-                        self.worktrees.len() - 1
-                    } else {
-                        self.selected_worktree - 1
-                    };
-                    self.switch_to_selected_session();
-                }
+                self.sidebar_tree.move_up();
+                self.switch_to_selected_session();
             }
             KeyCode::Enter => {
-                // Signal that we want to start a session for this worktree
-                // Actual spawning is handled by main loop
+                // On section/item: toggle collapse. On session: signal spawn (handled by main loop).
+                use crate::sidebar::tree::TreeNode;
+                if let Some(&node) = self.sidebar_tree.selected_node() {
+                    match node {
+                        TreeNode::Section(_) => { self.sidebar_tree.toggle_collapse(); }
+                        TreeNode::Item(..) => {
+                            // Signal session spawn — handled by main loop
+                        }
+                        TreeNode::Session(..) => {
+                            // Signal session spawn — handled by main loop
+                        }
+                    }
+                }
             }
-            // 1-9, 0 jump to worktree by index (0 = 10th)
+            KeyCode::Char('l') | KeyCode::Right => {
+                if !self.sidebar_tree.expand() {
+                    // Already expanded — move to first child
+                    self.sidebar_tree.move_down();
+                }
+            }
+            KeyCode::Char('h') | KeyCode::Left => {
+                self.sidebar_tree.collapse_or_parent();
+            }
+            // 1-9, 0 jump to item by index (0 = 10th)
             KeyCode::Char(c @ '1'..='9') => {
                 self.jump_to_worktree((c as usize) - ('1' as usize));
             }
@@ -1992,15 +2135,27 @@ impl App {
                 });
             }
             KeyCode::Char('d') => {
-                if let Some(wt) = self.worktrees.get(self.selected_worktree) {
-                    if !wt.is_main {
+                if let Some(item) = self.sidebar_tree.selected_item() {
+                    if !item.is_main {
                         self.prompt = Some(Prompt::ConfirmDelete {
-                            worktree_name: wt.name.clone(),
+                            worktree_name: item.display_name.clone(),
                         });
                     } else {
                         self.status_message = Some("Cannot delete main worktree".to_string());
                     }
                 }
+            }
+            KeyCode::Char('S') => {
+                // Add named shell slot to current item
+                self.prompt = Some(Prompt::AddShellSlot {
+                    input: String::new(),
+                });
+            }
+            KeyCode::Char('N') => {
+                // Create new section
+                self.prompt = Some(Prompt::CreateSection {
+                    input: String::new(),
+                });
             }
             KeyCode::Tab => {
                 self.toggle_focus();
@@ -2014,14 +2169,9 @@ impl App {
         match key.code {
             KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
-                let active_layout = if self.main_view == MainView::Shell {
-                    self.shell_pane_layout.as_ref()
-                } else {
-                    self.pane_layout.as_ref()
-                };
-                if let Some(layout) = active_layout {
+                if let Some(ref layout) = self.pane_layout {
                     if layout.focused < layout.panes.len() - 1 {
-                        // Not last pane: cycle to next, enter terminal if session alive
+                        // Not last pane: cycle to next, enter appropriate mode
                         self.cycle_pane_focus_next();
                         self.enter_terminal_if_focused();
                     } else {
@@ -2059,15 +2209,19 @@ impl App {
 
     fn handle_terminal_key(&mut self, key: KeyEvent) {
         if key.code == KeyCode::Tab {
-            let active_layout = if self.main_view == MainView::Shell {
-                self.shell_pane_layout.as_ref()
-            } else {
-                self.pane_layout.as_ref()
-            };
-            if let Some(layout) = active_layout {
+            if let Some(ref layout) = self.pane_layout {
                 if layout.focused < layout.panes.len() - 1 {
-                    // Not last pane: cycle to next, stay in Terminal mode
+                    // Not last pane: cycle to next, enter appropriate mode
                     self.cycle_pane_focus_next();
+                    // Check if the new pane is a terminal/shell (stay Terminal) or editor (switch to Nav)
+                    if let Some(ref layout) = self.pane_layout {
+                        match layout.panes.get(layout.focused) {
+                            Some(PaneContent::Editor) => {
+                                self.input_mode = InputMode::Navigation;
+                            }
+                            _ => {} // Stay in Terminal mode for Terminal/Shell panes
+                        }
+                    }
                 } else {
                     // Last pane: exit to nav, go to left panel
                     self.input_mode = InputMode::Navigation;
@@ -2166,8 +2320,17 @@ impl App {
             }
             KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
-                self.toggle_focus();
-                self.enter_terminal_if_focused();
+                if let Some(ref layout) = self.pane_layout {
+                    if layout.focused < layout.panes.len() - 1 {
+                        self.cycle_pane_focus_next();
+                        self.enter_terminal_if_focused();
+                    } else {
+                        self.panel_focus = PanelFocus::Left;
+                    }
+                } else {
+                    self.toggle_focus();
+                    self.enter_terminal_if_focused();
+                }
             }
             KeyCode::Char(c @ '1'..='9') => {
                 self.jump_to_worktree((c as usize) - ('1' as usize));
@@ -2409,10 +2572,10 @@ impl App {
             self.status_message = Some("No file open in editor".to_string());
             return;
         };
-        let Some(wt) = self.worktrees.get(self.selected_worktree) else {
+        let Some(item) = self.sidebar_tree.selected_item() else {
             return;
         };
-        let root = wt.path.clone();
+        let root = item.path.clone();
         let file_path = editor.file_path.clone();
         let relative = file_path
             .strip_prefix(&root)
@@ -2437,10 +2600,10 @@ impl App {
     }
 
     fn open_git_log(&mut self) {
-        let Some(wt) = self.worktrees.get(self.selected_worktree) else {
+        let Some(item) = self.sidebar_tree.selected_item() else {
             return;
         };
-        let root = wt.path.clone();
+        let root = item.path.clone();
         let file_filter = self.editor.as_ref().and_then(|ed| {
             ed.file_path
                 .strip_prefix(&root)
@@ -2467,24 +2630,20 @@ impl App {
     }
 
     fn jump_to_worktree(&mut self, index: usize) {
-        if index < self.worktrees.len() {
-            self.selected_worktree = index;
+        if self.sidebar_tree.jump_to_nth_item(index) {
             self.switch_to_selected_session();
         }
     }
 
     fn switch_to_selected_session(&mut self) {
-        if let Some(wt) = self.worktrees.get(self.selected_worktree) {
-            self.active_session_id = self.session_ids.get(&wt.path).cloned();
-            self.active_shell_session_id = self.shell_session_ids.get(&wt.path).cloned();
-            // Clear attention when switching to a session
-            if let Some(ref id) = self.active_session_id {
-                self.attention_sessions.remove(id);
+        if let Some(item) = self.sidebar_tree.selected_item() {
+            // Clear attention for any sessions in this item
+            for slot in &item.sessions {
+                if let Some(ref id) = slot.session_id {
+                    self.attention_sessions.remove(id);
+                }
             }
-            if let Some(ref id) = self.active_shell_session_id {
-                self.attention_sessions.remove(id);
-            }
-            self.file_explorer.set_root(wt.path.clone());
+            self.file_explorer.set_root(item.path.clone());
             // Clear stale git state from previous worktree
             self.git_status = None;
             self.diff_view = None;
@@ -2494,62 +2653,171 @@ impl App {
     }
 
     /// Returns the session ID that should receive input: view-aware routing.
-    /// When Shell view is active, returns from shell session state; otherwise from Claude session state.
+    /// In split mode, extracts session ID from focused pane content.
+    /// Fallback: derives from sidebar tree cursor based on main_view.
     pub fn focused_session_id(&self) -> Option<&String> {
-        if self.main_view == MainView::Shell {
-            if let Some(ref layout) = self.shell_pane_layout {
-                layout.panes.get(layout.focused)
-            } else {
-                self.active_shell_session_id.as_ref()
-            }
-        } else if let Some(ref layout) = self.pane_layout {
-            layout.panes.get(layout.focused)
-        } else {
-            self.active_session_id.as_ref()
+        if let Some(ref layout) = self.pane_layout {
+            return match layout.panes.get(layout.focused) {
+                Some(PaneContent::Terminal(id)) | Some(PaneContent::Shell(id)) => Some(id),
+                _ => None,
+            };
         }
+        // No split: derive from sidebar_tree selected item
+        let item = self.sidebar_tree.selected_item()?;
+        let target_kind = if self.main_view == MainView::Shell {
+            SessionKind::Shell
+        } else {
+            SessionKind::Claude
+        };
+        item.sessions.iter()
+            .find(|s| s.kind == target_kind)
+            .and_then(|s| s.session_id.as_ref())
+    }
+
+    /// Returns the focused pane content, if in split mode.
+    pub fn focused_pane_content(&self) -> Option<&PaneContent> {
+        self.pane_layout.as_ref()
+            .and_then(|layout| layout.panes.get(layout.focused))
     }
 
     /// Whether a session is currently visible on screen.
     pub fn is_session_visible(&self, session_id: &str) -> bool {
-        // Check Claude terminal panes
+        // Check pane layout for any Terminal/Shell pane with this session ID
         if let Some(ref layout) = self.pane_layout {
-            if layout.panes.iter().any(|id| id == session_id) {
-                return self.main_view == MainView::Terminal;
-            }
-        } else if self.active_session_id.as_deref() == Some(session_id)
-            && self.main_view == MainView::Terminal
-        {
-            return true;
+            return layout.panes.iter().any(|pane| {
+                pane.session_id() == Some(session_id)
+            });
         }
-        // Check shell panes
-        if let Some(ref layout) = self.shell_pane_layout {
-            if layout.panes.iter().any(|id| id == session_id) {
-                return self.main_view == MainView::Shell;
-            }
-        } else if self.active_shell_session_id.as_deref() == Some(session_id)
-            && self.main_view == MainView::Shell
-        {
-            return true;
-        }
-        false
+        // No split: check if focused session matches
+        self.focused_session_id()
+            .map(|id| id.as_str() == session_id)
+            .unwrap_or(false)
+            && (self.main_view == MainView::Terminal || self.main_view == MainView::Shell)
     }
 
     /// Reverse lookup: find the worktree name for a given session ID.
     pub fn worktree_name_for_session(&self, session_id: &str) -> Option<&str> {
-        for (path, sid) in &self.session_ids {
-            if sid == session_id {
-                for wt in &self.worktrees {
-                    if &wt.path == path {
-                        return Some(&wt.name);
+        self.sidebar_tree.name_for_session(session_id)
+    }
+
+    /// Add a pane with the given content. Creates PaneLayout if None. Max 3.
+    pub fn split_add_pane_with(&mut self, content: PaneContent) -> bool {
+        if let Some(ref layout) = self.pane_layout {
+            if layout.panes.len() >= MAX_PANES {
+                self.status_message = Some(format!("Maximum {} panes", MAX_PANES));
+                return false;
+            }
+        }
+
+        // Build initial pane from current state if no layout exists
+        let current_pane = if self.pane_layout.is_none() {
+            match self.main_view {
+                MainView::Terminal => {
+                    self.active_session_id().map(|id| PaneContent::Terminal(id.to_string()))
+                }
+                MainView::Shell => {
+                    self.active_shell_session_id().map(|id| PaneContent::Shell(id.to_string()))
+                }
+                MainView::Editor => Some(PaneContent::Editor),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        if self.pane_layout.is_none() {
+            let Some(first_pane) = current_pane else {
+                self.status_message = Some("No active view to split".to_string());
+                return false;
+            };
+            self.pane_layout = Some(PaneLayout {
+                panes: vec![first_pane, content],
+                focused: 0,
+            });
+        } else {
+            self.pane_layout.as_mut().unwrap().panes.push(content);
+        }
+        true
+    }
+
+    /// Add a pane of the same type as the current focused content, finding the next available session.
+    /// Returns false if no sessions available.
+    pub fn split_add_pane(&mut self) -> bool {
+        // Check MAX_PANES first
+        if let Some(ref layout) = self.pane_layout {
+            if layout.panes.len() >= MAX_PANES {
+                self.status_message = Some(format!("Maximum {} panes", MAX_PANES));
+                return false;
+            }
+        }
+        // Determine the type to split based on focused content
+        let split_type = if let Some(ref layout) = self.pane_layout {
+            match layout.panes.get(layout.focused) {
+                Some(PaneContent::Terminal(_)) => "terminal",
+                Some(PaneContent::Shell(_)) => "shell",
+                Some(PaneContent::Editor) => "editor",
+                None => return false,
+            }
+        } else {
+            match self.main_view {
+                MainView::Terminal => "terminal",
+                MainView::Shell => "shell",
+                MainView::Editor => "editor",
+                _ => {
+                    self.status_message = Some("Split not supported for this view".to_string());
+                    return false;
+                }
+            }
+        };
+
+        match split_type {
+            "terminal" => {
+                let next = self.find_next_terminal_session();
+                match next {
+                    Some(id) => self.split_add_pane_with(PaneContent::Terminal(id)),
+                    None => {
+                        self.status_message = Some("No other running sessions to show".to_string());
+                        false
                     }
                 }
             }
+            "shell" => {
+                let next = self.find_next_shell_session();
+                match next {
+                    Some(id) => self.split_add_pane_with(PaneContent::Shell(id)),
+                    None => {
+                        self.status_message = Some("No other running shell sessions to show".to_string());
+                        false
+                    }
+                }
+            }
+            "editor" => {
+                // Editor pane is singular — just add it
+                self.split_add_pane_with(PaneContent::Editor)
+            }
+            _ => false,
         }
-        for (path, sid) in &self.shell_session_ids {
-            if sid == session_id {
-                for wt in &self.worktrees {
-                    if &wt.path == path {
-                        return Some(&wt.name);
+    }
+
+    /// Find next terminal (Claude) session not already in pane layout.
+    fn find_next_terminal_session(&self) -> Option<String> {
+        let current_ids: Vec<&str> = if let Some(ref layout) = self.pane_layout {
+            layout.panes.iter().filter_map(|p| p.session_id()).collect()
+        } else if let Some(id) = self.active_session_id() {
+            vec![id]
+        } else {
+            vec![]
+        };
+
+        for section in &self.sidebar_tree.sections {
+            for item in &section.items {
+                for slot in &item.sessions {
+                    if slot.kind == SessionKind::Claude {
+                        if let Some(ref sid) = slot.session_id {
+                            if !current_ids.contains(&sid.as_str()) && !self.exited_sessions.contains(sid.as_str()) {
+                                return Some(sid.clone());
+                            }
+                        }
                     }
                 }
             }
@@ -2557,72 +2825,35 @@ impl App {
         None
     }
 
-    /// Add a pane showing the next non-visible running session.
-    /// Creates PaneLayout if None. Max 3. Returns false if no sessions available.
-    pub fn split_add_pane(&mut self) -> bool {
-        if self.main_view == MainView::Shell {
-            return self.shell_split_add_pane();
-        }
-        if self.main_view != MainView::Terminal {
-            self.status_message = Some("Split only works in terminal view".to_string());
-            return false;
-        }
+    /// Find next shell session not already in pane layout.
+    fn find_next_shell_session(&self) -> Option<String> {
+        let current_ids: Vec<&str> = if let Some(ref layout) = self.pane_layout {
+            layout.panes.iter().filter_map(|p| p.session_id()).collect()
+        } else if let Some(id) = self.active_shell_session_id() {
+            vec![id]
+        } else {
+            vec![]
+        };
 
-        let current_panes: Vec<String> = if let Some(ref layout) = self.pane_layout {
-            if layout.panes.len() >= MAX_PANES {
-                self.status_message = Some(format!("Maximum {} panes", MAX_PANES));
-                return false;
+        for section in &self.sidebar_tree.sections {
+            for item in &section.items {
+                for slot in &item.sessions {
+                    if slot.kind == SessionKind::Shell {
+                        if let Some(ref sid) = slot.session_id {
+                            if !current_ids.contains(&sid.as_str()) && !self.exited_sessions.contains(sid.as_str()) {
+                                return Some(sid.clone());
+                            }
+                        }
+                    }
+                }
             }
-            layout.panes.clone()
-        } else if let Some(ref id) = self.active_session_id {
-            vec![id.clone()]
-        } else {
-            self.status_message = Some("No active session to split".to_string());
-            return false;
-        };
-
-        // Find next non-visible running session in worktree order
-        let next_session = self.worktrees.iter()
-            .filter_map(|wt| self.session_ids.get(&wt.path))
-            .find(|sid| !current_panes.contains(sid) && !self.exited_sessions.contains(sid.as_str()))
-            .cloned();
-
-        let Some(next_id) = next_session else {
-            self.status_message = Some("No other running sessions to show".to_string());
-            return false;
-        };
-
-        let mut panes = current_panes;
-        panes.push(next_id);
-        let focused = if let Some(ref layout) = self.pane_layout {
-            layout.focused
-        } else {
-            0
-        };
-        self.pane_layout = Some(PaneLayout { panes, focused });
-        true
+        }
+        None
     }
 
     /// Remove the focused pane. Collapses to single mode if <=1 remains.
+    /// Sets main_view based on remaining pane's content type.
     pub fn close_focused_pane(&mut self) {
-        if self.main_view == MainView::Shell {
-            let Some(ref mut layout) = self.shell_pane_layout else { return };
-            if layout.panes.len() <= 1 {
-                self.shell_pane_layout = None;
-                return;
-            }
-            layout.panes.remove(layout.focused);
-            if layout.focused >= layout.panes.len() {
-                layout.focused = layout.panes.len() - 1;
-            }
-            if layout.panes.len() <= 1 {
-                if let Some(remaining) = layout.panes.first().cloned() {
-                    self.active_shell_session_id = Some(remaining);
-                }
-                self.shell_pane_layout = None;
-            }
-            return;
-        }
         let Some(ref mut layout) = self.pane_layout else { return };
         if layout.panes.len() <= 1 {
             self.pane_layout = None;
@@ -2633,32 +2864,32 @@ impl App {
             layout.focused = layout.panes.len() - 1;
         }
         if layout.panes.len() <= 1 {
-            // Switch active_session_id to the remaining pane
+            // Collapse: set main_view based on remaining pane
             if let Some(remaining) = layout.panes.first().cloned() {
-                self.active_session_id = Some(remaining);
+                match &remaining {
+                    PaneContent::Terminal(_) => {
+                        self.main_view = MainView::Terminal;
+                    }
+                    PaneContent::Shell(_) => {
+                        self.main_view = MainView::Shell;
+                    }
+                    PaneContent::Editor => {
+                        self.main_view = MainView::Editor;
+                    }
+                }
             }
             self.pane_layout = None;
         }
     }
 
     pub fn cycle_pane_focus_next(&mut self) {
-        let layout = if self.main_view == MainView::Shell {
-            self.shell_pane_layout.as_mut()
-        } else {
-            self.pane_layout.as_mut()
-        };
-        if let Some(layout) = layout {
+        if let Some(ref mut layout) = self.pane_layout {
             layout.focused = (layout.focused + 1) % layout.panes.len();
         }
     }
 
     pub fn cycle_pane_focus_prev(&mut self) {
-        let layout = if self.main_view == MainView::Shell {
-            self.shell_pane_layout.as_mut()
-        } else {
-            self.pane_layout.as_mut()
-        };
-        if let Some(layout) = layout {
+        if let Some(ref mut layout) = self.pane_layout {
             layout.focused = if layout.focused == 0 {
                 layout.panes.len() - 1
             } else {
@@ -2670,7 +2901,7 @@ impl App {
     /// Remove a session from the pane layout if present. Collapses if needed.
     pub fn remove_session_from_panes(&mut self, session_id: &str) {
         let Some(ref mut layout) = self.pane_layout else { return };
-        if let Some(pos) = layout.panes.iter().position(|id| id == session_id) {
+        if let Some(pos) = layout.panes.iter().position(|p| p.session_id() == Some(session_id)) {
             layout.panes.remove(pos);
             if layout.focused >= layout.panes.len() && layout.focused > 0 {
                 layout.focused = layout.panes.len() - 1;
@@ -2678,7 +2909,17 @@ impl App {
         }
         if layout.panes.len() <= 1 {
             if let Some(remaining) = layout.panes.first().cloned() {
-                self.active_session_id = Some(remaining);
+                match &remaining {
+                    PaneContent::Terminal(_) => {
+                        self.main_view = MainView::Terminal;
+                    }
+                    PaneContent::Shell(_) => {
+                        self.main_view = MainView::Shell;
+                    }
+                    PaneContent::Editor => {
+                        self.main_view = MainView::Editor;
+                    }
+                }
             }
             self.pane_layout = None;
         }
@@ -2719,36 +2960,32 @@ impl App {
         self.scroll_offsets.get(session_id).copied().unwrap_or(0)
     }
 
-    pub fn selected_worktree_path(&self) -> Option<&PathBuf> {
-        self.worktrees.get(self.selected_worktree).map(|wt| &wt.path)
-    }
-
-    /// Count sessions that are running (in session_ids but not exited).
+    /// Count sessions that are running (have session_id but not exited).
     pub fn running_session_count(&self) -> usize {
-        self.session_ids
-            .values()
-            .filter(|id| !self.exited_sessions.contains(id.as_str()))
+        self.sidebar_tree.all_session_ids()
+            .iter()
+            .filter(|id| !self.exited_sessions.contains(**id))
             .count()
     }
 
     /// Count sessions that have exited.
     pub fn exited_session_count(&self) -> usize {
-        self.session_ids
-            .values()
-            .filter(|id| self.exited_sessions.contains(id.as_str()))
+        self.sidebar_tree.all_session_ids()
+            .iter()
+            .filter(|id| self.exited_sessions.contains(**id))
             .count()
     }
 
     /// Get branch name and dirty counts for the selected worktree.
     /// Returns (branch_name, untracked_count, modified_count).
     pub fn selected_branch_info(&self) -> Option<(String, usize, usize)> {
-        let wt = self.worktrees.get(self.selected_worktree)?;
-        let branch = wt
+        let item = self.sidebar_tree.selected_item()?;
+        let branch = item
             .branch
             .clone()
             .unwrap_or_else(|| "detached".to_string());
         let (untracked, modified) = match &self.git_status {
-            Some(gs) if gs.worktree_path == wt.path => {
+            Some(gs) if gs.worktree_path == item.path => {
                 let u = gs
                     .entries
                     .iter()
@@ -2766,6 +3003,7 @@ impl App {
         Some((branch, untracked, modified))
     }
 
+    /// Check if cursor is on a session slot with an active session (for close on Backspace).
     pub fn needs_session_close(&self, key: &KeyEvent) -> bool {
         if key.code != KeyCode::Backspace
             || self.prompt.is_some()
@@ -2774,11 +3012,11 @@ impl App {
         {
             return false;
         }
-        self.selected_worktree_path()
-            .and_then(|p| self.session_ids.get(p))
-            .is_some()
+        // Close works from worktree sidebar or right panel terminal/shell view
+        self.cursor_session_id().is_some()
     }
 
+    /// Check if cursor is on an exited session (for restart on 'r').
     pub fn needs_session_restart(&self, key: &KeyEvent) -> bool {
         if key.code != KeyCode::Char('r')
             || self.prompt.is_some()
@@ -2787,116 +3025,77 @@ impl App {
         {
             return false;
         }
-        self.selected_worktree_path()
-            .and_then(|p| self.session_ids.get(p))
+        self.cursor_session_id()
             .map(|id| self.exited_sessions.contains(id))
             .unwrap_or(false)
     }
 
+    /// Check if Enter should spawn/switch a session.
     pub fn needs_session_spawn(&self, key: &KeyEvent) -> bool {
         self.prompt.is_none()
             && !self.show_help
             && key.code == KeyCode::Enter
             && self.input_mode == InputMode::Navigation
             && ((self.sidebar_view == SidebarView::Worktrees && self.panel_focus == PanelFocus::Left)
-                || (self.main_view == MainView::Terminal && self.panel_focus == PanelFocus::Right))
+                || (self.main_view == MainView::Terminal && self.panel_focus == PanelFocus::Right)
+                || (self.main_view == MainView::Shell && self.panel_focus == PanelFocus::Right))
     }
 
-    pub fn needs_shell_spawn(&self, key: &KeyEvent) -> bool {
-        self.prompt.is_none()
-            && !self.show_help
-            && key.code == KeyCode::Enter
-            && self.input_mode == InputMode::Navigation
-            && self.main_view == MainView::Shell
-            && self.panel_focus == PanelFocus::Right
+    /// Merged: no longer separate shell spawn check. needs_session_spawn handles all.
+    pub fn needs_shell_spawn(&self, _key: &KeyEvent) -> bool {
+        false // Handled by needs_session_spawn now
     }
 
-    pub fn needs_shell_restart(&self, key: &KeyEvent) -> bool {
-        if key.code != KeyCode::Char('r')
-            || self.prompt.is_some()
-            || self.show_help
-            || self.input_mode != InputMode::Navigation
-            || self.main_view != MainView::Shell
-        {
-            return false;
-        }
-        self.selected_worktree_path()
-            .and_then(|p| self.shell_session_ids.get(p))
-            .map(|id| self.exited_sessions.contains(id))
-            .unwrap_or(false)
+    pub fn needs_shell_restart(&self, _key: &KeyEvent) -> bool {
+        false // Handled by needs_session_restart now
     }
 
-    pub fn needs_shell_close(&self, key: &KeyEvent) -> bool {
-        if key.code != KeyCode::Backspace
-            || self.prompt.is_some()
-            || self.show_help
-            || self.input_mode != InputMode::Navigation
-            || self.main_view != MainView::Shell
-        {
-            return false;
-        }
-        self.selected_worktree_path()
-            .and_then(|p| self.shell_session_ids.get(p))
-            .is_some()
+    pub fn needs_shell_close(&self, _key: &KeyEvent) -> bool {
+        false // Handled by needs_session_close now
     }
 
-    /// Add a pane in shell view showing the next non-visible shell session.
-    pub fn shell_split_add_pane(&mut self) -> bool {
-        if self.main_view != MainView::Shell {
-            self.status_message = Some("Split only works in shell view".to_string());
-            return false;
-        }
-
-        let current_panes: Vec<String> = if let Some(ref layout) = self.shell_pane_layout {
-            if layout.panes.len() >= MAX_PANES {
-                self.status_message = Some(format!("Maximum {} panes", MAX_PANES));
-                return false;
+    /// Get the session ID at the current cursor position.
+    /// For Item nodes, returns the first Claude session's ID.
+    /// For Session nodes, returns that slot's ID.
+    pub fn cursor_session_id(&self) -> Option<&str> {
+        use crate::sidebar::tree::TreeNode;
+        match self.sidebar_tree.visible.get(self.sidebar_tree.cursor)? {
+            TreeNode::Section(_) => None,
+            TreeNode::Item(si, ii) => {
+                // Return first session with an active ID
+                self.sidebar_tree.sections.get(*si)?
+                    .items.get(*ii)?
+                    .sessions.iter()
+                    .find_map(|s| s.session_id.as_deref())
             }
-            layout.panes.clone()
-        } else if let Some(ref id) = self.active_shell_session_id {
-            vec![id.clone()]
-        } else {
-            self.status_message = Some("No active shell session to split".to_string());
-            return false;
-        };
-
-        let next_session = self.worktrees.iter()
-            .filter_map(|wt| self.shell_session_ids.get(&wt.path))
-            .find(|sid| !current_panes.contains(sid) && !self.exited_sessions.contains(sid.as_str()))
-            .cloned();
-
-        let Some(next_id) = next_session else {
-            self.status_message = Some("No other running shell sessions to show".to_string());
-            return false;
-        };
-
-        let mut panes = current_panes;
-        panes.push(next_id);
-        let focused = if let Some(ref layout) = self.shell_pane_layout {
-            layout.focused
-        } else {
-            0
-        };
-        self.shell_pane_layout = Some(PaneLayout { panes, focused });
-        true
-    }
-
-    /// Remove a shell session from pane layout if present.
-    pub fn remove_shell_session_from_panes(&mut self, session_id: &str) {
-        let Some(ref mut layout) = self.shell_pane_layout else { return };
-        if let Some(pos) = layout.panes.iter().position(|id| id == session_id) {
-            layout.panes.remove(pos);
-            if layout.focused >= layout.panes.len() && layout.focused > 0 {
-                layout.focused = layout.panes.len() - 1;
+            TreeNode::Session(si, ii, slot) => {
+                self.sidebar_tree.sections.get(*si)?
+                    .items.get(*ii)?
+                    .sessions.get(*slot)?
+                    .session_id.as_deref()
             }
         }
-        if layout.panes.len() <= 1 {
-            if let Some(remaining) = layout.panes.first().cloned() {
-                self.active_shell_session_id = Some(remaining);
+    }
+
+    /// Get the session kind + ID at cursor for spawn/switch logic.
+    pub fn cursor_session_info(&self) -> Option<(SessionKind, Option<&str>, &PathBuf)> {
+        use crate::sidebar::tree::TreeNode;
+        let node = self.sidebar_tree.visible.get(self.sidebar_tree.cursor)?;
+        match node {
+            TreeNode::Section(_) => None,
+            TreeNode::Item(si, ii) => {
+                let item = self.sidebar_tree.sections.get(*si)?.items.get(*ii)?;
+                let slot = item.sessions.first()?;
+                Some((slot.kind, slot.session_id.as_deref(), &item.path))
             }
-            self.shell_pane_layout = None;
+            TreeNode::Session(si, ii, slot_idx) => {
+                let item = self.sidebar_tree.sections.get(*si)?.items.get(*ii)?;
+                let slot = item.sessions.get(*slot_idx)?;
+                Some((slot.kind, slot.session_id.as_deref(), &item.path))
+            }
         }
     }
+
 
     /// Check if user confirmed worktree creation. Returns the branch name.
     pub fn wants_create_worktree(&self, key: &KeyEvent) -> Option<String> {
@@ -2919,16 +3118,37 @@ impl App {
         false
     }
 
-    pub fn refresh_worktrees(&mut self, worktrees: Vec<Worktree>) {
-        self.worktrees = worktrees;
-        if self.worktrees.is_empty() {
-            self.selected_worktree = 0;
-        } else if self.selected_worktree >= self.worktrees.len() {
-            self.selected_worktree = self.worktrees.len() - 1;
+    /// Look up the worktree name for a given session ID.
+    pub fn session_worktree_name(&self, session_id: &str) -> Option<&str> {
+        self.sidebar_tree.name_for_session(session_id)
+    }
+
+    /// Returns a notification message if the event warrants an OS alert, None otherwise.
+    pub fn notification_for_event(&self, event: &AppEvent) -> Option<String> {
+        match event {
+            AppEvent::SessionBell { session_id } => {
+                // Same logic as attention_sessions: only notify if user isn't actively viewing
+                if self.focused_session_id().map(|s| s.as_str()) == Some(session_id)
+                    && self.input_mode == InputMode::Terminal
+                {
+                    return None;
+                }
+                let name = self.session_worktree_name(session_id)?;
+                Some(format!("{} needs attention", name))
+            }
+            AppEvent::SessionExited { session_id } => {
+                let name = self.session_worktree_name(session_id)?;
+                Some(format!("{} session exited", name))
+            }
+            _ => None,
         }
+    }
+
+    pub fn refresh_worktrees(&mut self, worktrees: Vec<Worktree>) {
+        self.sidebar_tree.refresh_worktrees(&worktrees);
         // Sync file explorer root with current worktree
-        if let Some(wt) = self.worktrees.get(self.selected_worktree) {
-            self.file_explorer.set_root(wt.path.clone());
+        if let Some(item) = self.sidebar_tree.selected_item() {
+            self.file_explorer.set_root(item.path.clone());
         }
     }
 }
