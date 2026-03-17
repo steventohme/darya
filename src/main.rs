@@ -185,8 +185,61 @@ async fn run_loop(
     while app.running {
         terminal.draw(|frame| ui::draw(frame, app, session_manager))?;
 
-        if let Some(event) = events.next().await {
-            if let AppEvent::Key(key) = &event {
+        // Wait for the first event (blocking)
+        let first_event = events.next().await;
+        let Some(event) = first_event else { break };
+
+        // Process the first event, then drain all pending events before redrawing.
+        // This batches rapid keystrokes and PtyOutput events into a single redraw.
+        process_event(&event, terminal, app, session_manager, wt_manager);
+
+        // Drain remaining queued events without blocking
+        while let Ok(event) = events.try_recv() {
+            process_event(&event, terminal, app, session_manager, wt_manager);
+            if !app.running { break; }
+        }
+
+        // Post-event housekeeping (once per batch, not per event)
+
+        // Handle pending section refresh (after dir browser creates a section)
+        if let Some((section_idx, root_path)) = app.pending_section_refresh.take() {
+            if let Ok(wts) = darya::worktree::manager::list_worktrees_for_root(&root_path) {
+                app.sidebar_tree.refresh_section_worktrees(section_idx, &wts);
+            }
+        }
+
+        // Clean up sessions from deleted sections
+        if !app.pending_removed_sessions.is_empty() {
+            for sid in app.pending_removed_sessions.drain(..) {
+                session_manager.remove(&sid);
+            }
+        }
+
+        // Rewatch if the file explorer root changed (worktree switch)
+        let current_root = &app.file_explorer.root;
+        let needs_rewatch = match file_watcher {
+            Some(ref fw) => fw.watched_path() != current_root,
+            None => true,
+        };
+        if needs_rewatch {
+            let new_path = current_root.clone();
+            *file_watcher = match file_watcher.take() {
+                Some(fw) => fw.rewatch(new_path, event_tx.clone()).ok(),
+                None => FileWatcher::new(new_path, event_tx.clone()).ok(),
+            };
+        }
+    }
+    Ok(())
+}
+
+fn process_event(
+    event: &AppEvent,
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+    session_manager: &mut SessionManager,
+    wt_manager: &WorktreeManager,
+) {
+        if let AppEvent::Key(key) = event {
                 // Clear status message on any keypress
                 app.status_message = None;
                 // Ctrl+C: dismiss prompt → close active session → quit
@@ -522,38 +575,7 @@ async fn run_loop(
                 let _ = terminal.backend_mut().flush();
             }
 
-            app.handle_event(&event);
-
-            // Handle pending section refresh (after dir browser creates a section)
-            if let Some((section_idx, root_path)) = app.pending_section_refresh.take() {
-                if let Ok(wts) = darya::worktree::manager::list_worktrees_for_root(&root_path) {
-                    app.sidebar_tree.refresh_section_worktrees(section_idx, &wts);
-                }
-            }
-
-            // Clean up sessions from deleted sections
-            if !app.pending_removed_sessions.is_empty() {
-                for sid in app.pending_removed_sessions.drain(..) {
-                    session_manager.remove(&sid);
-                }
-            }
-
-            // Rewatch if the file explorer root changed (worktree switch)
-            let current_root = &app.file_explorer.root;
-            let needs_rewatch = match file_watcher {
-                Some(ref fw) => fw.watched_path() != current_root,
-                None => true,
-            };
-            if needs_rewatch {
-                let new_path = current_root.clone();
-                *file_watcher = match file_watcher.take() {
-                    Some(fw) => fw.rewatch(new_path, event_tx.clone()).ok(),
-                    None => FileWatcher::new(new_path, event_tx.clone()).ok(),
-                };
-            }
-        }
-    }
-    Ok(())
+            app.handle_event(event);
 }
 
 /// Convert a crossterm KeyEvent to raw bytes for the PTY.

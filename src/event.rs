@@ -27,6 +27,11 @@ impl EventHandler {
     pub async fn next(&mut self) -> Option<AppEvent> {
         self.rx.recv().await
     }
+
+    /// Non-blocking: return the next event if one is already queued.
+    pub fn try_recv(&mut self) -> Result<AppEvent, mpsc::error::TryRecvError> {
+        self.rx.try_recv()
+    }
 }
 
 /// Create an event handler and return both the handler and a sender for PTY events.
