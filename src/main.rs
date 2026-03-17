@@ -322,6 +322,9 @@ fn process_event(
                     }
                 }
 
+                // Track whether a session operation consumed this key (prevents Enter leaking to PTY)
+                let mut key_consumed = false;
+
                 // Handle worktree creation
                 if let Some(branch_name) = app.wants_create_worktree(key) {
                     match wt_manager.add(&branch_name) {
@@ -381,6 +384,7 @@ fn process_event(
                 }
                 // Handle unified session spawning on Enter
                 else if app.needs_session_spawn(key) {
+                    key_consumed = true;
                     if let Some((kind, existing_id, wt_path)) = app.cursor_session_info().map(|(k, id, p)| (k, id.map(|s| s.to_string()), p.clone())) {
                         if let Some(id) = existing_id {
                             // Session already exists, just switch to it
@@ -433,6 +437,7 @@ fn process_event(
 
                 // Handle session restart on 'r' for exited sessions
                 else if app.needs_session_restart(key) {
+                    key_consumed = true;
                     if let Some((kind, Some(old_id), wt_path)) = app.cursor_session_info().map(|(k, id, p)| (k, id.map(|s| s.to_string()), p.clone())) {
                         let coords = app.sidebar_tree.cursor_session_coords();
                         session_manager.remove(&old_id);
@@ -473,6 +478,7 @@ fn process_event(
 
                 // Handle session close on Backspace
                 else if app.needs_session_close(key) {
+                    key_consumed = true;
                     if let Some(session_id) = app.cursor_session_id().map(|s| s.to_string()) {
                         session_manager.remove(&session_id);
                         app.sidebar_tree.clear_session_id(&session_id);
@@ -527,7 +533,7 @@ fn process_event(
                     app.scroll_down(app.terminal_height.saturating_sub(2) as usize);
                 }
                 // Forward keys to PTY in terminal mode
-                else if app.input_mode == InputMode::Terminal && app.prompt.is_none() {
+                else if !key_consumed && app.input_mode == InputMode::Terminal && app.prompt.is_none() {
                     // Don't forward Tab — it switches to sidebar
                     if key.code != KeyCode::Tab {
                         if let Some(session_id) = app.focused_session_id().cloned() {

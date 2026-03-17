@@ -1782,7 +1782,13 @@ impl App {
 
     /// Get the currently active Claude session ID (derived from sidebar tree cursor).
     pub fn active_session_id(&self) -> Option<&str> {
-        // Check cursor position for a Claude session
+        use crate::sidebar::tree::TreeNode;
+        // If cursor is on a specific session slot, use it if it's Claude kind
+        if let Some(TreeNode::Session(si, ii, slot_idx)) = self.sidebar_tree.visible.get(self.sidebar_tree.cursor) {
+            let slot = self.sidebar_tree.sections.get(*si)?.items.get(*ii)?.sessions.get(*slot_idx)?;
+            return if slot.kind == SessionKind::Claude { slot.session_id.as_deref() } else { None };
+        }
+        // Item/Section: first Claude session
         let item = self.sidebar_tree.selected_item()?;
         item.sessions.iter()
             .find(|s| s.kind == SessionKind::Claude)
@@ -1791,6 +1797,13 @@ impl App {
 
     /// Get the currently active shell session ID (derived from sidebar tree cursor).
     pub fn active_shell_session_id(&self) -> Option<&str> {
+        use crate::sidebar::tree::TreeNode;
+        // If cursor is on a specific session slot, use it if it's Shell kind
+        if let Some(TreeNode::Session(si, ii, slot_idx)) = self.sidebar_tree.visible.get(self.sidebar_tree.cursor) {
+            let slot = self.sidebar_tree.sections.get(*si)?.items.get(*ii)?.sessions.get(*slot_idx)?;
+            return if slot.kind == SessionKind::Shell { slot.session_id.as_deref() } else { None };
+        }
+        // Item/Section: first Shell session
         let item = self.sidebar_tree.selected_item()?;
         item.sessions.iter()
             .find(|s| s.kind == SessionKind::Shell)
@@ -3028,6 +3041,21 @@ impl App {
     }
 
     fn switch_to_selected_session(&mut self) {
+        // When cursor lands on a specific session slot, update main_view to match its kind
+        // so the right panel renders the correct session type.
+        use crate::sidebar::tree::TreeNode;
+        if let Some(TreeNode::Session(si, ii, slot_idx)) = self.sidebar_tree.visible.get(self.sidebar_tree.cursor).copied() {
+            if let Some(slot) = self.sidebar_tree.sections.get(si)
+                .and_then(|s| s.items.get(ii))
+                .and_then(|item| item.sessions.get(slot_idx))
+            {
+                match slot.kind {
+                    SessionKind::Shell => self.main_view = MainView::Shell,
+                    SessionKind::Claude => self.main_view = MainView::Terminal,
+                }
+            }
+        }
+
         if let Some(item) = self.sidebar_tree.selected_item() {
             // Clear attention for any sessions in this item
             for slot in &item.sessions {
@@ -3054,7 +3082,15 @@ impl App {
                 _ => None,
             };
         }
-        // No split: derive from sidebar_tree selected item
+        // If cursor is on a specific session slot, use it directly (handles multiple slots of same kind)
+        use crate::sidebar::tree::TreeNode;
+        if let Some(TreeNode::Session(si, ii, slot_idx)) = self.sidebar_tree.visible.get(self.sidebar_tree.cursor) {
+            return self.sidebar_tree.sections.get(*si)?
+                .items.get(*ii)?
+                .sessions.get(*slot_idx)?
+                .session_id.as_ref();
+        }
+        // Cursor on Item or Section: fall back to kind-based lookup
         let item = self.sidebar_tree.selected_item()?;
         let target_kind = if self.main_view == MainView::Shell {
             SessionKind::Shell
