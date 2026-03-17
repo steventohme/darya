@@ -22,6 +22,8 @@ use darya::sidebar::types::SessionKind;
 use darya::ui;
 use darya::watcher::FileWatcher;
 use darya::worktree::manager::WorktreeManager;
+use signal_hook::consts::signal::{SIGHUP, SIGINT, SIGTERM};
+use signal_hook_tokio::Signals;
 
 fn find_git_root() -> color_eyre::Result<PathBuf> {
     let output = std::process::Command::new("git")
@@ -151,6 +153,9 @@ async fn main() -> color_eyre::Result<()> {
         .unwrap_or_else(|| PathBuf::from("."));
     let mut file_watcher = FileWatcher::new(initial_watch_path, watcher_tx).ok();
 
+    // Register signal handlers for graceful shutdown (e.g. cargo-watch sends SIGTERM)
+    let mut signals = Signals::new([SIGTERM, SIGINT, SIGHUP])?;
+
     // Main loop
     let result = run_loop(
         &mut terminal,
@@ -160,6 +165,7 @@ async fn main() -> color_eyre::Result<()> {
         &wt_manager,
         &mut file_watcher,
         &event_tx,
+        &mut signals,
     )
     .await;
 
@@ -182,14 +188,24 @@ async fn run_loop(
     wt_manager: &WorktreeManager,
     file_watcher: &mut Option<FileWatcher>,
     event_tx: &tokio::sync::mpsc::UnboundedSender<AppEvent>,
+    signals: &mut Signals,
 ) -> color_eyre::Result<()> {
+    use futures::StreamExt as _;
+
     while app.running {
         terminal.draw(|frame| ui::draw(frame, app, session_manager))?;
 
-        // Wait for the first event (blocking)
-        let first_event = events.next().await;
-        let Some(event) = first_event else { break };
-
+        // Wait for the first event or a termination signal
+        let event = tokio::select! {
+            ev = events.next() => {
+                let Some(ev) = ev else { break };
+                ev
+            }
+            _ = signals.next() => {
+                app.running = false;
+                break;
+            }
+        };
         // Process the first event, then drain all pending events before redrawing.
         // This batches rapid keystrokes and PtyOutput events into a single redraw.
         process_event(&event, terminal, app, session_manager, wt_manager);

@@ -22,6 +22,8 @@ edtui = { version = "0.11", features = ["syntax-highlighting"] }
 nucleo-matcher = "0.3"
 ignore = "0.4"
 notify = "7"
+signal-hook = "0.3"
+signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
 
 [dev-dependencies]
 insta = "1"
