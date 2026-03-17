@@ -97,7 +97,7 @@ pub fn render_session(
             // Show scroll indicator when scrolled back
             if offset > 0 && inner.height > 0 {
                 let indicator_area = Rect::new(inner.x, inner.y, inner.width, 1);
-                let indicator = Paragraph::new(" \u{2191} scrollback (PgDn to return) ")
+                let indicator = Paragraph::new(" \u{2191} scrollback (scroll or PgDn to return) ")
                     .alignment(Alignment::Right)
                     .style(
                         Style::default()

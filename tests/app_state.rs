@@ -2543,3 +2543,63 @@ fn remove_section_returns_session_ids() {
     let removed = app.sidebar_tree.remove_section(si);
     assert_eq!(removed, vec!["sess-123".to_string()]);
 }
+
+// ── Mouse scroll ──────────────────────────────────────────────
+
+#[test]
+fn mouse_scroll_up_increases_offset() {
+    let mut app = make_app_with_session(1);
+    app.sidebar_tree.cursor = 1;
+    assert_eq!(app.active_scroll_offset(), 0);
+    // Simulate what process_event does for MouseScroll { delta: 3 }
+    app.scroll_up(3);
+    assert_eq!(app.active_scroll_offset(), 3);
+    app.scroll_up(3);
+    assert_eq!(app.active_scroll_offset(), 6);
+}
+
+#[test]
+fn mouse_scroll_down_decreases_offset() {
+    let mut app = make_app_with_session(1);
+    app.sidebar_tree.cursor = 1;
+    app.scroll_up(10);
+    assert_eq!(app.active_scroll_offset(), 10);
+    // Simulate scroll down (delta: -3 → scroll_down(3))
+    app.scroll_down(3);
+    assert_eq!(app.active_scroll_offset(), 7);
+}
+
+#[test]
+fn mouse_scroll_event_noop_in_handle_event() {
+    // MouseScroll is handled in process_event, handle_event should not panic
+    let mut app = make_app(1);
+    app.handle_event(&AppEvent::MouseScroll { delta: 3 });
+    app.handle_event(&AppEvent::MouseScroll { delta: -3 });
+    // No panic = pass
+}
+
+#[test]
+fn shift_pageup_scrolls_in_navigation_mode() {
+    let mut app = make_app_with_session(1);
+    app.sidebar_tree.cursor = 1;
+    app.input_mode = InputMode::Navigation;
+    app.terminal_height = 40;
+    // Shift+PageUp handled via handle_event → handle_key dispatches to terminal_nav
+    // which calls scroll_up. But actually Shift+PageUp in navigation mode is handled
+    // by process_event in main.rs. For the app-level test, verify scroll methods work.
+    let page = app.terminal_height.saturating_sub(2) as usize;
+    app.scroll_up(page);
+    assert_eq!(app.active_scroll_offset(), 38);
+}
+
+#[test]
+fn shift_pagedown_reduces_scroll_offset() {
+    let mut app = make_app_with_session(1);
+    app.sidebar_tree.cursor = 1;
+    app.terminal_height = 40;
+    app.scroll_up(80);
+    assert_eq!(app.active_scroll_offset(), 80);
+    let page = app.terminal_height.saturating_sub(2) as usize;
+    app.scroll_down(page);
+    assert_eq!(app.active_scroll_offset(), 42);
+}

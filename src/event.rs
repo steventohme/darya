@@ -1,4 +1,4 @@
-use crossterm::event::{Event, EventStream, KeyEvent};
+use crossterm::event::{Event, EventStream, KeyEvent, MouseEventKind};
 use futures::StreamExt;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -16,6 +16,7 @@ pub enum AppEvent {
     SessionExited { session_id: String },
     FileChanged { paths: Vec<PathBuf> },
     FilesCreatedOrDeleted,
+    MouseScroll { delta: i16 },
     Tick,
 }
 
@@ -48,6 +49,11 @@ pub fn create_event_handler() -> (EventHandler, mpsc::UnboundedSender<AppEvent>)
                     let app_event = match event {
                         Event::Key(key) => Some(AppEvent::Key(key)),
                         Event::Resize(w, h) => Some(AppEvent::Resize(w, h)),
+                        Event::Mouse(mouse) => match mouse.kind {
+                            MouseEventKind::ScrollUp => Some(AppEvent::MouseScroll { delta: 3 }),
+                            MouseEventKind::ScrollDown => Some(AppEvent::MouseScroll { delta: -3 }),
+                            _ => None,
+                        },
                         _ => None,
                     };
                     if let Some(e) = app_event {

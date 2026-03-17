@@ -1917,6 +1917,9 @@ impl App {
                     gb.mark_stale();
                 }
             }
+            AppEvent::MouseScroll { .. } => {
+                // Handled in process_event() before reaching here
+            }
             AppEvent::Tick => {
                 self.activity.tick();
             }

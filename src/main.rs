@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crossterm::event::{
-    KeyCode, KeyboardEnhancementFlags,
+    DisableMouseCapture, EnableMouseCapture, KeyCode, KeyModifiers, KeyboardEnhancementFlags,
     PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use crossterm::execute;
@@ -75,6 +75,7 @@ fn pane_sizes(
 /// Restore the terminal to normal state. Called on both clean exit and panic.
 fn restore_terminal() {
     let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
+    let _ = execute!(io::stdout(), DisableMouseCapture);
     let _ = disable_raw_mode();
     let _ = execute!(io::stdout(), LeaveAlternateScreen);
 }
@@ -109,7 +110,7 @@ async fn main() -> color_eyre::Result<()> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     // Enable keyboard enhancement so Ctrl+number keys are reported correctly
     let _ = execute!(
         stdout,
@@ -503,8 +504,14 @@ fn process_event(
                     }
                 }
 
+                // Shift+PageUp/Down: scroll in ANY mode (intercept before PTY)
+                if key.modifiers.contains(KeyModifiers::SHIFT) && key.code == KeyCode::PageUp {
+                    app.scroll_up(app.terminal_height.saturating_sub(2) as usize);
+                } else if key.modifiers.contains(KeyModifiers::SHIFT) && key.code == KeyCode::PageDown {
+                    app.scroll_down(app.terminal_height.saturating_sub(2) as usize);
+                }
                 // Forward keys to PTY in terminal mode
-                if app.input_mode == InputMode::Terminal && app.prompt.is_none() {
+                else if app.input_mode == InputMode::Terminal && app.prompt.is_none() {
                     // Don't forward Tab — it switches to sidebar
                     if key.code != KeyCode::Tab {
                         if let Some(session_id) = app.focused_session_id().cloned() {
@@ -515,6 +522,8 @@ fn process_event(
                                     {
                                         let _ = session.write_input(&bytes);
                                         app.activity.mark_input(&session_id);
+                                        // Reset scroll to live view on user input
+                                        app.scroll_offsets.remove(&session_id);
                                     }
                                 }
                             }
@@ -527,6 +536,15 @@ fn process_event(
             if let AppEvent::PtyOutput { ref session_id } = event {
                 if app.is_session_visible(session_id) {
                     app.scroll_offsets.remove(session_id);
+                }
+            }
+
+            // Handle mouse scroll — works in ALL modes
+            if let AppEvent::MouseScroll { delta } = event {
+                if *delta > 0 {
+                    app.scroll_up(*delta as usize);
+                } else if *delta < 0 {
+                    app.scroll_down((-delta) as usize);
                 }
             }
 

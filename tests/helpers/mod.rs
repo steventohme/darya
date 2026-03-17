@@ -119,6 +119,11 @@ pub fn alt_key(c: char) -> AppEvent {
     ))
 }
 
+/// Shorthand for creating a Shift+key event (for non-char keys like PageUp/PageDown).
+pub fn shift_key(code: KeyCode) -> AppEvent {
+    AppEvent::Key(KeyEvent::new(code, KeyModifiers::SHIFT))
+}
+
 /// Create an App with `n` worktrees where the first two worktrees have active sessions.
 pub fn make_app_with_two_sessions(n: usize) -> App {
     assert!(n >= 2);
