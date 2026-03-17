@@ -1,0 +1,25 @@
+Cargo.toml
+  3a987cb988a4cf2c 25-26
+src/main.rs
+  3a987cb988a4cf2c 25-26,156-158,168,191,193-194,198-206,208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.15",
+  "base_commit_sha": "dc2b3108290c716cc8257d0ba69d2d9523be131c",
+  "prompts": {
+    "3a987cb988a4cf2c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7909ec8-7ba9-4513-a37e-abb14fce2de0",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 24,
+      "total_deletions": 6,
+      "accepted_lines": 21,
+      "overriden_lines": 0
+    }
+  }
+}
