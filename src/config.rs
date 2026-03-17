@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::style::Color;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub const TICK_RATE_MS: u64 = 50;
 pub const CLAUDE_COMMAND: &str = "claude";
@@ -151,20 +151,20 @@ pub struct KeybindingsConfig {
 impl Default for KeybindingsConfig {
     fn default() -> Self {
         Self {
-            worktrees: (KeyModifiers::CONTROL, KeyCode::Char('1')),
-            terminal: (KeyModifiers::CONTROL, KeyCode::Char('2')),
-            files: (KeyModifiers::CONTROL, KeyCode::Char('3')),
-            editor: (KeyModifiers::CONTROL, KeyCode::Char('4')),
-            search: (KeyModifiers::CONTROL, KeyCode::Char('5')),
-            git_status: (KeyModifiers::CONTROL, KeyCode::Char('6')),
-            fuzzy_finder: (KeyModifiers::CONTROL, KeyCode::Char('p')),
-            project_search: (KeyModifiers::CONTROL, KeyCode::Char('f')),
-            split_pane: (KeyModifiers::CONTROL, KeyCode::Char('\\')),
-            close_pane: (KeyModifiers::CONTROL, KeyCode::Char('w')),
-            git_blame: (KeyModifiers::CONTROL, KeyCode::Char('7')),
-            git_log: (KeyModifiers::CONTROL, KeyCode::Char('8')),
-            command_palette: (KeyModifiers::CONTROL, KeyCode::Char('k')),
-            shell: (KeyModifiers::CONTROL, KeyCode::Char('9')),
+            worktrees: (KeyModifiers::SUPER, KeyCode::Char('1')),
+            terminal: (KeyModifiers::SUPER, KeyCode::Char('2')),
+            files: (KeyModifiers::SUPER, KeyCode::Char('3')),
+            editor: (KeyModifiers::SUPER, KeyCode::Char('4')),
+            search: (KeyModifiers::SUPER, KeyCode::Char('5')),
+            git_status: (KeyModifiers::SUPER, KeyCode::Char('6')),
+            fuzzy_finder: (KeyModifiers::SUPER, KeyCode::Char('p')),
+            project_search: (KeyModifiers::SUPER, KeyCode::Char('f')),
+            split_pane: (KeyModifiers::SUPER, KeyCode::Char('\\')),
+            close_pane: (KeyModifiers::SUPER, KeyCode::Char('w')),
+            git_blame: (KeyModifiers::SUPER, KeyCode::Char('7')),
+            git_log: (KeyModifiers::SUPER, KeyCode::Char('8')),
+            command_palette: (KeyModifiers::SUPER, KeyCode::Char('k')),
+            shell: (KeyModifiers::SUPER, KeyCode::Char('9')),
         }
     }
 }
@@ -173,6 +173,9 @@ impl KeybindingsConfig {
     /// Format a keybinding as a human-readable string (e.g. "Ctrl+1").
     pub fn format(binding: &(KeyModifiers, KeyCode)) -> String {
         let mut result = String::new();
+        if binding.0.contains(KeyModifiers::SUPER) {
+            result.push_str("Cmd+");
+        }
         if binding.0.contains(KeyModifiers::CONTROL) {
             result.push_str("Ctrl+");
         }
@@ -199,7 +202,7 @@ impl KeybindingsConfig {
 
     /// Check if a key event matches a binding.
     pub fn matches(binding: &(KeyModifiers, KeyCode), modifiers: KeyModifiers, code: KeyCode) -> bool {
-        modifiers.contains(binding.0) && code == binding.1
+        modifiers == binding.0 && code == binding.1
     }
 }
 
@@ -216,6 +219,7 @@ pub fn parse_keybinding(s: &str) -> Option<(KeyModifiers, KeyCode)> {
             "ctrl" | "control" => modifiers |= KeyModifiers::CONTROL,
             "alt" => modifiers |= KeyModifiers::ALT,
             "shift" => modifiers |= KeyModifiers::SHIFT,
+            "cmd" | "command" | "super" => modifiers |= KeyModifiers::SUPER,
             _ => return None,
         }
     }
@@ -252,6 +256,54 @@ struct ConfigToml {
     keybindings: Option<KeybindingsToml>,
     session: Option<SessionToml>,
     shell: Option<ShellToml>,
+}
+
+// ── Sections persistence (separate file) ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectionShellToml {
+    pub label: String,
+    #[serde(default)]
+    pub command: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectionItemToml {
+    pub path: String,
+    #[serde(default)]
+    pub shells: Vec<SectionShellToml>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectionToml {
+    pub name: String,
+    #[serde(default)]
+    pub items: Vec<SectionItemToml>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SectionsConfig {
+    #[serde(default)]
+    pub sections: Vec<SectionToml>,
+}
+
+/// Load sections config from `~/.config/darya/sections.toml`.
+pub fn load_sections() -> Option<SectionsConfig> {
+    let home = dirs_path()?;
+    let path = home.join(".config").join("darya").join("sections.toml");
+    let contents = std::fs::read_to_string(&path).ok()?;
+    toml::from_str::<SectionsConfig>(&contents).ok()
+}
+
+/// Save sections config to `~/.config/darya/sections.toml`.
+pub fn save_sections(config: &SectionsConfig) {
+    let Some(home) = dirs_path() else { return };
+    let dir = home.join(".config").join("darya");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("sections.toml");
+    if let Ok(toml_str) = toml::to_string_pretty(config) {
+        let _ = std::fs::write(&path, toml_str);
+    }
 }
 
 pub const DEFAULT_WORKTREE_DIR_FORMAT: &str = "{repo}-{branch}";
