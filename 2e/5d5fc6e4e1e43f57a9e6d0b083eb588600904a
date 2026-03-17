@@ -1,0 +1,29 @@
+src/widgets/help_overlay.rs
+  880ffe26be51740e 45
+src/main.rs
+  880ffe26be51740e 479-520
+src/app.rs
+  880ffe26be51740e 2364,3461-3472
+tests/app_state.rs
+  880ffe26be51740e 469-505
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.15",
+  "base_commit_sha": "2e5d5fc6e4e1e43f57a9e6d0b083eb588600904a",
+  "prompts": {
+    "880ffe26be51740e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "659f4d52-956f-43f3-abc9-35c6006833c3",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 93,
+      "total_deletions": 1,
+      "accepted_lines": 93,
+      "overriden_lines": 0
+    }
+  }
+}
