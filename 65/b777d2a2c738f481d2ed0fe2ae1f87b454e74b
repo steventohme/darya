@@ -1,0 +1,23 @@
+src/widgets/help_overlay.rs
+  5148298279870b01 45-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.15",
+  "base_commit_sha": "65b777d2a2c738f481d2ed0fe2ae1f87b454e74b",
+  "prompts": {
+    "5148298279870b01": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a56661a5-b887-475b-8a46-fa15f610b7ca",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    }
+  }
+}
