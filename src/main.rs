@@ -358,11 +358,7 @@ fn process_event(
                         app.input_mode = InputMode::Navigation;
                     } else if let Some(session_id) = app.focused_session_id().cloned() {
                         session_manager.remove(&session_id);
-                        app.sidebar_tree.clear_session_id(&session_id);
-                        app.attention_sessions.remove(&session_id);
-                        app.exited_sessions.remove(&session_id);
-                        app.activity.remove_session(&session_id);
-                        app.remove_session_from_panes(&session_id);
+                        app.cleanup_session(&session_id);
                         app.input_mode = InputMode::Navigation;
                         app.status_message = Some("Session closed".to_string());
                     } else {
@@ -432,16 +428,7 @@ fn process_event(
                         for slot in &item.sessions {
                             if let Some(ref session_id) = slot.session_id {
                                 session_manager.remove(session_id);
-                                app.attention_sessions.remove(session_id);
-                                app.exited_sessions.remove(session_id);
-                                app.activity.remove_session(session_id);
-                                app.remove_session_from_panes(session_id);
-                            }
-                        }
-                        // Clear session IDs in tree
-                        for slot in &item.sessions {
-                            if let Some(ref session_id) = slot.session_id {
-                                app.sidebar_tree.clear_session_id(session_id);
+                                app.cleanup_session(session_id);
                             }
                         }
                         match wt_manager.remove(&item.path) {
@@ -519,10 +506,7 @@ fn process_event(
                     if let Some((kind, Some(old_id), wt_path)) = app.cursor_session_info().map(|(k, id, p)| (k, id.map(|s| s.to_string()), p.clone())) {
                         let coords = app.sidebar_tree.cursor_session_coords();
                         session_manager.remove(&old_id);
-                        app.sidebar_tree.clear_session_id(&old_id);
-                        app.attention_sessions.remove(&old_id);
-                        app.exited_sessions.remove(&old_id);
-                        app.activity.remove_session(&old_id);
+                        app.cleanup_session(&old_id);
 
                         let (rows, cols) = pty_size(terminal);
                         let command = match kind {
@@ -560,11 +544,7 @@ fn process_event(
                     if let Some((kind, Some(old_id), wt_path)) = app.cursor_session_info().map(|(k, id, p)| (k, id.map(|s| s.to_string()), p.clone())) {
                         let coords = app.sidebar_tree.cursor_session_coords();
                         session_manager.remove(&old_id);
-                        app.sidebar_tree.clear_session_id(&old_id);
-                        app.attention_sessions.remove(&old_id);
-                        app.exited_sessions.remove(&old_id);
-                        app.activity.remove_session(&old_id);
-                        app.remove_session_from_panes(&old_id);
+                        app.cleanup_session(&old_id);
 
                         let (rows, cols) = pty_size(terminal);
                         let command = match kind {
@@ -601,11 +581,7 @@ fn process_event(
                     key_consumed = true;
                     if let Some(session_id) = app.cursor_session_id().map(|s| s.to_string()) {
                         session_manager.remove(&session_id);
-                        app.sidebar_tree.clear_session_id(&session_id);
-                        app.attention_sessions.remove(&session_id);
-                        app.exited_sessions.remove(&session_id);
-                        app.activity.remove_session(&session_id);
-                        app.remove_session_from_panes(&session_id);
+                        app.cleanup_session(&session_id);
                         app.status_message = Some("Session closed".to_string());
                     }
                 }
@@ -654,16 +630,19 @@ fn process_event(
                 }
                 // Forward keys to PTY in terminal mode
                 else if !key_consumed && app.input_mode == InputMode::Terminal && app.prompt.is_none() {
-                    if let Some(session_id) = app.focused_session_id().cloned() {
-                        if !app.exited_sessions.contains(session_id.as_str()) {
-                            if let Some(bytes) = key_event_to_bytes(key) {
-                                if let Some(session) =
-                                    session_manager.get_mut(&session_id)
-                                {
-                                    let _ = session.write_input(&bytes);
-                                    app.activity.mark_input(&session_id);
-                                    // Reset scroll to live view on user input
-                                    app.scroll_offsets.remove(&session_id);
+                    // Don't forward Tab — it switches to sidebar
+                    if key.code != KeyCode::Tab {
+                        if let Some(session_id) = app.focused_session_id().cloned() {
+                            if !app.exited_sessions.contains(session_id.as_str()) {
+                                if let Some(bytes) = key_event_to_bytes(key) {
+                                    if let Some(session) =
+                                        session_manager.get_mut(&session_id)
+                                    {
+                                        let _ = session.write_input(&bytes);
+                                        app.activity.mark_input(&session_id);
+                                        // Reset scroll to live view on user input
+                                        app.scroll_offsets.remove(&session_id);
+                                    }
                                 }
                             }
                         }

@@ -90,21 +90,11 @@ impl SidebarTree {
     }
 
     pub fn move_down(&mut self) {
-        if self.visible.is_empty() {
-            return;
-        }
-        self.cursor = (self.cursor + 1) % self.visible.len();
+        self.cursor = crate::app::wrapping_next(self.cursor, self.visible.len());
     }
 
     pub fn move_up(&mut self) {
-        if self.visible.is_empty() {
-            return;
-        }
-        self.cursor = if self.cursor == 0 {
-            self.visible.len() - 1
-        } else {
-            self.cursor - 1
-        };
+        self.cursor = crate::app::wrapping_prev(self.cursor, self.visible.len());
     }
 
     /// Toggle collapse on the current node (section or item).

@@ -14,6 +14,18 @@ use crate::sidebar::types::SessionKind;
 
 const IGNORED_NAMES: &[&str] = &["target", "node_modules", "__pycache__"];
 
+/// Wrapping move-up for list navigation. Returns new index.
+pub fn wrapping_prev(selected: usize, len: usize) -> usize {
+    if len == 0 { return 0; }
+    if selected == 0 { len - 1 } else { selected - 1 }
+}
+
+/// Wrapping move-down for list navigation. Returns new index.
+pub fn wrapping_next(selected: usize, len: usize) -> usize {
+    if len == 0 { return 0; }
+    (selected + 1) % len
+}
+
 /// Which sidebar node a color is being assigned to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorTarget {
@@ -255,21 +267,11 @@ impl DirBrowser {
     }
 
     pub fn move_up(&mut self) {
-        if self.entries.is_empty() {
-            return;
-        }
-        self.selected = if self.selected == 0 {
-            self.entries.len() - 1
-        } else {
-            self.selected - 1
-        };
+        self.selected = wrapping_prev(self.selected, self.entries.len());
     }
 
     pub fn move_down(&mut self) {
-        if self.entries.is_empty() {
-            return;
-        }
-        self.selected = (self.selected + 1) % self.entries.len();
+        self.selected = wrapping_next(self.selected, self.entries.len());
     }
 
     /// Expand the selected directory (show its children).
@@ -422,21 +424,11 @@ impl FileExplorerState {
     }
 
     pub fn move_up(&mut self) {
-        if self.entries.is_empty() {
-            return;
-        }
-        self.selected = if self.selected == 0 {
-            self.entries.len() - 1
-        } else {
-            self.selected - 1
-        };
+        self.selected = wrapping_prev(self.selected, self.entries.len());
     }
 
     pub fn move_down(&mut self) {
-        if self.entries.is_empty() {
-            return;
-        }
-        self.selected = (self.selected + 1) % self.entries.len();
+        self.selected = wrapping_next(self.selected, self.entries.len());
     }
 
     /// Enter on selected entry: toggle dir expand/collapse, return Some(path) for files.
@@ -523,8 +515,7 @@ impl FileExplorerState {
     /// Ensure git indicators are up-to-date. Call before rendering.
     pub fn ensure_git_indicators(&mut self) {
         if self.git_indicators_stale {
-            self.refresh_git_indicators();
-            self.git_indicators_stale = false;
+            self.refresh_git_indicators(); // already sets stale = false
         }
     }
 }
@@ -674,19 +665,11 @@ impl FuzzyFinderState {
     }
 
     pub fn move_up(&mut self) {
-        if !self.results.is_empty() {
-            self.selected = if self.selected == 0 {
-                self.results.len() - 1
-            } else {
-                self.selected - 1
-            };
-        }
+        self.selected = wrapping_prev(self.selected, self.results.len());
     }
 
     pub fn move_down(&mut self) {
-        if !self.results.is_empty() {
-            self.selected = (self.selected + 1) % self.results.len();
-        }
+        self.selected = wrapping_next(self.selected, self.results.len());
     }
 
     pub fn selected_path(&self) -> Option<&PathBuf> {
@@ -833,19 +816,11 @@ impl CommandPaletteState {
     }
 
     pub fn move_up(&mut self) {
-        if !self.results.is_empty() {
-            self.selected = if self.selected == 0 {
-                self.results.len() - 1
-            } else {
-                self.selected - 1
-            };
-        }
+        self.selected = wrapping_prev(self.selected, self.results.len());
     }
 
     pub fn move_down(&mut self) {
-        if !self.results.is_empty() {
-            self.selected = (self.selected + 1) % self.results.len();
-        }
+        self.selected = wrapping_next(self.selected, self.results.len());
     }
 
     pub fn selected_command(&self) -> Option<CommandId> {
@@ -886,19 +861,11 @@ impl SearchViewState {
     }
 
     pub fn move_up(&mut self) {
-        if !self.results.is_empty() {
-            self.selected = if self.selected == 0 {
-                self.results.len() - 1
-            } else {
-                self.selected - 1
-            };
-        }
+        self.selected = wrapping_prev(self.selected, self.results.len());
     }
 
     pub fn move_down(&mut self) {
-        if !self.results.is_empty() {
-            self.selected = (self.selected + 1) % self.results.len();
-        }
+        self.selected = wrapping_next(self.selected, self.results.len());
     }
 
     pub fn selected_result(&self) -> Option<&SearchResult> {
@@ -1024,19 +991,11 @@ impl GitStatusState {
     }
 
     pub fn move_up(&mut self) {
-        if !self.entries.is_empty() {
-            self.selected = if self.selected == 0 {
-                self.entries.len() - 1
-            } else {
-                self.selected - 1
-            };
-        }
+        self.selected = wrapping_prev(self.selected, self.entries.len());
     }
 
     pub fn move_down(&mut self) {
-        if !self.entries.is_empty() {
-            self.selected = (self.selected + 1) % self.entries.len();
-        }
+        self.selected = wrapping_next(self.selected, self.entries.len());
     }
 
     pub fn selected_entry(&self) -> Option<&GitStatusEntry> {
@@ -1408,19 +1367,11 @@ pub struct GitLogState {
 
 impl GitLogState {
     pub fn move_up(&mut self) {
-        if !self.entries.is_empty() {
-            self.selected = if self.selected == 0 {
-                self.entries.len() - 1
-            } else {
-                self.selected - 1
-            };
-        }
+        self.selected = wrapping_prev(self.selected, self.entries.len());
     }
 
     pub fn move_down(&mut self) {
-        if !self.entries.is_empty() {
-            self.selected = (self.selected + 1) % self.entries.len();
-        }
+        self.selected = wrapping_next(self.selected, self.entries.len());
     }
 
     pub fn selected_entry(&self) -> Option<&GitLogEntry> {
@@ -1794,34 +1745,27 @@ impl App {
         self.sidebar_tree.selected_item().map(|item| &item.path)
     }
 
-    /// Get the currently active Claude session ID (derived from sidebar tree cursor).
-    pub fn active_session_id(&self) -> Option<&str> {
+    /// Get the active session ID of the given kind (derived from sidebar tree cursor).
+    fn active_session_id_of_kind(&self, kind: SessionKind) -> Option<&str> {
         use crate::sidebar::tree::TreeNode;
-        // If cursor is on a specific session slot, use it if it's Claude kind
         if let Some(TreeNode::Session(si, ii, slot_idx)) = self.sidebar_tree.visible.get(self.sidebar_tree.cursor) {
             let slot = self.sidebar_tree.sections.get(*si)?.items.get(*ii)?.sessions.get(*slot_idx)?;
-            return if slot.kind == SessionKind::Claude { slot.session_id.as_deref() } else { None };
+            return if slot.kind == kind { slot.session_id.as_deref() } else { None };
         }
-        // Item/Section: first Claude session
         let item = self.sidebar_tree.selected_item()?;
         item.sessions.iter()
-            .find(|s| s.kind == SessionKind::Claude)
+            .find(|s| s.kind == kind)
             .and_then(|s| s.session_id.as_deref())
     }
 
-    /// Get the currently active shell session ID (derived from sidebar tree cursor).
+    /// Get the currently active Claude session ID.
+    pub fn active_session_id(&self) -> Option<&str> {
+        self.active_session_id_of_kind(SessionKind::Claude)
+    }
+
+    /// Get the currently active shell session ID.
     pub fn active_shell_session_id(&self) -> Option<&str> {
-        use crate::sidebar::tree::TreeNode;
-        // If cursor is on a specific session slot, use it if it's Shell kind
-        if let Some(TreeNode::Session(si, ii, slot_idx)) = self.sidebar_tree.visible.get(self.sidebar_tree.cursor) {
-            let slot = self.sidebar_tree.sections.get(*si)?.items.get(*ii)?.sessions.get(*slot_idx)?;
-            return if slot.kind == SessionKind::Shell { slot.session_id.as_deref() } else { None };
-        }
-        // Item/Section: first Shell session
-        let item = self.sidebar_tree.selected_item()?;
-        item.sessions.iter()
-            .find(|s| s.kind == SessionKind::Shell)
-            .and_then(|s| s.session_id.as_deref())
+        self.active_session_id_of_kind(SessionKind::Shell)
     }
 
     pub fn focused_view(&self) -> ViewKind {
@@ -2364,7 +2308,7 @@ impl App {
                 self.split_add_pane();
             }
             CommandId::SplitTerminal => {
-                if let Some(id) = self.find_next_terminal_session() {
+                if let Some(id) = self.find_next_session_of_kind(SessionKind::Claude) {
                     self.split_add_pane_with(PaneContent::Terminal(id));
                 } else if let Some(id) = self.active_session_id().map(|s| s.to_string()) {
                     self.split_add_pane_with(PaneContent::Terminal(id));
@@ -2373,7 +2317,7 @@ impl App {
                 }
             }
             CommandId::SplitShell => {
-                if let Some(id) = self.find_next_shell_session() {
+                if let Some(id) = self.find_next_session_of_kind(SessionKind::Shell) {
                     self.split_add_pane_with(PaneContent::Shell(id));
                 } else if let Some(id) = self.active_shell_session_id().map(|s| s.to_string()) {
                     self.split_add_pane_with(PaneContent::Shell(id));
@@ -2646,9 +2590,24 @@ impl App {
         }
     }
 
-    fn handle_terminal_key(&mut self, _key: KeyEvent) {
-        // All keys (including Tab) are forwarded to PTY in main loop.
-        // Use Esc to exit terminal mode, Cmd+1/2/etc to switch panels.
+    fn handle_terminal_key(&mut self, key: KeyEvent) {
+        if key.code == KeyCode::Tab {
+            if let Some(ref mut layout) = self.pane_layout {
+                if layout.focused < layout.panes.len() - 1 {
+                    layout.focused += 1;
+                    if matches!(layout.panes.get(layout.focused), Some(PaneContent::Editor)) {
+                        self.input_mode = InputMode::Navigation;
+                    }
+                } else {
+                    self.input_mode = InputMode::Navigation;
+                    self.panel_focus = PanelFocus::Left;
+                }
+            } else {
+                self.input_mode = InputMode::Navigation;
+                self.toggle_focus();
+            }
+        }
+        // All other keys get forwarded to PTY (handled in main loop)
     }
 
     fn handle_file_explorer_key(&mut self, key: KeyEvent) {
@@ -3213,7 +3172,7 @@ impl App {
 
         match split_type {
             "terminal" => {
-                let next = self.find_next_terminal_session();
+                let next = self.find_next_session_of_kind(SessionKind::Claude);
                 match next {
                     Some(id) => self.split_add_pane_with(PaneContent::Terminal(id)),
                     None => {
@@ -3223,7 +3182,7 @@ impl App {
                 }
             }
             "shell" => {
-                let next = self.find_next_shell_session();
+                let next = self.find_next_session_of_kind(SessionKind::Shell);
                 match next {
                     Some(id) => self.split_add_pane_with(PaneContent::Shell(id)),
                     None => {
@@ -3240,20 +3199,22 @@ impl App {
         }
     }
 
-    /// Find next terminal (Claude) session not already in pane layout.
-    fn find_next_terminal_session(&self) -> Option<String> {
+    /// Find next session of the given kind not already in pane layout.
+    fn find_next_session_of_kind(&self, kind: SessionKind) -> Option<String> {
         let current_ids: Vec<&str> = if let Some(ref layout) = self.pane_layout {
             layout.panes.iter().filter_map(|p| p.session_id()).collect()
-        } else if let Some(id) = self.active_session_id() {
-            vec![id]
         } else {
-            vec![]
+            let id = match kind {
+                SessionKind::Claude => self.active_session_id(),
+                SessionKind::Shell => self.active_shell_session_id(),
+            };
+            id.into_iter().collect()
         };
 
         for section in &self.sidebar_tree.sections {
             for item in &section.items {
                 for slot in &item.sessions {
-                    if slot.kind == SessionKind::Claude {
+                    if slot.kind == kind {
                         if let Some(ref sid) = slot.session_id {
                             if !current_ids.contains(&sid.as_str()) && !self.exited_sessions.contains(sid.as_str()) {
                                 return Some(sid.clone());
@@ -3266,34 +3227,22 @@ impl App {
         None
     }
 
-    /// Find next shell session not already in pane layout.
-    fn find_next_shell_session(&self) -> Option<String> {
-        let current_ids: Vec<&str> = if let Some(ref layout) = self.pane_layout {
-            layout.panes.iter().filter_map(|p| p.session_id()).collect()
-        } else if let Some(id) = self.active_shell_session_id() {
-            vec![id]
-        } else {
-            vec![]
-        };
-
-        for section in &self.sidebar_tree.sections {
-            for item in &section.items {
-                for slot in &item.sessions {
-                    if slot.kind == SessionKind::Shell {
-                        if let Some(ref sid) = slot.session_id {
-                            if !current_ids.contains(&sid.as_str()) && !self.exited_sessions.contains(sid.as_str()) {
-                                return Some(sid.clone());
-                            }
-                        }
-                    }
+    /// Collapse pane layout to single-view if only 0-1 panes remain.
+    fn collapse_pane_layout_if_needed(&mut self) {
+        let Some(ref layout) = self.pane_layout else { return };
+        if layout.panes.len() <= 1 {
+            if let Some(remaining) = layout.panes.first() {
+                match remaining {
+                    PaneContent::Terminal(_) => self.main_view = MainView::Terminal,
+                    PaneContent::Shell(_) => self.main_view = MainView::Shell,
+                    PaneContent::Editor => self.main_view = MainView::Editor,
                 }
             }
+            self.pane_layout = None;
         }
-        None
     }
 
     /// Remove the focused pane. Collapses to single mode if <=1 remains.
-    /// Sets main_view based on remaining pane's content type.
     pub fn close_focused_pane(&mut self) {
         let Some(ref mut layout) = self.pane_layout else { return };
         if layout.panes.len() <= 1 {
@@ -3304,23 +3253,7 @@ impl App {
         if layout.focused >= layout.panes.len() {
             layout.focused = layout.panes.len() - 1;
         }
-        if layout.panes.len() <= 1 {
-            // Collapse: set main_view based on remaining pane
-            if let Some(remaining) = layout.panes.first().cloned() {
-                match &remaining {
-                    PaneContent::Terminal(_) => {
-                        self.main_view = MainView::Terminal;
-                    }
-                    PaneContent::Shell(_) => {
-                        self.main_view = MainView::Shell;
-                    }
-                    PaneContent::Editor => {
-                        self.main_view = MainView::Editor;
-                    }
-                }
-            }
-            self.pane_layout = None;
-        }
+        self.collapse_pane_layout_if_needed();
     }
 
     pub fn cycle_pane_focus_next(&mut self) {
@@ -3348,22 +3281,17 @@ impl App {
                 layout.focused = layout.panes.len() - 1;
             }
         }
-        if layout.panes.len() <= 1 {
-            if let Some(remaining) = layout.panes.first().cloned() {
-                match &remaining {
-                    PaneContent::Terminal(_) => {
-                        self.main_view = MainView::Terminal;
-                    }
-                    PaneContent::Shell(_) => {
-                        self.main_view = MainView::Shell;
-                    }
-                    PaneContent::Editor => {
-                        self.main_view = MainView::Editor;
-                    }
-                }
-            }
-            self.pane_layout = None;
-        }
+        self.collapse_pane_layout_if_needed();
+    }
+
+    /// Clean up all app-side state for a removed session.
+    /// Caller is responsible for removing from SessionManager separately.
+    pub fn cleanup_session(&mut self, session_id: &str) {
+        self.sidebar_tree.clear_session_id(session_id);
+        self.attention_sessions.remove(session_id);
+        self.exited_sessions.remove(session_id);
+        self.activity.remove_session(session_id);
+        self.remove_session_from_panes(session_id);
     }
 
     pub fn scroll_up(&mut self, lines: usize) {
@@ -3452,19 +3380,11 @@ impl App {
         }
     }
 
-    pub fn running_session_count(&self) -> usize {
-        self.sidebar_tree.all_session_ids()
-            .iter()
-            .filter(|id| !self.exited_sessions.contains(**id))
-            .count()
-    }
-
-    /// Count sessions that have exited.
-    pub fn exited_session_count(&self) -> usize {
-        self.sidebar_tree.all_session_ids()
-            .iter()
-            .filter(|id| self.exited_sessions.contains(**id))
-            .count()
+    /// Count (running, exited) sessions in a single pass.
+    pub fn session_counts(&self) -> (usize, usize) {
+        let ids = self.sidebar_tree.all_session_ids();
+        let exited = ids.iter().filter(|id| self.exited_sessions.contains(**id)).count();
+        (ids.len() - exited, exited)
     }
 
     /// Get branch name and dirty counts for the selected worktree.
@@ -3544,19 +3464,6 @@ impl App {
                 || (self.main_view == MainView::Shell && self.panel_focus == PanelFocus::Right))
     }
 
-    /// Merged: no longer separate shell spawn check. needs_session_spawn handles all.
-    pub fn needs_shell_spawn(&self, _key: &KeyEvent) -> bool {
-        false // Handled by needs_session_spawn now
-    }
-
-    pub fn needs_shell_restart(&self, _key: &KeyEvent) -> bool {
-        false // Handled by needs_session_restart now
-    }
-
-    pub fn needs_shell_close(&self, _key: &KeyEvent) -> bool {
-        false // Handled by needs_session_close now
-    }
-
     /// Get the session ID at the current cursor position.
     /// For Item nodes, returns the first Claude session's ID.
     /// For Session nodes, returns that slot's ID.
@@ -3621,11 +3528,6 @@ impl App {
         false
     }
 
-    /// Look up the worktree name for a given session ID.
-    pub fn session_worktree_name(&self, session_id: &str) -> Option<&str> {
-        self.sidebar_tree.name_for_session(session_id)
-    }
-
     /// Returns a notification message if the event warrants an OS alert, None otherwise.
     /// Returns (iterm2_msg, native_msg) — iTerm2 is suppressed when viewing the session.
     /// Native msg format: "subtitle\nmessage" where subtitle is the section name.
@@ -3633,7 +3535,7 @@ impl App {
         match event {
             AppEvent::SessionBell { session_id } => {
                 // Bell = iTerm2 dock bounce only, no native notification
-                let name = match self.session_worktree_name(session_id) {
+                let name = match self.worktree_name_for_session(session_id) {
                     Some(n) => n,
                     None => return (None, None),
                 };

@@ -8,11 +8,7 @@ use crate::app::App;
 use crate::config::ThemeMode;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
-    let border_style = if is_focused {
-        Style::default().fg(app.theme.border_active)
-    } else {
-        Style::default().fg(app.theme.border_inactive)
-    };
+    let border_style = app.theme.border_style(is_focused);
 
     let Some(ref mut editor) = app.editor else {
         // No file open — render placeholder

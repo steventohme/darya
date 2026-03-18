@@ -75,6 +75,17 @@ impl Theme {
     }
 }
 
+impl Theme {
+    /// Return the border style for a focused or unfocused panel.
+    pub fn border_style(&self, focused: bool) -> ratatui::style::Style {
+        if focused {
+            ratatui::style::Style::default().fg(self.border_active)
+        } else {
+            ratatui::style::Style::default().fg(self.border_inactive)
+        }
+    }
+}
+
 impl Default for Theme {
     fn default() -> Self {
         Self::dark()
@@ -512,36 +523,35 @@ pub fn load_config() -> AppConfig {
     AppConfig { theme, terminal_start_bottom, worktree_dir_format, keybindings, session_command, shell_command, auto_resume }
 }
 
-/// Resolve the session command for a worktree. Checks for a `.darya.toml`
-/// override in the worktree root, falling back to the global config value.
-pub fn resolve_session_command(worktree_path: &std::path::Path, global_command: &str) -> String {
+/// Resolve a local `.darya.toml` override for a worktree, falling back to the global value.
+fn resolve_local_command(
+    worktree_path: &std::path::Path,
+    global_command: &str,
+    extractor: fn(&ConfigToml) -> Option<&str>,
+) -> String {
     let local_config = worktree_path.join(".darya.toml");
     if let Ok(contents) = std::fs::read_to_string(&local_config) {
         if let Ok(config) = toml::from_str::<ConfigToml>(&contents) {
-            if let Some(session) = config.session {
-                if let Some(cmd) = session.command {
-                    return cmd;
-                }
+            if let Some(cmd) = extractor(&config) {
+                return cmd.to_string();
             }
         }
     }
     global_command.to_string()
 }
 
-/// Resolve the shell command for a worktree. Checks for a `.darya.toml`
-/// override in the worktree root, falling back to the global config value.
+/// Resolve the session command for a worktree.
+pub fn resolve_session_command(worktree_path: &std::path::Path, global_command: &str) -> String {
+    resolve_local_command(worktree_path, global_command, |c| {
+        c.session.as_ref()?.command.as_deref()
+    })
+}
+
+/// Resolve the shell command for a worktree.
 pub fn resolve_shell_command(worktree_path: &std::path::Path, global_command: &str) -> String {
-    let local_config = worktree_path.join(".darya.toml");
-    if let Ok(contents) = std::fs::read_to_string(&local_config) {
-        if let Ok(config) = toml::from_str::<ConfigToml>(&contents) {
-            if let Some(shell) = config.shell {
-                if let Some(cmd) = shell.command {
-                    return cmd;
-                }
-            }
-        }
-    }
-    global_command.to_string()
+    resolve_local_command(worktree_path, global_command, |c| {
+        c.shell.as_ref()?.command.as_deref()
+    })
 }
 
 fn dirs_path() -> Option<std::path::PathBuf> {

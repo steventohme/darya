@@ -17,7 +17,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| app.file_explorer.root.display().to_string());
 
-    let root = app.file_explorer.root.clone();
+    let root = &app.file_explorer.root;
     let items: Vec<ListItem> = app
         .file_explorer
         .entries
@@ -70,11 +70,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
         })
         .collect();
 
-    let border_style = if is_focused {
-        Style::default().fg(app.theme.border_active)
-    } else {
-        Style::default().fg(app.theme.border_inactive)
-    };
+    let border_style = app.theme.border_style(is_focused);
 
     let list = List::new(items)
         .block(

@@ -7,11 +7,7 @@ use ratatui::Frame;
 use crate::app::App;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
-    let border_color = if is_focused {
-        app.theme.border_active
-    } else {
-        app.theme.border_inactive
-    };
+    let border_color = if is_focused { app.theme.border_active } else { app.theme.border_inactive };
 
     let search = app.search.as_ref();
     let (title, items, selected) = match search {

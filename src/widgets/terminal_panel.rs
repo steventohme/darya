@@ -16,11 +16,7 @@ pub fn render_session(
     session_id: &str,
     is_focused: bool,
 ) {
-    let border_style = if is_focused {
-        Style::default().fg(app.theme.border_active)
-    } else {
-        Style::default().fg(app.theme.border_inactive)
-    };
+    let border_style = app.theme.border_style(is_focused);
 
     let title = app
         .worktree_name_for_session(session_id)
@@ -135,29 +131,34 @@ pub fn render_session(
     frame.render_widget(placeholder, inner);
 }
 
-/// Render the single-pane terminal panel (backward compatible entry point).
+/// Render a placeholder panel when no session is active.
+fn render_placeholder(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    is_focused: bool,
+    title: &str,
+    message: &str,
+) {
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick)
+        .border_style(app.theme.border_style(is_focused));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let placeholder = Paragraph::new(format!("  {}", message))
+        .style(Style::default().fg(app.theme.fg_dim));
+    frame.render_widget(placeholder, inner);
+}
+
+/// Render the single-pane terminal panel.
 pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &SessionManager, is_focused: bool) {
     if let Some(session_id) = app.active_session_id().map(|s| s.to_string()) {
         render_session(frame, area, app, session_manager, &session_id, is_focused);
     } else {
-        // No active session — show placeholder with border
-        let border_style = if is_focused {
-            Style::default().fg(app.theme.border_active)
-        } else {
-            Style::default().fg(app.theme.border_inactive)
-        };
-
-        let block = Block::default()
-            .title(" Claude Code ")
-            .borders(Borders::ALL)
-            .border_type(BorderType::Thick)
-            .border_style(border_style);
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
-
-        let placeholder = Paragraph::new("  Press Enter on a worktree to start a Claude Code session")
-            .style(Style::default().fg(app.theme.fg_dim));
-        frame.render_widget(placeholder, inner);
+        render_placeholder(frame, area, app, is_focused, " Claude Code ", "Press Enter on a worktree to start a Claude Code session");
     }
 }
 
@@ -166,22 +167,6 @@ pub fn render_shell(frame: &mut Frame, area: Rect, app: &App, session_manager: &
     if let Some(session_id) = app.active_shell_session_id().map(|s| s.to_string()) {
         render_session(frame, area, app, session_manager, &session_id, is_focused);
     } else {
-        let border_style = if is_focused {
-            Style::default().fg(app.theme.border_active)
-        } else {
-            Style::default().fg(app.theme.border_inactive)
-        };
-
-        let block = Block::default()
-            .title(" Shell ")
-            .borders(Borders::ALL)
-            .border_type(BorderType::Thick)
-            .border_style(border_style);
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
-
-        let placeholder = Paragraph::new("  Press Enter to start a shell session")
-            .style(Style::default().fg(app.theme.fg_dim));
-        frame.render_widget(placeholder, inner);
+        render_placeholder(frame, area, app, is_focused, " Shell ", "Press Enter to start a shell session");
     }
 }

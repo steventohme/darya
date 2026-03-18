@@ -11,11 +11,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
         gs.ensure_fresh();
     }
 
-    let border_color = if is_focused {
-        app.theme.border_active
-    } else {
-        app.theme.border_inactive
-    };
+    let border_color = if is_focused { app.theme.border_active } else { app.theme.border_inactive };
 
     let gs = app.git_status.as_ref();
     let (title, items, selected) = match gs {

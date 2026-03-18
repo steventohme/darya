@@ -7,11 +7,7 @@ use ratatui::Frame;
 use crate::app::{App, DiffLineKind};
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
-    let border_style = if is_focused {
-        Style::default().fg(app.theme.border_active)
-    } else {
-        Style::default().fg(app.theme.border_inactive)
-    };
+    let border_style = app.theme.border_style(is_focused);
 
     let Some(ref mut dv) = app.diff_view else {
         // No diff loaded — render placeholder

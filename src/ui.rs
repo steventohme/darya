@@ -185,8 +185,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
         };
 
         // Right: session counts
-        let running = app.running_session_count();
-        let exited = app.exited_session_count();
+        let (running, exited) = app.session_counts();
         let mut right_parts = Vec::new();
         if running > 0 {
             right_parts.push(format!("{} running", running));
