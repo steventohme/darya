@@ -1,0 +1,83 @@
+src/config.rs
+  940a37fba2dd3415 497-510
+src/main.rs
+  940a37fba2dd3415 132-136
+src/app.rs
+  940a37fba2dd3415 11,183-184,2111-2117
+tests/setup_guide.rs
+  940a37fba2dd3415 1-54
+src/ui.rs
+  940a37fba2dd3415 252-257,384,388-441
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.15",
+  "base_commit_sha": "4f202e36ea516ea1129cfcacb58935aca10fbe61",
+  "prompts": {
+    "0155678273b9bb06": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2584911a-2d36-46c6-b10b-aeae70c3d98f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 9,
+      "total_deletions": 8,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    },
+    "5791a088e961605e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4eedbcd3-8a25-49d4-abc1-f92ea1eca314",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    },
+    "7ff66cc0149a6421": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "91076a45-4787-4218-b815-a70f1dafcdc0",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 8,
+      "overriden_lines": 0
+    },
+    "940a37fba2dd3415": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a55d2b08-0e03-4a2a-b56b-c88365bbc338",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 144,
+      "total_deletions": 0,
+      "accepted_lines": 144,
+      "overriden_lines": 0
+    },
+    "e092411c63abbdcd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "20639538-78c2-4c3e-93bc-243f4a8c6054",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 103,
+      "overriden_lines": 0
+    }
+  }
+}
