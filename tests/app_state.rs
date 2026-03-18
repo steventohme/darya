@@ -892,9 +892,9 @@ fn backtab_in_editor_insert_mode_no_crash() {
         ed.read_only = false;
         ed.editor_state.mode = edtui::EditorMode::Insert;
     }
-    // BackTab should be silently ignored, not panic
+    // BackTab exits editor mode and cycles main view
     app.handle_event(&key(KeyCode::BackTab));
-    assert_eq!(app.input_mode, InputMode::Editor);
+    assert_eq!(app.input_mode, InputMode::Navigation);
 }
 
 #[test]
@@ -951,10 +951,10 @@ fn tab_shift_in_editor_insert_mode_no_crash() {
         ed.read_only = false;
         ed.editor_state.mode = edtui::EditorMode::Insert;
     }
-    // Tab+SHIFT (Kitty BackTab) should be silently ignored, not panic
+    // Tab+SHIFT (Kitty BackTab) exits editor mode and cycles main view
     let tab_shift = AppEvent::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT));
     app.handle_event(&tab_shift);
-    assert_eq!(app.input_mode, InputMode::Editor);
+    assert_eq!(app.input_mode, InputMode::Navigation);
 }
 
 #[test]

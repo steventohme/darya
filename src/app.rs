@@ -165,6 +165,27 @@ pub enum MainView {
 }
 
 impl MainView {
+    /// Cycle forward through primary main views: Terminal → Editor → Shell → Terminal.
+    /// Skips contextual views (DiffView, GitBlame, GitLog).
+    pub fn next(self) -> Self {
+        match self {
+            MainView::Terminal => MainView::Editor,
+            MainView::Editor => MainView::Shell,
+            MainView::Shell => MainView::Terminal,
+            // Contextual views cycle back to Terminal
+            MainView::DiffView | MainView::GitBlame | MainView::GitLog => MainView::Terminal,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        match self {
+            MainView::Terminal => MainView::Shell,
+            MainView::Editor => MainView::Terminal,
+            MainView::Shell => MainView::Editor,
+            MainView::DiffView | MainView::GitBlame | MainView::GitLog => MainView::Terminal,
+        }
+    }
+
     pub fn to_view_kind(self) -> ViewKind {
         match self {
             MainView::Terminal => ViewKind::Terminal,
@@ -2418,6 +2439,20 @@ impl App {
             self.show_help = false;
             return;
         }
+        // Shift+Tab: cycle sub-views within the current panel
+        if key.code == KeyCode::BackTab
+            || (key.code == KeyCode::Tab && key.modifiers.contains(KeyModifiers::SHIFT))
+        {
+            match self.panel_focus {
+                PanelFocus::Left => {
+                    self.sidebar_view = self.sidebar_view.next();
+                }
+                PanelFocus::Right => {
+                    self.main_view = self.main_view.next();
+                }
+            }
+            return;
+        }
         // h/l cycle sidebar views when left panel is focused (except in Worktrees view
         // where h/l do expand/collapse in the tree)
         if self.panel_focus == PanelFocus::Left && self.sidebar_view != SidebarView::Worktrees {
@@ -2596,6 +2631,14 @@ impl App {
     }
 
     fn handle_terminal_key(&mut self, key: KeyEvent) {
+        // Shift+Tab: exit terminal mode and cycle main views
+        if key.code == KeyCode::BackTab
+            || (key.code == KeyCode::Tab && key.modifiers.contains(KeyModifiers::SHIFT))
+        {
+            self.input_mode = InputMode::Navigation;
+            self.main_view = self.main_view.next();
+            return;
+        }
         if key.code == KeyCode::Tab {
             if let Some(ref mut layout) = self.pane_layout {
                 if layout.focused < layout.panes.len() - 1 {
@@ -2663,6 +2706,16 @@ impl App {
         };
 
         if self.input_mode == InputMode::Editor {
+            // Shift+Tab: exit editor mode and cycle main views
+            if key.code == KeyCode::BackTab
+                || (key.code == KeyCode::Tab && key.modifiers.contains(KeyModifiers::SHIFT))
+            {
+                editor.read_only = true;
+                editor.editor_state.mode = EditorMode::Normal;
+                self.input_mode = InputMode::Navigation;
+                self.main_view = self.main_view.next();
+                return;
+            }
             // Edit mode: Ctrl+S saves, Esc exits to read-only, rest forwarded to edtui
             if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('s') {
                 match editor.save() {
