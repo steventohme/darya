@@ -1,0 +1,79 @@
+src/app.rs
+  bf36b5632e66e33f 2649-2651
+src/main.rs
+  bf36b5632e66e33f 665-666
+tests/app_state.rs
+  bf36b5632e66e33f 93-94,100-102,1298,1308,1313-1314,1327-1328,1338-1339,1344-1345,1353-1354,2252-2253,2263-2265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.15",
+  "base_commit_sha": "ffcd49ea71c10158d2779936739a917bad5dfcd8",
+  "prompts": {
+    "0155678273b9bb06": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2584911a-2d36-46c6-b10b-aeae70c3d98f",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    },
+    "5791a088e961605e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4eedbcd3-8a25-49d4-abc1-f92ea1eca314",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    },
+    "7ff66cc0149a6421": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "91076a45-4787-4218-b815-a70f1dafcdc0",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 8,
+      "overriden_lines": 0
+    },
+    "bf36b5632e66e33f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e18f3204-8282-4bdc-9120-a351a1519d2a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 39,
+      "total_deletions": 68,
+      "accepted_lines": 27,
+      "overriden_lines": 0
+    },
+    "e092411c63abbdcd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "20639538-78c2-4c3e-93bc-243f4a8c6054",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 103,
+      "overriden_lines": 0
+    }
+  }
+}
