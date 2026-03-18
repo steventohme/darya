@@ -1,0 +1,72 @@
+src/widgets/worktree_list.rs
+  5791a088e961605e 101-112,190,207-223,263-275,284-299,302-304
+src/session/manager.rs
+  5791a088e961605e 59-62
+src/main.rs
+  5791a088e961605e 604-609
+src/app.rs
+  5791a088e961605e 1702-1703,1752,2093
+src/session/pty_session.rs
+  5791a088e961605e 19,26,32-39,77,130,133,187,193-196
+tests/pty_callbacks.rs
+  5791a088e961605e 11,14,19,95-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.15",
+  "base_commit_sha": "32ec44b4d5bee7115a60b275a98c307262573ef4",
+  "prompts": {
+    "1225cbc3ff365e23": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cc8c8976-f0e3-4be0-9ef8-1b60a0a37028",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "4c368f8a2e2cdbca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0e760caa-35ba-4ca1-9f6a-6d9ae3adbb70",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    },
+    "5791a088e961605e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4eedbcd3-8a25-49d4-abc1-f92ea1eca314",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 152,
+      "total_deletions": 17,
+      "accepted_lines": 142,
+      "overriden_lines": 0
+    },
+    "e092411c63abbdcd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "20639538-78c2-4c3e-93bc-243f4a8c6054",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme <steven@workweave.ai>",
+      "messages": [],
+      "total_additions": 125,
+      "total_deletions": 0,
+      "accepted_lines": 125,
+      "overriden_lines": 0
+    }
+  }
+}
