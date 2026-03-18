@@ -127,6 +127,7 @@ async fn main() -> color_eyre::Result<()> {
     let keybindings = app_config.keybindings;
     let session_command = app_config.session_command;
     let shell_command = app_config.shell_command;
+    let auto_resume = app_config.auto_resume;
     let mut app = App::new(worktrees, theme, terminal_start_bottom, keybindings, session_command, shell_command);
 
     // Show setup guide on first launch
@@ -147,6 +148,21 @@ async fn main() -> color_eyre::Result<()> {
             }
         }
     }
+    // Load saved layout and decide whether to restore sessions
+    if let Some(layout) = config::load_layout() {
+        if !layout.sessions.is_empty() {
+            if auto_resume {
+                app.pending_layout = Some(layout);
+                app.restore_approved = true;
+            } else if app.prompt.is_none() {
+                // Only show prompt if no other prompt (e.g. SetupGuide) is active
+                let count = layout.sessions.len();
+                app.pending_layout = Some(layout);
+                app.prompt = Some(darya::app::Prompt::RestoreSession { count });
+            }
+        }
+    }
+
     let (pty_rows, _pty_cols) = pty_size(&terminal);
     app.terminal_height = pty_rows;
     let (mut events, event_tx) = create_event_handler();
@@ -176,8 +192,9 @@ async fn main() -> color_eyre::Result<()> {
     )
     .await;
 
-    // Save sections config before exit
+    // Save sections config and layout before exit
     config::save_sections(&app.sidebar_tree.to_sections_config());
+    config::save_layout(&app.to_layout_config());
 
     // Restore terminal and Claude theme (normal exit path)
     restore_terminal();
@@ -245,6 +262,14 @@ async fn run_loop(
         if let Some((section_idx, root_path)) = app.pending_section_refresh.take() {
             if let Ok(wts) = darya::worktree::manager::list_worktrees_for_root(&root_path) {
                 app.sidebar_tree.refresh_section_worktrees(section_idx, &wts);
+            }
+        }
+
+        // Deferred session restore: user approved (or auto_resume) + layout pending
+        if app.restore_approved {
+            if let Some(layout) = app.pending_layout.take() {
+                app.restore_approved = false;
+                restore_sessions(terminal, app, session_manager, &layout);
             }
         }
 
@@ -762,6 +787,91 @@ fn process_event(
             }
 
             app.handle_event(event);
+}
+
+/// Restore sessions from a saved layout config.
+fn restore_sessions(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    app: &mut App,
+    session_manager: &mut SessionManager,
+    layout: &config::LayoutConfig,
+) {
+    let (rows, cols) = pty_size(terminal);
+
+    for saved in &layout.sessions {
+        let saved_path = PathBuf::from(&saved.path);
+        let saved_kind = match saved.slot_kind.as_str() {
+            "claude" => SessionKind::Claude,
+            "shell" => SessionKind::Shell,
+            _ => continue,
+        };
+
+        // Find matching sidebar item by path, then matching slot by kind + label
+        let mut found = None;
+        for (si, section) in app.sidebar_tree.sections.iter().enumerate() {
+            for (ii, item) in section.items.iter().enumerate() {
+                if item.path == saved_path {
+                    for (slot_idx, slot) in item.sessions.iter().enumerate() {
+                        if slot.kind == saved_kind
+                            && slot.label == saved.slot_label
+                            && slot.session_id.is_none()
+                        {
+                            found = Some((si, ii, slot_idx));
+                            break;
+                        }
+                    }
+                }
+                if found.is_some() { break; }
+            }
+            if found.is_some() { break; }
+        }
+
+        let Some((si, ii, slot_idx)) = found else { continue };
+
+        let command = match saved_kind {
+            SessionKind::Claude => {
+                let base = config::resolve_session_command(&saved_path, &app.session_command);
+                format!("{} --continue", base)
+            }
+            SessionKind::Shell => config::resolve_shell_command(&saved_path, &app.shell_command),
+        };
+
+        match session_manager.spawn_session(saved_path, rows, cols, app.theme.mode, &command) {
+            Ok(id) => {
+                app.sidebar_tree.set_session_id(si, ii, slot_idx, id);
+            }
+            Err(_) => {} // silently skip failed spawns
+        }
+    }
+
+    // Restore UI state
+    if let Some(ref sv) = layout.sidebar_view {
+        app.sidebar_view = match sv.as_str() {
+            "worktrees" => app::SidebarView::Worktrees,
+            "files" => app::SidebarView::FileExplorer,
+            "search" => app::SidebarView::Search,
+            "git_status" => app::SidebarView::GitStatus,
+            _ => app.sidebar_view,
+        };
+    }
+    if let Some(ref mv) = layout.main_view {
+        app.main_view = match mv.as_str() {
+            "terminal" => app::MainView::Terminal,
+            "editor" => app::MainView::Editor,
+            "diff" => app::MainView::DiffView,
+            "blame" => app::MainView::GitBlame,
+            "log" => app::MainView::GitLog,
+            "shell" => app::MainView::Shell,
+            _ => app.main_view,
+        };
+    }
+    if let Some(ref pf) = layout.panel_focus {
+        app.panel_focus = match pf.as_str() {
+            "left" => app::PanelFocus::Left,
+            "right" => app::PanelFocus::Right,
+            _ => app.panel_focus,
+        };
+    }
 }
 
 /// Convert a crossterm KeyEvent to raw bytes for the PTY.

@@ -2757,3 +2757,140 @@ fn color_roundtrip_through_toml() {
     assert_eq!(tree.sections[0].color, Some(Color::Rgb(0xFF, 0x55, 0x33)));
     assert_eq!(tree.sections[0].items[0].color, Some(Color::Rgb(0x33, 0xCC, 0x33)));
 }
+
+// ── Layout Persistence ──────────────────────────────────────
+
+#[test]
+fn to_layout_config_collects_active_sessions() {
+    let mut app = make_app(3);
+    set_session(&mut app, 0, "sess-1");
+    set_session(&mut app, 2, "sess-2");
+
+    let layout = app.to_layout_config();
+    assert_eq!(layout.sessions.len(), 2);
+    assert_eq!(layout.sessions[0].path, item_path(&app, 0).to_string_lossy());
+    assert_eq!(layout.sessions[0].slot_kind, "claude");
+    assert_eq!(layout.sessions[1].path, item_path(&app, 2).to_string_lossy());
+}
+
+#[test]
+fn to_layout_config_includes_shell_sessions() {
+    let mut app = make_app(2);
+    set_session(&mut app, 0, "claude-1");
+    set_shell_session(&mut app, 0, "shell-1");
+
+    let layout = app.to_layout_config();
+    assert_eq!(layout.sessions.len(), 2);
+    let kinds: Vec<&str> = layout.sessions.iter().map(|s| s.slot_kind.as_str()).collect();
+    assert!(kinds.contains(&"claude"));
+    assert!(kinds.contains(&"shell"));
+}
+
+#[test]
+fn to_layout_config_empty_when_no_sessions() {
+    let app = make_app(3);
+    let layout = app.to_layout_config();
+    assert!(layout.sessions.is_empty());
+}
+
+#[test]
+fn to_layout_config_captures_ui_state() {
+    let mut app = make_app(2);
+    app.sidebar_view = SidebarView::FileExplorer;
+    app.main_view = MainView::Shell;
+    app.panel_focus = PanelFocus::Right;
+
+    let layout = app.to_layout_config();
+    assert_eq!(layout.sidebar_view.as_deref(), Some("files"));
+    assert_eq!(layout.main_view.as_deref(), Some("shell"));
+    assert_eq!(layout.panel_focus.as_deref(), Some("right"));
+}
+
+#[test]
+fn restore_session_prompt_y_sets_approved() {
+    let mut app = make_app(2);
+    app.pending_layout = Some(config::LayoutConfig {
+        sessions: vec![config::LayoutSessionToml {
+            path: "/tmp/test".to_string(),
+            slot_kind: "claude".to_string(),
+            slot_label: "claude".to_string(),
+        }],
+        ..Default::default()
+    });
+    app.prompt = Some(Prompt::RestoreSession { count: 1 });
+
+    app.handle_event(&key(KeyCode::Char('y')));
+    assert!(app.restore_approved);
+    assert!(app.prompt.is_none());
+    assert!(app.pending_layout.is_some()); // still present, consumed by main loop
+}
+
+#[test]
+fn restore_session_prompt_n_clears_layout() {
+    let mut app = make_app(2);
+    app.pending_layout = Some(config::LayoutConfig {
+        sessions: vec![config::LayoutSessionToml {
+            path: "/tmp/test".to_string(),
+            slot_kind: "claude".to_string(),
+            slot_label: "claude".to_string(),
+        }],
+        ..Default::default()
+    });
+    app.prompt = Some(Prompt::RestoreSession { count: 1 });
+
+    app.handle_event(&key(KeyCode::Char('n')));
+    assert!(!app.restore_approved);
+    assert!(app.prompt.is_none());
+    assert!(app.pending_layout.is_none());
+}
+
+#[test]
+fn restore_session_prompt_esc_clears_layout() {
+    let mut app = make_app(2);
+    app.pending_layout = Some(config::LayoutConfig::default());
+    app.prompt = Some(Prompt::RestoreSession { count: 0 });
+
+    app.handle_event(&key(KeyCode::Esc));
+    assert!(app.pending_layout.is_none());
+    assert!(app.prompt.is_none());
+}
+
+#[test]
+fn restore_session_prompt_enter_approves() {
+    let mut app = make_app(2);
+    app.pending_layout = Some(config::LayoutConfig::default());
+    app.prompt = Some(Prompt::RestoreSession { count: 0 });
+
+    app.handle_event(&key(KeyCode::Enter));
+    assert!(app.restore_approved);
+    assert!(app.prompt.is_none());
+}
+
+#[test]
+fn layout_config_roundtrip_toml() {
+    let layout = config::LayoutConfig {
+        sessions: vec![
+            config::LayoutSessionToml {
+                path: "/tmp/project".to_string(),
+                slot_kind: "claude".to_string(),
+                slot_label: "claude".to_string(),
+            },
+            config::LayoutSessionToml {
+                path: "/tmp/project".to_string(),
+                slot_kind: "shell".to_string(),
+                slot_label: "my-shell".to_string(),
+            },
+        ],
+        sidebar_view: Some("files".to_string()),
+        main_view: Some("terminal".to_string()),
+        panel_focus: Some("right".to_string()),
+    };
+
+    let toml_str = toml::to_string_pretty(&layout).unwrap();
+    let parsed: config::LayoutConfig = toml::from_str(&toml_str).unwrap();
+    assert_eq!(parsed.sessions.len(), 2);
+    assert_eq!(parsed.sessions[0].slot_kind, "claude");
+    assert_eq!(parsed.sessions[1].slot_label, "my-shell");
+    assert_eq!(parsed.sidebar_view.as_deref(), Some("files"));
+    assert_eq!(parsed.panel_focus.as_deref(), Some("right"));
+}

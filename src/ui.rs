@@ -255,6 +255,12 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
         return;
     }
 
+    // RestoreSession uses a compact centered overlay
+    if let Prompt::RestoreSession { count } = prompt {
+        render_restore_session(frame, area, theme, *count);
+        return;
+    }
+
     let width = if matches!(prompt, Prompt::ColorPicker { .. }) { 30u16 } else { 50u16 }.min(area.width.saturating_sub(4));
     let height = if matches!(prompt, Prompt::ColorPicker { .. }) { 4u16 } else { 3u16 };
     let x = (area.width.saturating_sub(width)) / 2;
@@ -382,6 +388,7 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
             frame.render_widget(paragraph, inner);
         }
         Prompt::SetupGuide => unreachable!(), // handled by early return
+        Prompt::RestoreSession { .. } => unreachable!(), // handled by early return
     }
 }
 
@@ -433,6 +440,46 @@ fn render_setup_guide(frame: &mut Frame, area: Rect, theme: &crate::config::Them
         Line::from(vec![Span::styled("  Or edit ~/.config/darya/config.toml to rebind keys", dim)]),
         Line::from(""),
         Line::from(vec![Span::styled("  Press Enter or Esc to dismiss", dim)]),
+    ];
+
+    let paragraph = Paragraph::new(lines).style(Style::default().bg(theme.bg));
+    frame.render_widget(paragraph, inner);
+}
+
+fn render_restore_session(frame: &mut Frame, area: Rect, theme: &crate::config::Theme, count: usize) {
+    let width = 45u16.min(area.width.saturating_sub(4));
+    let height = 5u16.min(area.height.saturating_sub(2));
+    let x = (area.width.saturating_sub(width)) / 2;
+    let y = (area.height.saturating_sub(height)) / 2;
+    let popup_area = Rect::new(x, y, width, height);
+
+    frame.render_widget(Clear, popup_area);
+
+    let block = Block::default()
+        .title(" Restore Sessions ")
+        .title_style(Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(theme.border_active))
+        .style(Style::default().bg(theme.bg));
+    let inner = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+
+    let session_word = if count == 1 { "session" } else { "sessions" };
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                format!("  Restore {} previous {}? ", count, session_word),
+                Style::default().fg(theme.fg),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  y", Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD)),
+            Span::styled("/Enter: yes  ", Style::default().fg(theme.fg_dim)),
+            Span::styled("n", Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD)),
+            Span::styled("/Esc: no", Style::default().fg(theme.fg_dim)),
+        ]),
     ];
 
     let paragraph = Paragraph::new(lines).style(Style::default().bg(theme.bg));

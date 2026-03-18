@@ -182,6 +182,8 @@ pub enum Prompt {
     ColorPicker { target: ColorTarget, cursor: usize },
     /// First-launch setup guide for Cmd key configuration
     SetupGuide,
+    /// Offer to restore previous sessions
+    RestoreSession { count: usize },
 }
 
 /// An entry in the directory browser (a subdirectory).
@@ -1733,6 +1735,10 @@ pub struct App {
     pub pending_section_refresh: Option<(usize, PathBuf)>,
     /// Session IDs that need cleanup in session_manager (after section deletion)
     pub pending_removed_sessions: Vec<String>,
+    /// Pending layout to restore (loaded from layout.toml on startup)
+    pub pending_layout: Option<config::LayoutConfig>,
+    /// Set to true when user approves session restore via prompt
+    pub restore_approved: bool,
 }
 
 impl App {
@@ -1776,6 +1782,8 @@ impl App {
             dir_browser: None,
             pending_section_refresh: None,
             pending_removed_sessions: Vec::new(),
+            pending_layout: None,
+            restore_approved: false,
         }
     }
 
@@ -2111,6 +2119,17 @@ impl App {
             Prompt::SetupGuide => match key.code {
                 KeyCode::Enter | KeyCode::Esc => {
                     config::mark_setup_done();
+                    self.prompt = None;
+                }
+                _ => {}
+            },
+            Prompt::RestoreSession { .. } => match key.code {
+                KeyCode::Char('y') | KeyCode::Enter => {
+                    self.restore_approved = true;
+                    self.prompt = None;
+                }
+                KeyCode::Char('n') | KeyCode::Esc => {
+                    self.pending_layout = None;
                     self.prompt = None;
                 }
                 _ => {}
@@ -3406,6 +3425,56 @@ impl App {
     }
 
     /// Count sessions that are running (have session_id but not exited).
+    /// Build a LayoutConfig from current sidebar state (only slots with active sessions).
+    pub fn to_layout_config(&self) -> config::LayoutConfig {
+        let mut sessions = Vec::new();
+        for section in &self.sidebar_tree.sections {
+            for item in &section.items {
+                for slot in &item.sessions {
+                    if slot.session_id.is_some() {
+                        let slot_kind = match slot.kind {
+                            SessionKind::Claude => "claude",
+                            SessionKind::Shell => "shell",
+                        };
+                        sessions.push(config::LayoutSessionToml {
+                            path: item.path.to_string_lossy().to_string(),
+                            slot_kind: slot_kind.to_string(),
+                            slot_label: slot.label.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        let sidebar_view = Some(match self.sidebar_view {
+            SidebarView::Worktrees => "worktrees",
+            SidebarView::FileExplorer => "files",
+            SidebarView::Search => "search",
+            SidebarView::GitStatus => "git_status",
+        }.to_string());
+
+        let main_view = Some(match self.main_view {
+            MainView::Terminal => "terminal",
+            MainView::Editor => "editor",
+            MainView::DiffView => "diff",
+            MainView::GitBlame => "blame",
+            MainView::GitLog => "log",
+            MainView::Shell => "shell",
+        }.to_string());
+
+        let panel_focus = Some(match self.panel_focus {
+            PanelFocus::Left => "left",
+            PanelFocus::Right => "right",
+        }.to_string());
+
+        config::LayoutConfig {
+            sessions,
+            sidebar_view,
+            main_view,
+            panel_focus,
+        }
+    }
+
     pub fn running_session_count(&self) -> usize {
         self.sidebar_tree.all_session_ids()
             .iter()

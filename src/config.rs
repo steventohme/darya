@@ -249,6 +249,11 @@ struct ShellToml {
 }
 
 #[derive(Debug, Deserialize, Default)]
+struct LayoutToml {
+    auto_resume: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Default)]
 struct ConfigToml {
     theme: Option<ThemeToml>,
     terminal: Option<TerminalToml>,
@@ -256,6 +261,47 @@ struct ConfigToml {
     keybindings: Option<KeybindingsToml>,
     session: Option<SessionToml>,
     shell: Option<ShellToml>,
+    layout: Option<LayoutToml>,
+}
+
+// ── Layout persistence (session restore) ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LayoutSessionToml {
+    pub path: String,
+    pub slot_kind: String,
+    pub slot_label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LayoutConfig {
+    #[serde(default)]
+    pub sessions: Vec<LayoutSessionToml>,
+    #[serde(default)]
+    pub sidebar_view: Option<String>,
+    #[serde(default)]
+    pub main_view: Option<String>,
+    #[serde(default)]
+    pub panel_focus: Option<String>,
+}
+
+/// Load layout config from `~/.config/darya/layout.toml`.
+pub fn load_layout() -> Option<LayoutConfig> {
+    let home = dirs_path()?;
+    let path = home.join(".config").join("darya").join("layout.toml");
+    let contents = std::fs::read_to_string(&path).ok()?;
+    toml::from_str::<LayoutConfig>(&contents).ok()
+}
+
+/// Save layout config to `~/.config/darya/layout.toml`.
+pub fn save_layout(config: &LayoutConfig) {
+    let Some(home) = dirs_path() else { return };
+    let dir = home.join(".config").join("darya");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("layout.toml");
+    if let Ok(toml_str) = toml::to_string_pretty(config) {
+        let _ = std::fs::write(&path, toml_str);
+    }
 }
 
 // ── Sections persistence (separate file) ──
@@ -324,6 +370,7 @@ pub struct AppConfig {
     pub keybindings: KeybindingsConfig,
     pub session_command: String,
     pub shell_command: String,
+    pub auto_resume: bool,
 }
 
 /// Parse a hex color string like "#33FF33" or "33FF33" into a ratatui Color.
@@ -354,8 +401,9 @@ pub fn load_config() -> AppConfig {
     let mut keybindings = KeybindingsConfig::default();
     let mut session_command = CLAUDE_COMMAND.to_string();
     let mut shell_command = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    let mut auto_resume = false;
 
-    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone(), keybindings: KeybindingsConfig::default(), session_command: CLAUDE_COMMAND.to_string(), shell_command: shell_command.clone() };
+    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone(), keybindings: KeybindingsConfig::default(), session_command: CLAUDE_COMMAND.to_string(), shell_command: shell_command.clone(), auto_resume };
 
     let Some(home) = dirs_path() else {
         return defaults();
@@ -455,7 +503,13 @@ pub fn load_config() -> AppConfig {
         }
     }
 
-    AppConfig { theme, terminal_start_bottom, worktree_dir_format, keybindings, session_command, shell_command }
+    if let Some(ref l) = config.layout {
+        if let Some(val) = l.auto_resume {
+            auto_resume = val;
+        }
+    }
+
+    AppConfig { theme, terminal_start_bottom, worktree_dir_format, keybindings, session_command, shell_command, auto_resume }
 }
 
 /// Resolve the session command for a worktree. Checks for a `.darya.toml`
