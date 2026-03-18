@@ -12,7 +12,7 @@ expression: output
 ┃                   ┃View: Git Blame                                      Cmd+7┃                   ┃
 ┃                   ┃View: Git Log                                        Cmd+8┃                   ┃
 ┃                   ┃Refresh Git Status                                        ┃                   ┃
-┃                   ┃                                                          ┃                   ┃
+┃                   ┃Toggle Split Direction                                    ┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
@@ -31,4 +31,4 @@ expression: output
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
- [NAV] worktrees
+ NAV  worktrees

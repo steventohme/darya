@@ -1,2 +1,7 @@
 /target
 /tasks/
+.agents/
+.claude/
+logs/
+skills-lock.json
+ROADMAP.md
