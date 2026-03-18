@@ -90,15 +90,16 @@ fn nav_number_beyond_count_is_noop() {
 // ── Mode transitions ────────────────────────────────────────
 
 #[test]
-fn terminal_mode_tab_returns_to_nav() {
+fn terminal_mode_tab_passes_through_to_pty() {
+    // Tab in terminal mode should NOT change app state — it's forwarded to PTY
     let mut app = make_app_with_session(3);
-    // Move cursor to item 0 so active_session_id works
     app.sidebar_tree.cursor = 1;
     app.input_mode = InputMode::Terminal;
     app.panel_focus = PanelFocus::Right;
     app.handle_event(&key(KeyCode::Tab));
-    assert_eq!(app.input_mode, InputMode::Navigation);
-    assert_eq!(app.panel_focus, PanelFocus::Left);
+    // Stays in terminal mode, focus unchanged
+    assert_eq!(app.input_mode, InputMode::Terminal);
+    assert_eq!(app.panel_focus, PanelFocus::Right);
 }
 
 #[test]
@@ -1294,7 +1295,7 @@ fn remove_session_from_panes_collapses() {
 }
 
 #[test]
-fn tab_cycles_panes_then_sidebar_in_terminal_nav() {
+fn tab_cycles_panes_in_nav_mode() {
     let mut app = make_app_with_two_sessions(3);
     app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
@@ -1304,12 +1305,13 @@ fn tab_cycles_panes_then_sidebar_in_terminal_nav() {
 
     // Start at pane 0
     assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
-    // Tab → pane 1, enters terminal mode (session alive)
+    // Tab in nav mode → pane 1, enters terminal mode (session alive)
     app.handle_event(&key(KeyCode::Tab));
     assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
     assert_eq!(app.input_mode, InputMode::Terminal);
 
-    // Tab from last pane in terminal mode → exits to nav, goes to left panel
+    // Manually return to nav mode, then Tab from last pane → sidebar
+    app.input_mode = InputMode::Navigation;
     app.handle_event(&key(KeyCode::Tab));
     assert_eq!(app.panel_focus, PanelFocus::Left);
     assert_eq!(app.input_mode, InputMode::Navigation);
@@ -1322,7 +1324,8 @@ fn tab_cycles_panes_then_sidebar_in_terminal_nav() {
 }
 
 #[test]
-fn tab_cycles_panes_in_terminal_mode() {
+fn tab_in_terminal_mode_stays_in_terminal() {
+    // Tab in terminal mode passes through to PTY, doesn't cycle panes
     let mut app = make_app_with_two_sessions(3);
     app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
@@ -1330,21 +1333,16 @@ fn tab_cycles_panes_in_terminal_mode() {
     app.input_mode = InputMode::Terminal;
     app.split_add_pane();
 
-    // Tab in terminal mode with panes: cycle to next pane, stay in terminal mode
     assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
     app.handle_event(&key(KeyCode::Tab));
-    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
+    // Pane focus unchanged, still in terminal mode
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
     assert_eq!(app.input_mode, InputMode::Terminal);
-
-    // Tab on last pane in terminal mode → exit to nav, left panel
-    app.handle_event(&key(KeyCode::Tab));
-    assert_eq!(app.panel_focus, PanelFocus::Left);
-    assert_eq!(app.input_mode, InputMode::Navigation);
 }
 
 #[test]
-fn tab_no_panes_behaves_as_before() {
-    // Without split, Tab in terminal mode toggles to left panel
+fn tab_no_panes_stays_in_terminal() {
+    // Without split, Tab in terminal mode passes through to PTY
     let mut app = make_app_with_session(3);
     app.sidebar_tree.cursor = 1;
     app.input_mode = InputMode::Terminal;
@@ -1352,8 +1350,8 @@ fn tab_no_panes_behaves_as_before() {
     assert!(app.pane_layout.is_none());
 
     app.handle_event(&key(KeyCode::Tab));
-    assert_eq!(app.input_mode, InputMode::Navigation);
-    assert_eq!(app.panel_focus, PanelFocus::Left);
+    assert_eq!(app.input_mode, InputMode::Terminal);
+    assert_eq!(app.panel_focus, PanelFocus::Right);
 }
 
 // ── Git Indicators ──────────────────────────────────────────
@@ -2251,21 +2249,20 @@ fn tab_cycles_mixed_panes() {
 }
 
 #[test]
-fn tab_in_terminal_mode_to_editor_pane_switches_mode() {
+fn tab_in_terminal_mode_with_editor_pane_stays_in_terminal() {
+    // Tab in terminal mode passes to PTY even with editor pane present
     let mut app = make_app_with_session(3);
     app.sidebar_tree.cursor = 1;
     app.panel_focus = PanelFocus::Right;
     app.main_view = MainView::Terminal;
     app.input_mode = InputMode::Terminal;
 
-    // Add editor pane
     app.split_add_pane_with(PaneContent::Editor);
 
-    // Tab from terminal mode on pane 0 → pane 1 (editor)
     app.handle_event(&key(KeyCode::Tab));
-    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
-    // Should switch to Navigation since editor pane doesn't support Terminal mode
-    assert_eq!(app.input_mode, InputMode::Navigation);
+    // Stays on pane 0 in terminal mode — Tab went to PTY
+    assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
+    assert_eq!(app.input_mode, InputMode::Terminal);
 }
 
 #[test]

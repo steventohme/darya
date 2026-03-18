@@ -2646,32 +2646,9 @@ impl App {
         }
     }
 
-    fn handle_terminal_key(&mut self, key: KeyEvent) {
-        if key.code == KeyCode::Tab {
-            if let Some(ref layout) = self.pane_layout {
-                if layout.focused < layout.panes.len() - 1 {
-                    // Not last pane: cycle to next, enter appropriate mode
-                    self.cycle_pane_focus_next();
-                    // Check if the new pane is a terminal/shell (stay Terminal) or editor (switch to Nav)
-                    if let Some(ref layout) = self.pane_layout {
-                        match layout.panes.get(layout.focused) {
-                            Some(PaneContent::Editor) => {
-                                self.input_mode = InputMode::Navigation;
-                            }
-                            _ => {} // Stay in Terminal mode for Terminal/Shell panes
-                        }
-                    }
-                } else {
-                    // Last pane: exit to nav, go to left panel
-                    self.input_mode = InputMode::Navigation;
-                    self.panel_focus = PanelFocus::Left;
-                }
-            } else {
-                self.input_mode = InputMode::Navigation;
-                self.toggle_focus();
-            }
-        }
-        // All other keys get forwarded to PTY (handled in main loop)
+    fn handle_terminal_key(&mut self, _key: KeyEvent) {
+        // All keys (including Tab) are forwarded to PTY in main loop.
+        // Use Esc to exit terminal mode, Cmd+1/2/etc to switch panels.
     }
 
     fn handle_file_explorer_key(&mut self, key: KeyEvent) {
