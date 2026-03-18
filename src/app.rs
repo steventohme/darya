@@ -1699,6 +1699,8 @@ pub struct App {
     pub attention_sessions: HashSet<String>,
     /// Sessions whose process has exited
     pub exited_sessions: HashSet<String>,
+    /// Window title status text from PTY sessions (set via OSC 0/2)
+    pub session_statuses: HashMap<String, String>,
     /// Status message to show briefly
     pub status_message: Option<String>,
     pub show_help: bool,
@@ -1747,6 +1749,7 @@ impl App {
             sidebar_tree,
             attention_sessions: HashSet::new(),
             exited_sessions: HashSet::new(),
+            session_statuses: HashMap::new(),
             prompt: None,
             status_message: None,
             show_help: false,
@@ -2087,6 +2090,7 @@ impl App {
                     for sid in &session_ids {
                         self.attention_sessions.remove(sid);
                         self.exited_sessions.remove(sid);
+                        self.session_statuses.remove(sid);
                         self.activity.remove_session(sid);
                         self.remove_session_from_panes(sid);
                     }

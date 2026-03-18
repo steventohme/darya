@@ -601,6 +601,12 @@ fn process_event(
                 if app.is_session_visible(session_id) {
                     app.scroll_offsets.remove(session_id);
                 }
+                // Capture window title (OSC 0/2) as session status
+                if let Some(status) = session_manager.session_status(session_id) {
+                    if !status.is_empty() {
+                        app.session_statuses.insert(session_id.clone(), status);
+                    }
+                }
             }
 
             // Handle mouse scroll — works in ALL modes

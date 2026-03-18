@@ -98,6 +98,18 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     let branch_str = item.branch.as_deref().unwrap_or("detached");
                     let exited_marker = if is_exited { " [exited]" } else { "" };
 
+                    // Claude status text (window title from OSC 0/2) for active sessions.
+                    // Filter out bare directory names — only show titles that look like
+                    // real status updates (e.g. "Thinking...", "Reading src/app.rs").
+                    let claude_status = if !is_exited && has_session {
+                        session_id
+                            .and_then(|id| app.session_statuses.get(id))
+                            .filter(|s| !s.is_empty() && s.contains(' ') && !s.contains("Claude Code"))
+                            .cloned()
+                    } else {
+                        None
+                    };
+
                     // Hotkey label: 1-9 for first 9 items, 0 for 10th
                     let hotkey = if item_counter < 9 {
                         format!("{}", item_counter + 1)
@@ -175,7 +187,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                             ),
                         ]
                     } else {
-                        vec![
+                        let mut v = vec![
                             Span::styled(
                                 format!("  {} {} {} ", hotkey, arrow, indicator),
                                 Style::default().fg(indicator_color),
@@ -192,7 +204,23 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                 shell_indicator,
                                 Style::default().fg(app.theme.fg_dim),
                             ),
-                        ]
+                        ];
+                        if let Some(ref status) = claude_status {
+                            let prefix_len = 8 + item.display_name.len() + 3 + branch_str.len();
+                            let max_len = (area.width as usize).saturating_sub(prefix_len + 5);
+                            if max_len > 3 {
+                                let truncated = if status.len() > max_len {
+                                    format!(" {}…", &status[..max_len.saturating_sub(1)])
+                                } else {
+                                    format!(" {}", status)
+                                };
+                                v.push(Span::styled(
+                                    truncated,
+                                    Style::default().fg(app.theme.session_active).add_modifier(Modifier::DIM),
+                                ));
+                            }
+                        }
+                        v
                     };
 
                     // Right-align bouncing animation
@@ -232,7 +260,19 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     };
 
                     let label_fg = slot.color.unwrap_or(status_color);
-                    let spans = vec![
+
+                    // Show Claude status text for active sessions (no [exited] or (not started)).
+                    // Filter out bare directory names — only show multi-word status updates.
+                    let claude_status = if status_suffix.is_empty() {
+                        slot.session_id.as_ref()
+                            .and_then(|id| app.session_statuses.get(id))
+                            .filter(|s| !s.is_empty() && s.contains(' ') && !s.contains("Claude Code"))
+                            .cloned()
+                    } else {
+                        None
+                    };
+
+                    let mut spans = vec![
                         Span::styled(
                             format!("    {} ", icon),
                             Style::default().fg(status_color),
@@ -241,11 +281,27 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                             slot.label.clone(),
                             Style::default().fg(label_fg),
                         ),
-                        Span::styled(
+                    ];
+
+                    if let Some(status) = claude_status {
+                        let max_status_len = (area.width as usize)
+                            .saturating_sub(8 + slot.label.len());
+                        let truncated = if status.len() > max_status_len && max_status_len > 1 {
+                            format!("{}…", &status[..max_status_len.saturating_sub(1)])
+                        } else {
+                            status
+                        };
+                        spans.push(Span::styled(
+                            format!(" {}", truncated),
+                            Style::default().fg(app.theme.session_active).add_modifier(Modifier::DIM),
+                        ));
+                    } else {
+                        spans.push(Span::styled(
                             status_suffix.to_string(),
                             Style::default().fg(app.theme.fg_dim),
-                        ),
-                    ];
+                        ));
+                    }
+
                     ListItem::new(Line::from(spans))
                 }
             }

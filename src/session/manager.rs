@@ -56,6 +56,10 @@ impl SessionManager {
         self.sessions.remove(id)
     }
 
+    pub fn session_status(&self, id: &str) -> Option<String> {
+        self.sessions.get(id).map(|s| s.status_text())
+    }
+
     pub fn resize_all(&mut self, rows: u16, cols: u16) {
         for session in self.sessions.values_mut() {
             let _ = session.resize(rows, cols);

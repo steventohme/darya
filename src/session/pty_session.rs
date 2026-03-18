@@ -16,17 +16,27 @@ use crate::event::AppEvent;
 /// rather than a standalone BEL character.
 pub struct PtyCallback {
     pub done_count: Arc<AtomicUsize>,
+    pub status_text: Arc<RwLock<String>>,
 }
 
 impl PtyCallback {
     pub fn new() -> Self {
         Self {
             done_count: Arc::new(AtomicUsize::new(0)),
+            status_text: Arc::new(RwLock::new(String::new())),
         }
     }
 }
 
 impl vt100::Callbacks for PtyCallback {
+    fn set_window_title(&mut self, _: &mut vt100::Screen, title: &[u8]) {
+        if let Ok(text) = std::str::from_utf8(title) {
+            if let Ok(mut status) = self.status_text.write() {
+                *status = text.to_string();
+            }
+        }
+    }
+
     fn audible_bell(&mut self, _: &mut vt100::Screen) {
         // Standalone BEL — also counts as a notification
         self.done_count.fetch_add(1, Ordering::Relaxed);
@@ -64,6 +74,7 @@ pub struct PtySession {
     pub id: String,
     pub worktree_path: PathBuf,
     pub parser: Arc<RwLock<vt100::Parser<PtyCallback>>>,
+    status_text: Arc<RwLock<String>>,
     writer: Box<dyn Write + Send>,
     master: Box<dyn MasterPty + Send>,
 }
@@ -116,8 +127,10 @@ impl PtySession {
 
         // Create vt100 parser with task-done detection callback
         let done_count = Arc::new(AtomicUsize::new(0));
+        let status_text = Arc::new(RwLock::new(String::new()));
         let callbacks = PtyCallback {
             done_count: done_count.clone(),
+            status_text: status_text.clone(),
         };
         let parser = Arc::new(RwLock::new(vt100::Parser::new_with_callbacks(
             rows, cols, 1000, callbacks,
@@ -171,9 +184,14 @@ impl PtySession {
             id,
             worktree_path,
             parser,
+            status_text,
             writer,
             master: pair.master,
         })
+    }
+
+    pub fn status_text(&self) -> String {
+        self.status_text.read().map(|s| s.clone()).unwrap_or_default()
     }
 
     pub fn write_input(&mut self, bytes: &[u8]) -> Result<()> {
