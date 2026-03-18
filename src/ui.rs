@@ -249,6 +249,12 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
 }
 
 fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::config::Theme) {
+    // SetupGuide uses a larger overlay
+    if matches!(prompt, Prompt::SetupGuide) {
+        render_setup_guide(frame, area, theme);
+        return;
+    }
+
     let width = if matches!(prompt, Prompt::ColorPicker { .. }) { 30u16 } else { 50u16 }.min(area.width.saturating_sub(4));
     let height = if matches!(prompt, Prompt::ColorPicker { .. }) { 4u16 } else { 3u16 };
     let x = (area.width.saturating_sub(width)) / 2;
@@ -375,7 +381,62 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
             let paragraph = Paragraph::new(lines).style(Style::default().bg(theme.bg));
             frame.render_widget(paragraph, inner);
         }
+        Prompt::SetupGuide => unreachable!(), // handled by early return
     }
+}
+
+fn render_setup_guide(frame: &mut Frame, area: Rect, theme: &crate::config::Theme) {
+    let width = 56u16.min(area.width.saturating_sub(4));
+    let height = 16u16.min(area.height.saturating_sub(2));
+    let x = (area.width.saturating_sub(width)) / 2;
+    let y = (area.height.saturating_sub(height)) / 2;
+    let popup_area = Rect::new(x, y, width, height);
+
+    frame.render_widget(Clear, popup_area);
+
+    let block = Block::default()
+        .title(" Welcome to Darya ")
+        .title_style(Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(theme.border_active))
+        .style(Style::default().bg(theme.bg));
+    let inner = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+
+    let bold = Style::default().fg(theme.fg).add_modifier(Modifier::BOLD);
+    let normal = Style::default().fg(theme.fg);
+    let dim = Style::default().fg(theme.fg_dim);
+    let accent = Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD);
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![Span::styled("  Darya uses Cmd+key shortcuts:", normal)]),
+        Line::from(vec![
+            Span::styled("    Cmd+1", accent),
+            Span::styled("  Worktrees    ", normal),
+            Span::styled("Cmd+2", accent),
+            Span::styled("  Terminal", normal),
+        ]),
+        Line::from(vec![
+            Span::styled("    Cmd+P", accent),
+            Span::styled("  Fuzzy Find   ", normal),
+            Span::styled("Cmd+K", accent),
+            Span::styled("  Command Palette", normal),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled("  iTerm2 intercepts these by default. To fix:", normal)]),
+        Line::from(""),
+        Line::from(vec![Span::styled("  1. ", bold), Span::styled("iTerm2 \u{2192} Settings \u{2192} Keys \u{2192} Key Bindings", normal)]),
+        Line::from(vec![Span::styled("  2. ", bold), Span::styled("Remove or reassign Cmd+1 through Cmd+9", normal)]),
+        Line::from(""),
+        Line::from(vec![Span::styled("  Or edit ~/.config/darya/config.toml to rebind keys", dim)]),
+        Line::from(""),
+        Line::from(vec![Span::styled("  Press Enter or Esc to dismiss", dim)]),
+    ];
+
+    let paragraph = Paragraph::new(lines).style(Style::default().bg(theme.bg));
+    frame.render_widget(paragraph, inner);
 }
 
 fn render_dir_browser(frame: &mut Frame, area: Rect, browser: &DirBrowser, theme: &crate::config::Theme) {

@@ -494,6 +494,20 @@ fn dirs_path() -> Option<std::path::PathBuf> {
     std::env::var_os("HOME").map(std::path::PathBuf::from)
 }
 
+/// Check if the first-launch setup guide has been dismissed.
+pub fn setup_done() -> bool {
+    let Some(home) = dirs_path() else { return true };
+    home.join(".config").join("darya").join(".setup_done").exists()
+}
+
+/// Mark the first-launch setup guide as dismissed by creating a marker file.
+pub fn mark_setup_done() {
+    let Some(home) = dirs_path() else { return };
+    let dir = home.join(".config").join("darya");
+    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::write(dir.join(".setup_done"), "");
+}
+
 /// Sync Claude Code's theme in `~/.claude.json` to match darya's theme mode.
 /// Returns the original theme value so it can be restored later.
 pub fn sync_claude_theme(mode: ThemeMode) -> Option<serde_json::Value> {

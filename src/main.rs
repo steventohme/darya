@@ -129,6 +129,11 @@ async fn main() -> color_eyre::Result<()> {
     let shell_command = app_config.shell_command;
     let mut app = App::new(worktrees, theme, terminal_start_bottom, keybindings, session_command, shell_command);
 
+    // Show setup guide on first launch
+    if !config::setup_done() {
+        app.prompt = Some(darya::app::Prompt::SetupGuide);
+    }
+
     // Load sections config if it exists, merge with discovered worktrees
     if let Some(sections_config) = config::load_sections() {
         let wt_list = wt_manager.list().unwrap_or_default();

@@ -8,6 +8,7 @@ use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Index2, L
 
 use ratatui::style::Color;
 
+use crate::config;
 use crate::sidebar::tree::SidebarTree;
 use crate::sidebar::types::SessionKind;
 
@@ -179,6 +180,8 @@ pub enum Prompt {
     ConfirmDeleteSection { section_name: String, section_idx: usize },
     /// Color picker overlay
     ColorPicker { target: ColorTarget, cursor: usize },
+    /// First-launch setup guide for Cmd key configuration
+    SetupGuide,
 }
 
 /// An entry in the directory browser (a subdirectory).
@@ -2104,6 +2107,13 @@ impl App {
                 _ => {
                     self.prompt = None;
                 }
+            },
+            Prompt::SetupGuide => match key.code {
+                KeyCode::Enter | KeyCode::Esc => {
+                    config::mark_setup_done();
+                    self.prompt = None;
+                }
+                _ => {}
             },
             Prompt::ColorPicker { target, cursor } => match key.code {
                 KeyCode::Left | KeyCode::Char('h') => {
