@@ -156,4 +156,4 @@ Built with:
 
 ## License
 
-MIT
+[MIT](LICENSE)
