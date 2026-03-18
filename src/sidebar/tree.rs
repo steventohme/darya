@@ -381,6 +381,20 @@ impl SidebarTree {
         None
     }
 
+    /// Look up both the section name and item name for a session ID.
+    pub fn section_and_name_for_session(&self, session_id: &str) -> Option<(&str, &str)> {
+        for section in &self.sections {
+            for item in &section.items {
+                for slot in &item.sessions {
+                    if slot.session_id.as_deref() == Some(session_id) {
+                        return Some((&section.name, &item.display_name));
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Find a session slot's tree coordinates by session ID.
     pub fn find_session_slot(&self, session_id: &str) -> Option<(usize, usize, usize)> {
         for (si, section) in self.sections.iter().enumerate() {

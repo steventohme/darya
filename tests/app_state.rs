@@ -2348,24 +2348,41 @@ fn is_session_visible_in_mixed_panes() {
 fn notification_for_bell_when_not_viewing() {
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
-    // User is in navigation mode (not viewing terminal)
     app.input_mode = InputMode::Navigation;
     let sid = active_session_id(&app).unwrap().to_string();
     let event = AppEvent::SessionBell { session_id: sid };
-    let notif = app.notification_for_event(&event);
-    assert!(notif.is_some());
-    assert!(notif.unwrap().contains("needs attention"));
+    let (iterm, native) = app.notification_for_event(&event);
+    // Bell → iTerm2 only, no native notification
+    assert!(iterm.is_some());
+    assert!(iterm.unwrap().contains("needs attention"));
+    assert!(native.is_none());
 }
 
 #[test]
 fn notification_for_bell_when_viewing() {
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
-    // User is actively viewing the session in terminal mode
     app.input_mode = InputMode::Terminal;
     let sid = active_session_id(&app).unwrap().to_string();
     let event = AppEvent::SessionBell { session_id: sid };
-    assert!(app.notification_for_event(&event).is_none());
+    let (iterm, native) = app.notification_for_event(&event);
+    // Viewing session in terminal mode — no notifications at all
+    assert!(iterm.is_none());
+    assert!(native.is_none());
+}
+
+#[test]
+fn notification_for_done() {
+    let mut app = make_app_with_session(2);
+    app.sidebar_tree.cursor = 1;
+    let sid = active_session_id(&app).unwrap().to_string();
+    let event = AppEvent::SessionDone { session_id: sid };
+    let (iterm, native) = app.notification_for_event(&event);
+    // Done → native only, no iTerm2 (bell already handled that)
+    assert!(iterm.is_none());
+    let native = native.unwrap();
+    assert!(native.contains("task completed"));
+    assert!(native.contains("my-project")); // worktree name
 }
 
 #[test]
@@ -2374,23 +2391,27 @@ fn notification_for_exit() {
     app.sidebar_tree.cursor = 1;
     let sid = active_session_id(&app).unwrap().to_string();
     let event = AppEvent::SessionExited { session_id: sid };
-    let notif = app.notification_for_event(&event);
-    assert!(notif.is_some());
-    let msg = notif.unwrap();
-    assert!(msg.contains("my-project"));
-    assert!(msg.contains("session exited"));
+    let (iterm, native) = app.notification_for_event(&event);
+    assert!(iterm.is_some());
+    let iterm_msg = iterm.unwrap();
+    assert!(iterm_msg.contains("my-project"));
+    assert!(iterm_msg.contains("session exited"));
+    let native_msg = native.unwrap();
+    assert!(native_msg.contains("my-project"));
+    assert!(native_msg.contains("session exited"));
 }
 
 #[test]
 fn notification_none_for_other_events() {
     let app = make_app(2);
-    assert!(app.notification_for_event(&AppEvent::Tick).is_none());
-    assert!(app.notification_for_event(&AppEvent::Resize(80, 24)).is_none());
-    assert!(app
-        .notification_for_event(&AppEvent::PtyOutput {
+    assert_eq!(app.notification_for_event(&AppEvent::Tick), (None, None));
+    assert_eq!(app.notification_for_event(&AppEvent::Resize(80, 24)), (None, None));
+    assert_eq!(
+        app.notification_for_event(&AppEvent::PtyOutput {
             session_id: "foo".to_string(),
-        })
-        .is_none());
+        }),
+        (None, None)
+    );
 }
 
 // ── Directory browser / Section creation ──────────────────────────

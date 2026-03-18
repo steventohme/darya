@@ -191,6 +191,12 @@ async fn run_loop(
     signals: &mut Signals,
 ) -> color_eyre::Result<()> {
     use futures::StreamExt as _;
+    use std::collections::HashMap;
+    use std::time::Instant;
+
+    // Debounce native notifications: only fire if no PtyOutput for that session within 3s
+    let mut pending_native: HashMap<String, (Instant, String)> = HashMap::new();
+    const DEBOUNCE_SECS: f64 = 3.0;
 
     while app.running {
         terminal.draw(|frame| ui::draw(frame, app, session_manager))?;
@@ -208,15 +214,25 @@ async fn run_loop(
         };
         // Process the first event, then drain all pending events before redrawing.
         // This batches rapid keystrokes and PtyOutput events into a single redraw.
-        process_event(&event, terminal, app, session_manager, wt_manager);
+        process_event(&event, terminal, app, session_manager, wt_manager, &mut pending_native);
 
         // Drain remaining queued events without blocking
         while let Ok(event) = events.try_recv() {
-            process_event(&event, terminal, app, session_manager, wt_manager);
+            process_event(&event, terminal, app, session_manager, wt_manager, &mut pending_native);
             if !app.running { break; }
         }
 
         // Post-event housekeeping (once per batch, not per event)
+
+        // Flush debounced native notifications that have aged past the threshold
+        pending_native.retain(|_sid, (queued_at, msg)| {
+            if queued_at.elapsed().as_secs_f64() >= DEBOUNCE_SECS {
+                send_native_notification(msg.clone());
+                false // remove from map
+            } else {
+                true // keep waiting
+            }
+        });
 
         // Handle pending section refresh (after dir browser creates a section)
         if let Some((section_idx, root_path)) = app.pending_section_refresh.take() {
@@ -249,12 +265,42 @@ async fn run_loop(
     Ok(())
 }
 
+/// Send a native macOS notification. The msg format is "subtitle\nbody".
+fn send_native_notification(msg: String) {
+    std::thread::spawn(move || {
+        let (subtitle, body) = match msg.split_once('\n') {
+            Some((s, b)) => (s, b),
+            None => ("", msg.as_str()),
+        };
+        let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
+        let script = if subtitle.is_empty() {
+            format!(
+                "display notification \"{}\" with title \"Darya\"",
+                esc(body)
+            )
+        } else {
+            format!(
+                "display notification \"{}\" with title \"Darya\" subtitle \"{}\"",
+                esc(body),
+                esc(subtitle)
+            )
+        };
+        let _ = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(script)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+    });
+}
+
 fn process_event(
     event: &AppEvent,
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
     session_manager: &mut SessionManager,
     wt_manager: &WorktreeManager,
+    pending_native: &mut std::collections::HashMap<String, (std::time::Instant, String)>,
 ) {
         if let AppEvent::Key(key) = event {
                 // Clear status message on any keypress
@@ -657,10 +703,28 @@ fn process_event(
                 }
             }
 
-            // Send OS notification via iTerm2 OSC 9 + BEL for dock bounce
-            if let Some(msg) = app.notification_for_event(&event) {
+            // Send notifications
+            let (iterm_msg, native_msg) = app.notification_for_event(&event);
+            if let Some(msg) = iterm_msg {
                 let _ = write!(terminal.backend_mut(), "\x1b]9;{}\x07\x07", msg);
                 let _ = terminal.backend_mut().flush();
+            }
+            // Native notifications: debounce SessionDone, fire SessionExited immediately
+            if let Some(msg) = native_msg {
+                match event {
+                    AppEvent::SessionDone { ref session_id } => {
+                        // Queue for debounce — only fires if no PtyOutput follows within DEBOUNCE_SECS
+                        pending_native.insert(session_id.clone(), (std::time::Instant::now(), msg));
+                    }
+                    _ => {
+                        // SessionExited etc — fire immediately
+                        send_native_notification(msg);
+                    }
+                }
+            }
+            // Cancel pending notification if new output arrives for that session
+            if let AppEvent::PtyOutput { ref session_id } = event {
+                pending_native.remove(session_id);
             }
 
             app.handle_event(event);

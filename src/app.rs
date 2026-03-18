@@ -1903,7 +1903,7 @@ impl App {
             AppEvent::PtyOutput { session_id } => {
                 self.activity.mark_active(session_id);
             }
-            AppEvent::SessionBell { session_id } => {
+            AppEvent::SessionBell { session_id } | AppEvent::SessionDone { session_id } => {
                 // Only mark as needing attention if it's not the currently viewed session in terminal mode
                 if !(self.focused_session_id().map(|s| s.as_str()) == Some(session_id)
                     && self.input_mode == InputMode::Terminal)
@@ -3568,23 +3568,42 @@ impl App {
     }
 
     /// Returns a notification message if the event warrants an OS alert, None otherwise.
-    pub fn notification_for_event(&self, event: &AppEvent) -> Option<String> {
+    /// Returns (iterm2_msg, native_msg) — iTerm2 is suppressed when viewing the session.
+    /// Native msg format: "subtitle\nmessage" where subtitle is the section name.
+    pub fn notification_for_event(&self, event: &AppEvent) -> (Option<String>, Option<String>) {
         match event {
             AppEvent::SessionBell { session_id } => {
-                // Same logic as attention_sessions: only notify if user isn't actively viewing
-                if self.focused_session_id().map(|s| s.as_str()) == Some(session_id)
-                    && self.input_mode == InputMode::Terminal
-                {
-                    return None;
+                // Bell = iTerm2 dock bounce only, no native notification
+                let name = match self.session_worktree_name(session_id) {
+                    Some(n) => n,
+                    None => return (None, None),
+                };
+                let viewing = self.focused_session_id().map(|s| s.as_str()) == Some(session_id)
+                    && self.input_mode == InputMode::Terminal;
+                if viewing {
+                    (None, None)
+                } else {
+                    (Some(format!("{} needs attention", name)), None)
                 }
-                let name = self.session_worktree_name(session_id)?;
-                Some(format!("{} needs attention", name))
+            }
+            AppEvent::SessionDone { session_id } => {
+                // Task done = native notification only (bell already triggered iTerm2 bounce)
+                let (section, name) = match self.sidebar_tree.section_and_name_for_session(session_id) {
+                    Some(pair) => pair,
+                    None => return (None, None),
+                };
+                (None, Some(format!("{}\n{} task completed", section, name)))
             }
             AppEvent::SessionExited { session_id } => {
-                let name = self.session_worktree_name(session_id)?;
-                Some(format!("{} session exited", name))
+                let (section, name) = match self.sidebar_tree.section_and_name_for_session(session_id) {
+                    Some(pair) => pair,
+                    None => return (None, None),
+                };
+                let iterm_msg = format!("{} session exited", name);
+                let native_msg = format!("{}\n{} session exited", section, name);
+                (Some(iterm_msg), Some(native_msg))
             }
-            _ => None,
+            _ => (None, None),
         }
     }
 

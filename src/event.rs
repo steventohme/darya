@@ -13,6 +13,7 @@ pub enum AppEvent {
     Resize(u16, u16),
     PtyOutput { session_id: String },
     SessionBell { session_id: String },
+    SessionDone { session_id: String },
     SessionExited { session_id: String },
     FileChanged { paths: Vec<PathBuf> },
     FilesCreatedOrDeleted,

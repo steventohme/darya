@@ -15,6 +15,7 @@ use crate::event::AppEvent;
 /// Claude Code emits OSC 9;4;0 (clear progress indicator) when done,
 /// rather than a standalone BEL character.
 pub struct PtyCallback {
+    pub bell_count: Arc<AtomicUsize>,
     pub done_count: Arc<AtomicUsize>,
     pub status_text: Arc<RwLock<String>>,
 }
@@ -22,6 +23,7 @@ pub struct PtyCallback {
 impl PtyCallback {
     pub fn new() -> Self {
         Self {
+            bell_count: Arc::new(AtomicUsize::new(0)),
             done_count: Arc::new(AtomicUsize::new(0)),
             status_text: Arc::new(RwLock::new(String::new())),
         }
@@ -38,8 +40,8 @@ impl vt100::Callbacks for PtyCallback {
     }
 
     fn audible_bell(&mut self, _: &mut vt100::Screen) {
-        // Standalone BEL — also counts as a notification
-        self.done_count.fetch_add(1, Ordering::Relaxed);
+        // Standalone BEL — attention event only, not task completion
+        self.bell_count.fetch_add(1, Ordering::Relaxed);
     }
 
     fn unhandled_osc(&mut self, _: &mut vt100::Screen, params: &[&[u8]]) {
@@ -50,19 +52,21 @@ impl vt100::Callbacks for PtyCallback {
                 if params.len() >= 3 && params[1] == b"4" {
                     match params[2] {
                         b"3" | b"1" => return,
+                        // 9;4;0 = progress done, 9;4;2 = error → task completion
+                        b"0" | b"2" => {
+                            self.bell_count.fetch_add(1, Ordering::Relaxed);
+                            self.done_count.fetch_add(1, Ordering::Relaxed);
+                            return;
+                        }
                         _ => {}
                     }
                 }
-                // Everything else is attention-worthy:
-                // - 9;4;0 = progress done (task finished)
-                // - 9;4;2 = progress error
-                // - 9;<message> = notification (e.g. permission request)
-                self.done_count.fetch_add(1, Ordering::Relaxed);
+                // 9;<message> = generic notification (e.g. permission request) → bell only
+                self.bell_count.fetch_add(1, Ordering::Relaxed);
             }
-            // OSC 777 — Ghostty/rxvt-unicode notifications
-            // Format: 777;notify;title;body
+            // OSC 777 — Ghostty/rxvt-unicode notifications → bell only
             Some(b"777") => {
-                self.done_count.fetch_add(1, Ordering::Relaxed);
+                self.bell_count.fetch_add(1, Ordering::Relaxed);
             }
             _ => {}
         }
@@ -126,9 +130,11 @@ impl PtySession {
         });
 
         // Create vt100 parser with task-done detection callback
+        let bell_count = Arc::new(AtomicUsize::new(0));
         let done_count = Arc::new(AtomicUsize::new(0));
         let status_text = Arc::new(RwLock::new(String::new()));
         let callbacks = PtyCallback {
+            bell_count: bell_count.clone(),
             done_count: done_count.clone(),
             status_text: status_text.clone(),
         };
@@ -145,6 +151,7 @@ impl PtySession {
         let session_id = id.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
+            let mut last_bell_count = 0usize;
             let mut last_done_count = 0usize;
             loop {
                 match reader.read(&mut buf) {
@@ -153,11 +160,19 @@ impl PtySession {
                         if let Ok(mut p) = parser_clone.write() {
                             p.process(&buf[..n]);
                         }
-                        // Check if Claude Code signaled task completion (OSC 9;4;0)
-                        let current = done_count.load(Ordering::Relaxed);
-                        if current > last_done_count {
-                            last_done_count = current;
+                        // Check for attention events (all bells)
+                        let current_bell = bell_count.load(Ordering::Relaxed);
+                        if current_bell > last_bell_count {
+                            last_bell_count = current_bell;
                             let _ = event_tx.send(AppEvent::SessionBell {
+                                session_id: session_id.clone(),
+                            });
+                        }
+                        // Check for task completion (done signals only)
+                        let current_done = done_count.load(Ordering::Relaxed);
+                        if current_done > last_done_count {
+                            last_done_count = current_done;
+                            let _ = event_tx.send(AppEvent::SessionDone {
                                 session_id: session_id.clone(),
                             });
                         }
