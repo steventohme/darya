@@ -2,7 +2,7 @@ mod helpers;
 
 use std::path::PathBuf;
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use darya::app::{
     is_edtui_compatible, status_priority, EditorViewState,
@@ -911,30 +911,63 @@ fn backtab_in_editor_normal_mode_no_crash() {
 
 #[test]
 fn is_edtui_compatible_helper() {
+    let ke = |code| KeyEvent::new(code, KeyModifiers::NONE);
+
     // Compatible keys
-    assert!(is_edtui_compatible(&KeyCode::Char('a')));
-    assert!(is_edtui_compatible(&KeyCode::Enter));
-    assert!(is_edtui_compatible(&KeyCode::Backspace));
-    assert!(is_edtui_compatible(&KeyCode::Tab));
-    assert!(is_edtui_compatible(&KeyCode::Esc));
-    assert!(is_edtui_compatible(&KeyCode::Left));
-    assert!(is_edtui_compatible(&KeyCode::Right));
-    assert!(is_edtui_compatible(&KeyCode::Up));
-    assert!(is_edtui_compatible(&KeyCode::Down));
-    assert!(is_edtui_compatible(&KeyCode::Home));
-    assert!(is_edtui_compatible(&KeyCode::End));
-    assert!(is_edtui_compatible(&KeyCode::Delete));
-    assert!(is_edtui_compatible(&KeyCode::PageUp));
-    assert!(is_edtui_compatible(&KeyCode::PageDown));
-    assert!(is_edtui_compatible(&KeyCode::F(1)));
-    assert!(is_edtui_compatible(&KeyCode::F(12)));
+    assert!(is_edtui_compatible(&ke(KeyCode::Char('a'))));
+    assert!(is_edtui_compatible(&ke(KeyCode::Enter)));
+    assert!(is_edtui_compatible(&ke(KeyCode::Backspace)));
+    assert!(is_edtui_compatible(&ke(KeyCode::Tab)));
+    assert!(is_edtui_compatible(&ke(KeyCode::Esc)));
+    assert!(is_edtui_compatible(&ke(KeyCode::Left)));
+    assert!(is_edtui_compatible(&ke(KeyCode::Right)));
+    assert!(is_edtui_compatible(&ke(KeyCode::Up)));
+    assert!(is_edtui_compatible(&ke(KeyCode::Down)));
+    assert!(is_edtui_compatible(&ke(KeyCode::Home)));
+    assert!(is_edtui_compatible(&ke(KeyCode::End)));
+    assert!(is_edtui_compatible(&ke(KeyCode::Delete)));
+    assert!(is_edtui_compatible(&ke(KeyCode::PageUp)));
+    assert!(is_edtui_compatible(&ke(KeyCode::PageDown)));
+    assert!(is_edtui_compatible(&ke(KeyCode::F(1))));
+    assert!(is_edtui_compatible(&ke(KeyCode::F(12))));
 
     // Incompatible keys that would cause edtui to panic
-    assert!(!is_edtui_compatible(&KeyCode::BackTab));
-    assert!(!is_edtui_compatible(&KeyCode::Null));
-    assert!(!is_edtui_compatible(&KeyCode::Insert));
-    assert!(!is_edtui_compatible(&KeyCode::F(13)));
-    assert!(!is_edtui_compatible(&KeyCode::CapsLock));
+    assert!(!is_edtui_compatible(&ke(KeyCode::BackTab)));
+    assert!(!is_edtui_compatible(&ke(KeyCode::Null)));
+    assert!(!is_edtui_compatible(&ke(KeyCode::Insert)));
+    assert!(!is_edtui_compatible(&ke(KeyCode::F(13))));
+    assert!(!is_edtui_compatible(&ke(KeyCode::CapsLock)));
+
+    // Kitty keyboard enhancement: Tab+SHIFT must be rejected (same as BackTab)
+    let tab_shift = KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT);
+    assert!(!is_edtui_compatible(&tab_shift));
+}
+
+#[test]
+fn tab_shift_in_editor_insert_mode_no_crash() {
+    let mut app = make_app_with_editor(2);
+    app.input_mode = InputMode::Editor;
+    if let Some(ref mut ed) = app.editor {
+        ed.read_only = false;
+        ed.editor_state.mode = edtui::EditorMode::Insert;
+    }
+    // Tab+SHIFT (Kitty BackTab) should be silently ignored, not panic
+    let tab_shift = AppEvent::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT));
+    app.handle_event(&tab_shift);
+    assert_eq!(app.input_mode, InputMode::Editor);
+}
+
+#[test]
+fn tab_shift_in_editor_normal_mode_no_crash() {
+    let mut app = make_app_with_editor(2);
+    app.input_mode = InputMode::Navigation;
+    if let Some(ref mut ed) = app.editor {
+        ed.editor_state.mode = edtui::EditorMode::Normal;
+    }
+    // Tab+SHIFT (Kitty BackTab) should be silently ignored, not panic
+    let tab_shift = AppEvent::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT));
+    app.handle_event(&tab_shift);
+    assert_eq!(app.input_mode, InputMode::Navigation);
 }
 
 // ── Session counts / branch info helpers ─────────────────────

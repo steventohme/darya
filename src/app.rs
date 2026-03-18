@@ -1619,9 +1619,14 @@ impl ActivityAnimation {
 
 /// Returns `false` for key codes that edtui's `From<crossterm::event::KeyCode>`
 /// doesn't handle (it calls `unimplemented!()` for these, causing a panic).
-pub fn is_edtui_compatible(code: &KeyCode) -> bool {
+/// Also rejects Tab+SHIFT, which Kitty keyboard enhancement sends instead of BackTab.
+pub fn is_edtui_compatible(key: &KeyEvent) -> bool {
+    // Kitty sends Tab+SHIFT instead of BackTab — reject it the same way.
+    if key.code == KeyCode::Tab && key.modifiers.contains(KeyModifiers::SHIFT) {
+        return false;
+    }
     matches!(
-        code,
+        key.code,
         KeyCode::Char(_)
             | KeyCode::Enter
             | KeyCode::Backspace
@@ -2676,7 +2681,7 @@ impl App {
             if editor.editor_state.mode == EditorMode::Insert {
                 editor.modified = true;
             }
-            if is_edtui_compatible(&key.code) {
+            if is_edtui_compatible(&key) {
                 editor.event_handler.on_key_event(key, &mut editor.editor_state);
             }
             return;
@@ -2715,7 +2720,7 @@ impl App {
             }
             _ => {
                 // Forward navigation keys to edtui in Normal mode
-                if is_edtui_compatible(&key.code) {
+                if is_edtui_compatible(&key) {
                     editor.event_handler.on_key_event(key, &mut editor.editor_state);
                     // Force back to Normal in case edtui changed mode
                     editor.editor_state.mode = EditorMode::Normal;
