@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crossterm::event::{
-    DisableMouseCapture, EnableMouseCapture, KeyCode, KeyModifiers, KeyboardEnhancementFlags,
-    PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture, KeyCode,
+    KeyModifiers, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+    PushKeyboardEnhancementFlags,
 };
 use crossterm::execute;
 use crossterm::terminal::{
@@ -77,6 +78,7 @@ fn pane_sizes(
 /// Restore the terminal to normal state. Called on both clean exit and panic.
 fn restore_terminal() {
     let _ = execute!(io::stdout(), PopKeyboardEnhancementFlags);
+    let _ = execute!(io::stdout(), DisableBracketedPaste);
     let _ = execute!(io::stdout(), DisableMouseCapture);
     let _ = disable_raw_mode();
     let _ = execute!(io::stdout(), LeaveAlternateScreen);
@@ -112,7 +114,7 @@ async fn main() -> color_eyre::Result<()> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture, EnableBracketedPaste)?;
     // Enable keyboard enhancement so Ctrl+number keys are reported correctly
     let _ = execute!(
         stdout,
@@ -661,6 +663,33 @@ fn process_event(
                     app.scroll_up(*delta as usize);
                 } else if *delta < 0 {
                     app.scroll_down((-delta) as usize);
+                }
+            }
+
+            // Handle paste — forward to PTY with bracketed paste wrapping
+            if let AppEvent::Paste(ref text) = event {
+                if app.input_mode == InputMode::Terminal && app.prompt.is_none() {
+                    if let Some(session_id) = app.focused_session_id().cloned() {
+                        if !app.exited_sessions.contains(session_id.as_str()) {
+                            if let Some(session) = session_manager.get_mut(&session_id) {
+                                let use_bracketed = session.parser.read()
+                                    .map(|p| p.screen().bracketed_paste())
+                                    .unwrap_or(false);
+                                let payload = if use_bracketed {
+                                    let mut buf = Vec::with_capacity(text.len() + 12);
+                                    buf.extend_from_slice(b"\x1b[200~");
+                                    buf.extend_from_slice(text.as_bytes());
+                                    buf.extend_from_slice(b"\x1b[201~");
+                                    buf
+                                } else {
+                                    text.as_bytes().to_vec()
+                                };
+                                let _ = session.write_input(&payload);
+                                app.activity.mark_input(&session_id);
+                                app.scroll_offsets.remove(&session_id);
+                            }
+                        }
+                    }
                 }
             }
 

@@ -1971,6 +1971,9 @@ impl App {
             AppEvent::Tick => {
                 self.activity.tick();
             }
+            AppEvent::Paste(_) => {
+                // Handled in main.rs process_event() before reaching here
+            }
         }
     }
 

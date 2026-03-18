@@ -18,6 +18,7 @@ pub enum AppEvent {
     FileChanged { paths: Vec<PathBuf> },
     FilesCreatedOrDeleted,
     MouseScroll { delta: i16 },
+    Paste(String),
     Tick,
 }
 
@@ -55,6 +56,7 @@ pub fn create_event_handler() -> (EventHandler, mpsc::UnboundedSender<AppEvent>)
                             MouseEventKind::ScrollDown => Some(AppEvent::MouseScroll { delta: -3 }),
                             _ => None,
                         },
+                        Event::Paste(text) => Some(AppEvent::Paste(text)),
                         _ => None,
                     };
                     if let Some(e) = app_event {

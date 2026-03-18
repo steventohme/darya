@@ -371,6 +371,16 @@ fn tick_event_is_noop() {
     assert_eq!(app.sidebar_tree.cursor, before);
 }
 
+#[test]
+fn paste_event_is_noop_in_handle_event() {
+    let mut app = make_app(3);
+    let before_mode = app.input_mode;
+    let before_cursor = app.sidebar_tree.cursor;
+    app.handle_event(&AppEvent::Paste("hello world".to_string()));
+    assert_eq!(app.input_mode, before_mode);
+    assert_eq!(app.sidebar_tree.cursor, before_cursor);
+}
+
 // ── Scroll ──────────────────────────────────────────────────
 
 #[test]
