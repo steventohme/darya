@@ -55,7 +55,7 @@ fn pane_sizes(
     let size = terminal.size().unwrap_or_default();
     if let Some(ref layout) = app.pane_layout {
         if layout.panes.len() > 1 {
-            let rects = ui::compute_pane_rects(size.into(), layout.panes.len(), app.sidebar_width);
+            let rects = ui::compute_pane_rects(size.into(), layout.panes.len(), app.sidebar_width, layout.direction);
             let block = ratatui::widgets::Block::default()
                 .borders(ratatui::widgets::Borders::ALL)
                 .border_type(ratatui::widgets::BorderType::Thick);
@@ -130,9 +130,26 @@ async fn main() -> color_eyre::Result<()> {
     let auto_resume = app_config.auto_resume;
     let mut app = App::new(worktrees, theme, terminal_start_bottom, keybindings, session_command, shell_command);
 
-    // Show setup guide on first launch
+    // Load planet if configured
+    if let Some(planet_kind) = app_config.planet {
+        app.planet_kind = Some(planet_kind);
+        app.planet_animation = Some(darya::planet::sprites::PlanetAnimation::load(planet_kind));
+    }
+    app.show_planet = app_config.show_planet;
+
+    // Show theme picker on first launch (before setup guide), or just setup guide
     if !config::setup_done() {
-        app.prompt = Some(darya::app::Prompt::SetupGuide);
+        let selected = app
+            .planet_kind
+            .and_then(|k| darya::planet::types::PlanetKind::all().iter().position(|p| *p == k))
+            .unwrap_or(0);
+        let planet = darya::planet::types::PlanetKind::all()[selected];
+        app.planet_animation = Some(darya::planet::sprites::PlanetAnimation::load(planet));
+        app.planet_tick = 0;
+        app.prompt = Some(darya::app::Prompt::ThemePicker {
+            selected,
+            previous_theme: app.theme.clone(),
+        });
     }
 
     // Load sections config if it exists, merge with discovered worktrees
@@ -283,7 +300,7 @@ async fn run_loop(
             let mut paned_sids: Vec<String> = Vec::new();
             if let Some(ref layout) = app.pane_layout {
                 if layout.panes.len() > 1 {
-                    let pane_rects = ui::compute_pane_rects(full_size.into(), layout.panes.len(), app.sidebar_width);
+                    let pane_rects = ui::compute_pane_rects(full_size.into(), layout.panes.len(), app.sidebar_width, layout.direction);
                     let block = ratatui::widgets::Block::default()
                         .borders(ratatui::widgets::Borders::ALL)
                         .border_type(ratatui::widgets::BorderType::Thick);
@@ -302,6 +319,16 @@ async fn run_loop(
                 session_manager.resize_all(rect.height.max(1), rect.width.max(1));
             } else {
                 session_manager.resize_all_except(&paned_sids, rect.height.max(1), rect.width.max(1));
+            }
+        }
+
+        // Handle layout direction change — resize all pane sessions
+        if app.layout_changed {
+            app.layout_changed = false;
+            for (sid, rows, cols) in pane_sizes(terminal, app) {
+                if let Some(session) = session_manager.get_mut(&sid) {
+                    let _ = session.resize(rows, cols);
+                }
             }
         }
 
@@ -637,6 +664,20 @@ fn process_event(
                     }
                 }
 
+                // Split pane vertical (Navigation mode only)
+                if app.input_mode == InputMode::Navigation
+                    && KeybindingsConfig::matches(&app.keybindings.split_pane_vertical, key.modifiers, key.code)
+                {
+                    app.split_direction = darya::app::SplitDirection::Vertical;
+                    if app.split_add_pane() {
+                        for (sid, rows, cols) in pane_sizes(terminal, app) {
+                            if let Some(session) = session_manager.get_mut(&sid) {
+                                let _ = session.resize(rows, cols);
+                            }
+                        }
+                    }
+                }
+
                 // Close pane — intercept in ANY mode when panes exist
                 // (prevents Ctrl+W from reaching PTY as delete-word)
                 if app.pane_layout.is_some()
@@ -805,7 +846,7 @@ fn process_event(
                 // Resize panes (only Terminal/Shell have PTY sessions)
                 if let Some(ref layout) = app.pane_layout {
                     if layout.panes.len() > 1 {
-                        let pane_rects = ui::compute_pane_rects(full_size, layout.panes.len(), app.sidebar_width);
+                        let pane_rects = ui::compute_pane_rects(full_size, layout.panes.len(), app.sidebar_width, layout.direction);
                         let block = ratatui::widgets::Block::default()
                             .borders(ratatui::widgets::Borders::ALL)
                             .border_type(ratatui::widgets::BorderType::Thick);

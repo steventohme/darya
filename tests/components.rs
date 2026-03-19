@@ -5,9 +5,15 @@ use tempfile::TempDir;
 
 use darya::app::{
     parse_diff_lines, run_git_status, DiffLineKind, DiffViewState, FileExplorerState,
-    GitFileStatus, GitStatusCategory, GitStatusState, SearchViewState,
+    GitFileStatus, GitStatusCategory, GitStatusState, SearchViewState, SplitDirection,
 };
-use darya::config::{parse_keybinding, KeybindingsConfig};
+use darya::config::{parse_keybinding, KeybindingsConfig, ThemeMode};
+use darya::planet::types::PlanetKind;
+use darya::planet::renderer;
+use darya::planet::sprites::PlanetAnimation;
+use darya::ui::compute_pane_rects;
+use ratatui::layout::Rect;
+use ratatui::style::Color;
 
 // ── FileExplorerState ───────────────────────────────────────
 
@@ -580,4 +586,106 @@ fn sidebar_resize_respects_bounds() {
         app.sidebar_width = app.sidebar_width.saturating_sub(SIDEBAR_STEP).max(SIDEBAR_MIN_WIDTH);
     }
     assert_eq!(app.sidebar_width, SIDEBAR_MIN_WIDTH);
+}
+
+// ── compute_pane_rects direction ────────────────────────────
+
+#[test]
+fn compute_pane_rects_horizontal_vs_vertical() {
+    let size = Rect::new(0, 0, 120, 30);
+    let sidebar_pct = 25;
+
+    let h_rects = compute_pane_rects(size, 2, sidebar_pct, SplitDirection::Horizontal);
+    assert_eq!(h_rects.len(), 2);
+    // Horizontal: panes split width, same height
+    assert_eq!(h_rects[0].height, h_rects[1].height);
+    assert!(h_rects[0].width < size.width); // each pane narrower than total
+    assert_eq!(h_rects[0].y, h_rects[1].y); // same y position
+
+    let v_rects = compute_pane_rects(size, 2, sidebar_pct, SplitDirection::Vertical);
+    assert_eq!(v_rects.len(), 2);
+    // Vertical: panes split height, same width
+    assert_eq!(v_rects[0].width, v_rects[1].width);
+    assert!(v_rects[0].height < v_rects[1].y + v_rects[1].height); // stacked
+    assert_eq!(v_rects[0].x, v_rects[1].x); // same x position
+}
+
+// ── PlanetKind ──────────────────────────────────────────────
+
+#[test]
+fn planet_kind_all_returns_6_variants() {
+    assert_eq!(PlanetKind::all().len(), 6);
+}
+
+#[test]
+fn planet_kind_from_str_round_trips() {
+    for planet in PlanetKind::all() {
+        let name = planet.name();
+        let parsed = PlanetKind::from_str(name);
+        assert_eq!(parsed, Some(*planet), "failed to round-trip {}", name);
+    }
+}
+
+#[test]
+fn planet_kind_from_str_case_insensitive() {
+    assert_eq!(PlanetKind::from_str("EARTH"), Some(PlanetKind::Earth));
+    assert_eq!(PlanetKind::from_str("Mars"), Some(PlanetKind::Mars));
+    assert_eq!(PlanetKind::from_str("invalid"), None);
+}
+
+#[test]
+fn each_planet_produces_valid_dark_theme() {
+    for planet in PlanetKind::all() {
+        let theme = planet.dark_theme();
+        assert_eq!(theme.mode, ThemeMode::Dark);
+        // accent should match border_active
+        assert_eq!(theme.border_active, planet.accent());
+    }
+}
+
+#[test]
+fn each_planet_produces_valid_light_theme() {
+    for planet in PlanetKind::all() {
+        let theme = planet.light_theme();
+        assert_eq!(theme.mode, ThemeMode::Light);
+    }
+}
+
+#[test]
+fn planet_animation_loads_frames() {
+    let anim = PlanetAnimation::load(PlanetKind::Earth);
+    assert!(anim.frame_count() > 0);
+    let frame = anim.frame_at(0);
+    assert!(frame.width() > 0);
+    assert!(frame.height() > 0);
+}
+
+#[test]
+fn planet_animation_frame_at_wraps() {
+    let anim = PlanetAnimation::load(PlanetKind::Earth);
+    let count = anim.frame_count();
+    // Accessing beyond frame count should wrap
+    let _ = anim.frame_at(count + 5);
+}
+
+#[test]
+fn half_block_renderer_produces_output() {
+    let anim = PlanetAnimation::load(PlanetKind::Earth);
+    let frame = anim.frame_at(0);
+    let bg = Color::Rgb(0x1A, 0x1A, 0x1A);
+    let lines = renderer::render_frame(frame, 10, 5, bg);
+    assert_eq!(lines.len(), 5);
+    // Each line should have spans
+    for line in &lines {
+        assert!(!line.spans.is_empty());
+    }
+}
+
+#[test]
+fn half_block_renderer_handles_zero_size() {
+    let anim = PlanetAnimation::load(PlanetKind::Earth);
+    let frame = anim.frame_at(0);
+    let bg = Color::Rgb(0, 0, 0);
+    let lines = renderer::render_frame(frame, 0, 0, bg);
+    assert!(lines.is_empty());
 }

@@ -10,6 +10,8 @@ use ratatui::layout::Rect;
 use ratatui::style::Color;
 
 use crate::config;
+use crate::planet::sprites::PlanetAnimation;
+use crate::planet::types::PlanetKind;
 use crate::sidebar::tree::SidebarTree;
 use crate::sidebar::types::SessionKind;
 
@@ -88,10 +90,17 @@ impl PaneContent {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SplitDirection {
+    Horizontal,
+    Vertical,
+}
+
 #[derive(Debug, Clone)]
 pub struct PaneLayout {
-    pub panes: Vec<PaneContent>,  // pane contents, left to right, max 3
+    pub panes: Vec<PaneContent>,  // pane contents, left to right (or top to bottom), max 3
     pub focused: usize,            // index into panes — input goes here
+    pub direction: SplitDirection,  // Horizontal = side-by-side, Vertical = stacked
 }
 
 use crate::config::{KeybindingsConfig, Theme};
@@ -225,6 +234,11 @@ pub enum Prompt {
     SetupGuide,
     /// Offer to restore previous sessions
     RestoreSession { count: usize },
+    /// Planet/theme picker overlay
+    ThemePicker {
+        selected: usize,
+        previous_theme: Theme,
+    },
 }
 
 /// An entry in the directory browser (a subdirectory).
@@ -759,6 +773,10 @@ pub enum CommandId {
     AssignColor,
     SidebarGrow,
     SidebarShrink,
+    SplitPaneVertical,
+    ToggleSplitDirection,
+    ThemePicker,
+    TogglePlanet,
 }
 
 #[derive(Debug, Clone)]
@@ -805,6 +823,10 @@ impl CommandPaletteState {
             PaletteCommand { id: CommandId::AssignColor, name: "Sidebar: Assign Color".to_string(), keybinding: Some("c".to_string()) },
             PaletteCommand { id: CommandId::SidebarGrow, name: "Sidebar: Grow".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.sidebar_grow)) },
             PaletteCommand { id: CommandId::SidebarShrink, name: "Sidebar: Shrink".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.sidebar_shrink)) },
+            PaletteCommand { id: CommandId::SplitPaneVertical, name: "Split: Vertical Same Type".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.split_pane_vertical)) },
+            PaletteCommand { id: CommandId::ToggleSplitDirection, name: "Toggle Split Direction".to_string(), keybinding: None },
+            PaletteCommand { id: CommandId::ThemePicker, name: "Theme: Choose Planet".to_string(), keybinding: None },
+            PaletteCommand { id: CommandId::TogglePlanet, name: "Theme: Toggle Planet Display".to_string(), keybinding: None },
         ];
         let results = all_commands.clone();
         Self {
@@ -1748,6 +1770,18 @@ pub struct App {
     pub sidebar_resized: bool,
     /// Active mouse text selection (click-drag to copy).
     pub text_selection: Option<TextSelection>,
+    /// Current user preference for split direction (used when creating new layouts).
+    pub split_direction: SplitDirection,
+    /// Set when layout direction changed and PTY sessions need resizing.
+    pub layout_changed: bool,
+    /// Active planet kind (for theme + sidebar animation).
+    pub planet_kind: Option<PlanetKind>,
+    /// Whether to show the planet animation in the sidebar.
+    pub show_planet: bool,
+    /// Loaded planet animation frames.
+    pub planet_animation: Option<PlanetAnimation>,
+    /// Animation tick counter for the sidebar planet.
+    pub planet_tick: usize,
 }
 
 impl App {
@@ -1796,6 +1830,12 @@ impl App {
             sidebar_width: 25,
             sidebar_resized: false,
             text_selection: None,
+            split_direction: SplitDirection::Horizontal,
+            layout_changed: false,
+            planet_kind: None,
+            show_planet: true,
+            planet_animation: None,
+            planet_tick: 0,
         }
     }
 
@@ -1986,6 +2026,9 @@ impl App {
             }
             AppEvent::Tick => {
                 self.activity.tick();
+                if self.planet_animation.is_some() {
+                    self.planet_tick = self.planet_tick.wrapping_add(1);
+                }
             }
             AppEvent::Paste(_) => {
                 // Handled in main.rs process_event() before reaching here
@@ -2138,6 +2181,50 @@ impl App {
                 }
                 KeyCode::Char('n') | KeyCode::Esc => {
                     self.pending_layout = None;
+                    self.prompt = None;
+                }
+                _ => {}
+            },
+            Prompt::ThemePicker { selected, previous_theme } => match key.code {
+                KeyCode::Left | KeyCode::Right => {
+                    let len = PlanetKind::all().len();
+                    *selected = if key.code == KeyCode::Left {
+                        wrapping_prev(*selected, len)
+                    } else {
+                        wrapping_next(*selected, len)
+                    };
+                    let planet = PlanetKind::all()[*selected];
+                    let is_dark = self.theme.mode == config::ThemeMode::Dark;
+                    self.theme = if is_dark { planet.dark_theme() } else { planet.light_theme() };
+                    self.planet_animation = Some(PlanetAnimation::load(planet));
+                }
+                KeyCode::Char('d') => {
+                    let planet = PlanetKind::all()[*selected];
+                    self.theme = planet.dark_theme();
+                }
+                KeyCode::Char('l') => {
+                    let planet = PlanetKind::all()[*selected];
+                    self.theme = planet.light_theme();
+                }
+                KeyCode::Enter => {
+                    let planet = PlanetKind::all()[*selected];
+                    self.planet_kind = Some(planet);
+                    // planet_animation is already loaded from browsing
+                    config::save_planet_choice(planet, self.theme.mode);
+                    if !config::setup_done() {
+                        self.prompt = Some(Prompt::SetupGuide);
+                    } else {
+                        self.prompt = None;
+                    }
+                    self.status_message = Some(format!("Theme set to {}", planet.display_name()));
+                }
+                KeyCode::Esc => {
+                    let prev = previous_theme.clone();
+                    self.theme = prev;
+                    match self.planet_kind {
+                        None => self.planet_animation = None,
+                        Some(kind) => self.planet_animation = Some(PlanetAnimation::load(kind)),
+                    }
                     self.prompt = None;
                 }
                 _ => {}
@@ -2438,7 +2525,59 @@ impl App {
                 self.sidebar_width = self.sidebar_width.saturating_sub(SIDEBAR_STEP).max(SIDEBAR_MIN_WIDTH);
                 self.sidebar_resized = true;
             }
+            CommandId::SplitPaneVertical => {
+                self.split_direction = SplitDirection::Vertical;
+                self.split_add_pane();
+            }
+            CommandId::ToggleSplitDirection => {
+                self.toggle_split_direction();
+            }
+            CommandId::ThemePicker => {
+                self.open_theme_picker();
+            }
+            CommandId::TogglePlanet => {
+                self.show_planet = !self.show_planet;
+                self.status_message = Some(if self.show_planet {
+                    "Planet display enabled".to_string()
+                } else {
+                    "Planet display hidden".to_string()
+                });
+            }
         }
+    }
+
+    /// Open the theme picker overlay.
+    pub fn open_theme_picker(&mut self) {
+        let selected = self
+            .planet_kind
+            .and_then(|k| PlanetKind::all().iter().position(|p| *p == k))
+            .unwrap_or(0);
+        // Load the initially selected planet's animation for preview
+        let planet = PlanetKind::all()[selected];
+        self.planet_animation = Some(PlanetAnimation::load(planet));
+        self.planet_tick = 0;
+        self.prompt = Some(Prompt::ThemePicker {
+            selected,
+            previous_theme: self.theme.clone(),
+        });
+    }
+
+    /// Toggle the split direction between Horizontal and Vertical.
+    /// Updates both the user preference and any existing layout.
+    pub fn toggle_split_direction(&mut self) {
+        self.split_direction = match self.split_direction {
+            SplitDirection::Horizontal => SplitDirection::Vertical,
+            SplitDirection::Vertical => SplitDirection::Horizontal,
+        };
+        if let Some(ref mut layout) = self.pane_layout {
+            layout.direction = self.split_direction;
+            self.layout_changed = true;
+        }
+        let dir_name = match self.split_direction {
+            SplitDirection::Horizontal => "horizontal",
+            SplitDirection::Vertical => "vertical",
+        };
+        self.status_message = Some(format!("Split direction: {}", dir_name));
     }
 
     fn handle_nav_key(&mut self, key: KeyEvent) {
@@ -3221,7 +3360,7 @@ impl App {
 
         if let Some(ref layout) = self.pane_layout {
             if layout.panes.len() > 1 {
-                let rects = crate::ui::compute_pane_rects(terminal_size, layout.panes.len(), self.sidebar_width);
+                let rects = crate::ui::compute_pane_rects(terminal_size, layout.panes.len(), self.sidebar_width, layout.direction);
                 for (i, content) in layout.panes.iter().enumerate() {
                     if let Some(sid) = content.session_id() {
                         let inner = block.inner(rects[i]);
@@ -3289,6 +3428,7 @@ impl App {
             self.pane_layout = Some(PaneLayout {
                 panes: vec![first_pane, content],
                 focused: 0,
+                direction: self.split_direction,
             });
         } else {
             self.pane_layout.as_mut().unwrap().panes.push(content);

@@ -7,13 +7,14 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use darya::app::{
     is_edtui_compatible, status_priority, EditorViewState,
     GitStatusCategory, GitStatusEntry, GitStatusState, GitFileStatus,
-    InputMode, MainView, PaneContent, PanelFocus, Prompt, SidebarView, ViewKind,
+    InputMode, MainView, PaneContent, PanelFocus, Prompt, SidebarView, SplitDirection, ViewKind,
     BlameLine, GitBlameState, GitLogEntry, GitLogState,
     format_relative_time,
     CommandId, CommandPaletteState, ColorTarget,
 };
 use darya::config;
 use darya::event::AppEvent;
+use darya::planet::types::PlanetKind;
 
 use helpers::{key, cmd_key, make_app, make_app_with_session, make_app_with_two_sessions, selected_item_index, set_session, set_shell_session, active_session_id, active_shell_session_id, item_path};
 
@@ -2918,4 +2919,144 @@ fn layout_config_roundtrip_toml() {
     assert_eq!(parsed.sessions[1].slot_label, "my-shell");
     assert_eq!(parsed.sidebar_view.as_deref(), Some("files"));
     assert_eq!(parsed.panel_focus.as_deref(), Some("right"));
+}
+
+// ── Vertical Split Direction ────────────────────────────────
+
+#[test]
+fn split_vertical_creates_layout_with_vertical_direction() {
+    let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    app.split_direction = SplitDirection::Vertical;
+    assert!(app.split_add_pane());
+    let layout = app.pane_layout.as_ref().unwrap();
+    assert_eq!(layout.direction, SplitDirection::Vertical);
+    assert_eq!(layout.panes.len(), 2);
+}
+
+#[test]
+fn toggle_split_direction_flips_existing_layout() {
+    let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+    assert!(app.split_add_pane());
+    // Default is Horizontal
+    assert_eq!(app.pane_layout.as_ref().unwrap().direction, SplitDirection::Horizontal);
+    app.toggle_split_direction();
+    assert_eq!(app.pane_layout.as_ref().unwrap().direction, SplitDirection::Vertical);
+    assert_eq!(app.split_direction, SplitDirection::Vertical);
+    assert!(app.layout_changed);
+    // Toggle back
+    app.layout_changed = false;
+    app.toggle_split_direction();
+    assert_eq!(app.pane_layout.as_ref().unwrap().direction, SplitDirection::Horizontal);
+    assert!(app.layout_changed);
+}
+
+#[test]
+fn toggle_split_direction_noop_without_layout() {
+    let mut app = make_app(3);
+    assert!(app.pane_layout.is_none());
+    app.toggle_split_direction();
+    // Direction preference changes but no layout_changed since no layout exists
+    assert_eq!(app.split_direction, SplitDirection::Vertical);
+    assert!(!app.layout_changed);
+}
+
+// ── Theme Picker ─────────────────────────────────────────────
+
+#[test]
+fn theme_picker_opens_via_command() {
+    let mut app = make_app(1);
+    app.open_theme_picker();
+    assert!(matches!(app.prompt, Some(Prompt::ThemePicker { .. })));
+    assert!(app.planet_animation.is_some());
+}
+
+#[test]
+fn theme_picker_left_right_cycles_planets() {
+    let mut app = make_app(1);
+    app.open_theme_picker();
+    let original_theme = app.theme.clone();
+
+    // Right arrow moves to next planet
+    app.handle_event(&key(KeyCode::Right));
+    if let Some(Prompt::ThemePicker { selected, .. }) = &app.prompt {
+        assert_eq!(*selected, 1);
+    } else {
+        panic!("expected ThemePicker prompt");
+    }
+    // Theme should have changed (live preview)
+    assert_ne!(app.theme, original_theme);
+
+    // Left arrow wraps back
+    app.handle_event(&key(KeyCode::Left));
+    if let Some(Prompt::ThemePicker { selected, .. }) = &app.prompt {
+        assert_eq!(*selected, 0);
+    } else {
+        panic!("expected ThemePicker prompt");
+    }
+}
+
+#[test]
+fn theme_picker_left_wraps_to_last() {
+    let mut app = make_app(1);
+    app.open_theme_picker();
+    app.handle_event(&key(KeyCode::Left));
+    if let Some(Prompt::ThemePicker { selected, .. }) = &app.prompt {
+        assert_eq!(*selected, PlanetKind::all().len() - 1);
+    } else {
+        panic!("expected ThemePicker prompt");
+    }
+}
+
+#[test]
+fn theme_picker_enter_confirms_planet() {
+    let mut app = make_app(1);
+    app.open_theme_picker();
+    app.handle_event(&key(KeyCode::Right)); // select Mars
+    app.handle_event(&key(KeyCode::Enter));
+    assert_eq!(app.planet_kind, Some(PlanetKind::all()[1]));
+    assert!(app.planet_animation.is_some());
+    // Prompt dismissed (or transitioned to SetupGuide)
+    assert!(!matches!(app.prompt, Some(Prompt::ThemePicker { .. })));
+}
+
+#[test]
+fn theme_picker_esc_reverts_theme() {
+    let mut app = make_app(1);
+    let original_theme = app.theme.clone();
+    app.open_theme_picker();
+    app.handle_event(&key(KeyCode::Right)); // change theme
+    assert_ne!(app.theme, original_theme);
+    app.handle_event(&key(KeyCode::Esc));
+    assert_eq!(app.theme, original_theme);
+    assert!(app.prompt.is_none());
+}
+
+#[test]
+fn theme_picker_d_switches_to_dark() {
+    let mut app = make_app(1);
+    app.open_theme_picker();
+    // Switch to light first
+    app.handle_event(&key(KeyCode::Char('l')));
+    assert_eq!(app.theme.mode, darya::config::ThemeMode::Light);
+    // Switch back to dark
+    app.handle_event(&key(KeyCode::Char('d')));
+    assert_eq!(app.theme.mode, darya::config::ThemeMode::Dark);
+}
+
+#[test]
+fn theme_picker_live_preview_changes_theme() {
+    let mut app = make_app(1);
+    let initial_theme = app.theme.clone();
+    app.open_theme_picker();
+    // Navigate to a different planet
+    app.handle_event(&key(KeyCode::Right));
+    app.handle_event(&key(KeyCode::Right));
+    // Theme should differ from initial (live preview)
+    assert_ne!(app.theme, initial_theme);
 }

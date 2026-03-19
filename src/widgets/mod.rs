@@ -9,5 +9,7 @@ pub mod git_status;
 pub mod help_overlay;
 pub mod search_results;
 pub mod status_bar;
+pub mod planet_widget;
 pub mod terminal_panel;
+pub mod theme_picker;
 pub mod worktree_list;

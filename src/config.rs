@@ -11,7 +11,7 @@ pub enum ThemeMode {
     Light,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Theme {
     pub mode: ThemeMode,
     pub bg: Color,
@@ -95,7 +95,9 @@ impl Default for Theme {
 /// Raw TOML representation — all fields optional so partial configs work.
 #[derive(Debug, Deserialize, Default)]
 struct ThemeToml {
+    planet: Option<String>,
     mode: Option<String>,
+    show_planet: Option<bool>,
     bg: Option<String>,
     fg: Option<String>,
     fg_dim: Option<String>,
@@ -141,6 +143,7 @@ struct KeybindingsToml {
     shell: Option<String>,
     sidebar_grow: Option<String>,
     sidebar_shrink: Option<String>,
+    split_pane_vertical: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -161,6 +164,7 @@ pub struct KeybindingsConfig {
     pub shell: (KeyModifiers, KeyCode),
     pub sidebar_grow: (KeyModifiers, KeyCode),
     pub sidebar_shrink: (KeyModifiers, KeyCode),
+    pub split_pane_vertical: (KeyModifiers, KeyCode),
 }
 
 impl Default for KeybindingsConfig {
@@ -182,6 +186,7 @@ impl Default for KeybindingsConfig {
             shell: (KeyModifiers::SUPER, KeyCode::Char('9')),
             sidebar_grow: (KeyModifiers::SUPER, KeyCode::Char('=')),
             sidebar_shrink: (KeyModifiers::SUPER, KeyCode::Char('-')),
+            split_pane_vertical: (KeyModifiers::CONTROL, KeyCode::Char('.')),
         }
     }
 }
@@ -388,6 +393,8 @@ pub struct AppConfig {
     pub session_command: String,
     pub shell_command: String,
     pub auto_resume: bool,
+    pub planet: Option<crate::planet::types::PlanetKind>,
+    pub show_planet: bool,
 }
 
 /// Parse a hex color string like "#33FF33" or "33FF33" into a ratatui Color.
@@ -419,8 +426,11 @@ pub fn load_config() -> AppConfig {
     let mut session_command = CLAUDE_COMMAND.to_string();
     let mut shell_command = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
     let mut auto_resume = false;
+    let mut planet: Option<crate::planet::types::PlanetKind> = None;
 
-    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone(), keybindings: KeybindingsConfig::default(), session_command: CLAUDE_COMMAND.to_string(), shell_command: shell_command.clone(), auto_resume };
+    let mut show_planet = true;
+
+    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone(), keybindings: KeybindingsConfig::default(), session_command: CLAUDE_COMMAND.to_string(), shell_command: shell_command.clone(), auto_resume, planet: None, show_planet: true };
 
     let Some(home) = dirs_path() else {
         return defaults();
@@ -436,11 +446,28 @@ pub fn load_config() -> AppConfig {
         return defaults();
     };
 
+    // Determine if light mode
+    let is_light = config.theme.as_ref()
+        .and_then(|t| t.mode.as_deref())
+        .map(|m| m == "light")
+        .unwrap_or(false);
+
+    // If a planet is set, use its palette as the base theme
     if let Some(ref t) = config.theme {
-        match t.mode.as_deref() {
-            Some("light") => theme = Theme::light(),
-            _ => {} // dark is already the default
+        if let Some(ref planet_name) = t.planet {
+            if let Some(kind) = crate::planet::types::PlanetKind::from_str(planet_name) {
+                planet = Some(kind);
+                theme = if is_light { kind.light_theme() } else { kind.dark_theme() };
+            }
         }
+        if let Some(val) = t.show_planet {
+            show_planet = val;
+        }
+    }
+
+    // Fall back to default light/dark if no planet set
+    if planet.is_none() && is_light {
+        theme = Theme::light();
     }
 
     if let Some(t) = config.theme {
@@ -508,6 +535,7 @@ pub fn load_config() -> AppConfig {
         apply_kb!(shell);
         apply_kb!(sidebar_grow);
         apply_kb!(sidebar_shrink);
+        apply_kb!(split_pane_vertical);
     }
 
     if let Some(ref s) = config.session {
@@ -528,7 +556,7 @@ pub fn load_config() -> AppConfig {
         }
     }
 
-    AppConfig { theme, terminal_start_bottom, worktree_dir_format, keybindings, session_command, shell_command, auto_resume }
+    AppConfig { theme, terminal_start_bottom, worktree_dir_format, keybindings, session_command, shell_command, auto_resume, planet, show_planet }
 }
 
 /// Resolve a local `.darya.toml` override for a worktree, falling back to the global value.
@@ -564,6 +592,36 @@ pub fn resolve_shell_command(worktree_path: &std::path::Path, global_command: &s
 
 fn dirs_path() -> Option<std::path::PathBuf> {
     std::env::var_os("HOME").map(std::path::PathBuf::from)
+}
+
+/// Save the planet choice and theme mode to config.toml.
+pub fn save_planet_choice(kind: crate::planet::types::PlanetKind, mode: ThemeMode) {
+    let Some(home) = dirs_path() else { return };
+    let dir = home.join(".config").join("darya");
+    let _ = std::fs::create_dir_all(&dir);
+    let config_path = dir.join("config.toml");
+
+    // Read existing config, update only the planet and mode fields
+    let mut config: toml::Table = std::fs::read_to_string(&config_path)
+        .ok()
+        .and_then(|s| toml::from_str(&s).ok())
+        .unwrap_or_default();
+
+    let theme_table = config
+        .entry("theme")
+        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+    if let toml::Value::Table(ref mut t) = theme_table {
+        t.insert("planet".to_string(), toml::Value::String(kind.name().to_string()));
+        let mode_str = match mode {
+            ThemeMode::Dark => "dark",
+            ThemeMode::Light => "light",
+        };
+        t.insert("mode".to_string(), toml::Value::String(mode_str.to_string()));
+    }
+
+    if let Ok(toml_str) = toml::to_string_pretty(&config) {
+        let _ = std::fs::write(&config_path, toml_str);
+    }
 }
 
 /// Check if the first-launch setup guide has been dismissed.

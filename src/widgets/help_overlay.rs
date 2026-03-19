@@ -19,6 +19,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     let kb_git = KeybindingsConfig::format(&kb.git_status);
     let kb_split = KeybindingsConfig::format(&kb.split_pane);
+    let kb_split_v = KeybindingsConfig::format(&kb.split_pane_vertical);
     let kb_close_pane = KeybindingsConfig::format(&kb.close_pane);
     let kb_blame = KeybindingsConfig::format(&kb.git_blame);
     let kb_log = KeybindingsConfig::format(&kb.git_log);
@@ -61,7 +62,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             vec![
                 ("i, Enter", "Enter terminal mode"),
                 ("PgUp/PgDn", "Scroll output"),
-                (&kb_split, "Split: same type"),
+                (&kb_split, "Split: same type (horizontal)"),
+                (&kb_split_v, "Split: same type (vertical)"),
                 (&kb_close_pane, "Close pane"),
                 ("", "Palette: Split Terminal/Shell/Editor"),
                 ("1-9, 0", "Jump to worktree"),
@@ -168,7 +170,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             vec![
                 ("i, Enter", "Enter terminal mode"),
                 ("PgUp/PgDn", "Scroll output"),
-                (&kb_split, "Split: same type"),
+                (&kb_split, "Split: same type (horizontal)"),
+                (&kb_split_v, "Split: same type (vertical)"),
                 (&kb_close_pane, "Close pane"),
                 ("", "Palette: Split Terminal/Shell/Editor"),
                 ("1-9, 0", "Jump to worktree"),

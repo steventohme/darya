@@ -324,6 +324,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
         )
         .highlight_style(
             Style::default()
+                .fg(app.theme.fg)
                 .bg(app.theme.highlight_bg)
                 .add_modifier(Modifier::BOLD),
         )

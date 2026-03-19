@@ -15,7 +15,8 @@ expression: output
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃ i, Enter    Enter terminal mode                          ┃                   ┃
 ┃                   ┃ PgUp/PgDn   Scroll output                                ┃                   ┃
-┃                   ┃ Cmd+\       Split: same type                             ┃                   ┃
+┃                   ┃ Cmd+\       Split: same type (horizontal)                ┃                   ┃
+┃                   ┃ Ctrl+.      Split: same type (vertical)                  ┃                   ┃
 ┃                   ┃ Cmd+W       Close pane                                   ┃                   ┃
 ┃                   ┃             Palette: Split Terminal/Shell/Editor         ┃                   ┃
 ┃                   ┃ 1-9, 0      Jump to worktree                             ┃                   ┃
@@ -25,7 +26,6 @@ expression: output
 ┃                   ┃ q           Quit                                         ┃                   ┃
 ┃                   ┃ Ctrl+C      Close session / Quit                         ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
-┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃

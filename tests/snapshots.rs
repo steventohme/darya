@@ -7,9 +7,11 @@ use darya::app::{
     App, BlameLine, CommandPaletteState, DiffLine, DiffLineKind, DiffViewState, FileExplorerState,
     GitFileStatus, GitLogEntry, GitLogState, GitBlameState,
     GitStatusCategory, GitStatusEntry, GitStatusState, InputMode, MainView, PaneContent, PaneLayout,
-    PanelFocus, SidebarView,
+    PanelFocus, Prompt, SidebarView, SplitDirection,
 };
 use darya::config::{KeybindingsConfig, Theme};
+use darya::planet::types::PlanetKind;
+use darya::planet::sprites::PlanetAnimation;
 use darya::session::manager::SessionManager;
 
 use helpers::{make_worktrees, item_path, set_session};
@@ -266,6 +268,7 @@ fn snapshot_split_two_panes() {
     app.pane_layout = Some(PaneLayout {
         panes: vec![PaneContent::Terminal("s0".to_string()), PaneContent::Terminal("s1".to_string())],
         focused: 0,
+        direction: SplitDirection::Horizontal,
     });
 
     let sm = make_session_manager();
@@ -285,11 +288,31 @@ fn snapshot_split_focused_pane_highlighted() {
     app.pane_layout = Some(PaneLayout {
         panes: vec![PaneContent::Terminal("s0".to_string()), PaneContent::Terminal("s1".to_string())],
         focused: 1,
+        direction: SplitDirection::Horizontal,
     });
 
     let sm = make_session_manager();
     let output = render_to_string(&mut app, &sm, 120, 20);
     insta::assert_snapshot!("split_focused_pane_highlighted", output);
+}
+
+#[test]
+fn snapshot_split_two_panes_vertical() {
+    let mut app = make_test_app(3);
+    app.sidebar_tree.jump_to_nth_item(0);
+    set_session(&mut app, 0, "s0");
+    set_session(&mut app, 1, "s1");
+    app.main_view = MainView::Terminal;
+    app.panel_focus = PanelFocus::Right;
+    app.pane_layout = Some(PaneLayout {
+        panes: vec![PaneContent::Terminal("s0".to_string()), PaneContent::Terminal("s1".to_string())],
+        focused: 0,
+        direction: SplitDirection::Vertical,
+    });
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 120, 20);
+    insta::assert_snapshot!("split_two_panes_vertical", output);
 }
 
 // ── File explorer with git indicators ───────────────────────
@@ -501,4 +524,48 @@ fn snapshot_command_palette_filtered() {
     let sm = make_session_manager();
     let output = render_to_string(&mut app, &sm, 100, 30);
     insta::assert_snapshot!("command_palette_filtered", output);
+}
+
+// ── Planet theme snapshots ──────────────────────────────────
+
+#[test]
+fn snapshot_theme_picker_overlay() {
+    let mut app = make_test_app(3);
+    let planet = PlanetKind::Earth;
+    app.planet_animation = Some(PlanetAnimation::load(planet));
+    app.prompt = Some(Prompt::ThemePicker {
+        selected: 0,
+        previous_theme: app.theme.clone(),
+    });
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 35);
+    insta::assert_snapshot!("theme_picker_overlay", output);
+}
+
+#[test]
+fn snapshot_sidebar_with_planet() {
+    let mut app = make_test_app(3);
+    let planet = PlanetKind::Earth;
+    app.planet_kind = Some(planet);
+    app.planet_animation = Some(PlanetAnimation::load(planet));
+    // Apply earth theme
+    app.theme = planet.dark_theme();
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 30);
+    insta::assert_snapshot!("sidebar_with_planet", output);
+}
+
+#[test]
+fn snapshot_mars_theme() {
+    let mut app = make_test_app(3);
+    let planet = PlanetKind::Mars;
+    app.planet_kind = Some(planet);
+    app.planet_animation = Some(PlanetAnimation::load(planet));
+    app.theme = planet.dark_theme();
+
+    let sm = make_session_manager();
+    let output = render_to_string(&mut app, &sm, 100, 30);
+    insta::assert_snapshot!("mars_theme", output);
 }

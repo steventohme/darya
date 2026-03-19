@@ -5,7 +5,8 @@ use ratatui::Frame;
 
 use ratatui::text::{Line, Span};
 
-use crate::app::{App, DirBrowser, InputMode, PanelFocus, Prompt, ViewKind, PRESET_COLORS};
+use crate::app::{App, DirBrowser, InputMode, PanelFocus, Prompt, SplitDirection, ViewKind, PRESET_COLORS};
+use crate::planet;
 use crate::session::manager::SessionManager;
 use crate::widgets;
 
@@ -26,8 +27,9 @@ fn right_panel_rect(size: Rect, sidebar_pct: u16) -> Rect {
         .split(outer[1])[1]
 }
 
-/// Compute inner Rects for each pane by splitting the right panel horizontally.
-pub fn compute_pane_rects(size: Rect, pane_count: usize, sidebar_pct: u16) -> Vec<Rect> {
+/// Compute inner Rects for each pane by splitting the right panel.
+/// `direction` controls whether panes are side-by-side (Horizontal) or stacked (Vertical).
+pub fn compute_pane_rects(size: Rect, pane_count: usize, sidebar_pct: u16, direction: SplitDirection) -> Vec<Rect> {
     let panel = right_panel_rect(size, sidebar_pct);
     if pane_count <= 1 {
         return vec![panel];
@@ -35,8 +37,12 @@ pub fn compute_pane_rects(size: Rect, pane_count: usize, sidebar_pct: u16) -> Ve
     let constraints: Vec<Constraint> = (0..pane_count)
         .map(|_| Constraint::Ratio(1, pane_count as u32))
         .collect();
+    let layout_dir = match direction {
+        SplitDirection::Horizontal => Direction::Horizontal,
+        SplitDirection::Vertical => Direction::Vertical,
+    };
     Layout::default()
-        .direction(Direction::Horizontal)
+        .direction(layout_dir)
         .constraints(constraints)
         .split(panel)
         .to_vec()
@@ -107,24 +113,50 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
         .constraints([Constraint::Percentage(sidebar_pct), Constraint::Percentage(100 - sidebar_pct)])
         .split(outer[1]);
 
-    // Left panel (sidebar)
+    // Left panel (sidebar) — optionally split to include planet at bottom
     let left_focused = app.panel_focus == PanelFocus::Left;
-    render_view(frame, main_chunks[0], app.sidebar_view.to_view_kind(), app, session_manager, left_focused);
+    if app.show_planet && app.planet_kind.is_some() && app.planet_animation.is_some() {
+        // Small planet: ~8 cells tall, capped width to keep it compact
+        let max_planet_h: u16 = 8;
+        let planet_height = max_planet_h.min(main_chunks[0].height / 4);
+        let sidebar_split = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(0), Constraint::Length(planet_height)])
+            .split(main_chunks[0]);
+
+        render_view(frame, sidebar_split[0], app.sidebar_view.to_view_kind(), app, session_manager, left_focused);
+
+        // Render planet animation — render smaller than the area, with padding
+        if let Some(ref anim) = app.planet_animation {
+            let anim_frame = anim.frame_at(app.planet_tick / 2); // ~10fps
+            let render_h = planet_height.saturating_sub(2); // 1 row padding top+bottom
+            let render_w = (render_h * 2).min(sidebar_split[1].width);
+            let planet_lines = planet::renderer::render_frame(
+                anim_frame,
+                render_w,
+                render_h,
+                app.theme.bg,
+            );
+            widgets::planet_widget::render(frame, sidebar_split[1], &planet_lines);
+        }
+    } else {
+        render_view(frame, main_chunks[0], app.sidebar_view.to_view_kind(), app, session_manager, left_focused);
+    }
 
     // Right panel (main) — split panes or full panel
     let right_focused = app.panel_focus == PanelFocus::Right;
     // Snapshot pane info to avoid borrow conflicts with mutable render calls
-    let pane_snapshot: Option<Vec<(crate::app::PaneContent, bool)>> = app.pane_layout.as_ref().and_then(|layout| {
+    let pane_snapshot: Option<(Vec<(crate::app::PaneContent, bool)>, SplitDirection)> = app.pane_layout.as_ref().and_then(|layout| {
         if layout.panes.len() > 1 {
-            Some(layout.panes.iter().enumerate().map(|(i, c)| {
+            Some((layout.panes.iter().enumerate().map(|(i, c)| {
                 (c.clone(), right_focused && i == layout.focused)
-            }).collect())
+            }).collect(), layout.direction))
         } else {
             None
         }
     });
-    if let Some(panes) = pane_snapshot {
-        let pane_rects = compute_pane_rects(size, panes.len(), sidebar_pct);
+    if let Some((panes, direction)) = pane_snapshot {
+        let pane_rects = compute_pane_rects(size, panes.len(), sidebar_pct, direction);
         for (i, (content, pane_focused)) in panes.iter().enumerate() {
             match content {
                 crate::app::PaneContent::Terminal(session_id)
@@ -224,7 +256,11 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
 
     // Render prompt overlay if active
     if let Some(ref prompt) = app.prompt {
-        render_prompt(frame, size, prompt, &app.theme);
+        if let Prompt::ThemePicker { selected, .. } = prompt {
+            widgets::theme_picker::render(frame, size, app, *selected);
+        } else {
+            render_prompt(frame, size, prompt, &app.theme);
+        }
     }
 
     // Render directory browser overlay if active
@@ -249,6 +285,11 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
 }
 
 fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::config::Theme) {
+    // ThemePicker is rendered separately from draw() since it needs &App
+    if matches!(prompt, Prompt::ThemePicker { .. }) {
+        return;
+    }
+
     // SetupGuide uses a larger overlay
     if matches!(prompt, Prompt::SetupGuide) {
         render_setup_guide(frame, area, theme);
@@ -389,6 +430,7 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
         }
         Prompt::SetupGuide => unreachable!(), // handled by early return
         Prompt::RestoreSession { .. } => unreachable!(), // handled by early return
+        Prompt::ThemePicker { .. } => unreachable!(), // handled by early return
     }
 }
 
