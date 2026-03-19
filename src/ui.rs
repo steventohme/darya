@@ -10,7 +10,7 @@ use crate::session::manager::SessionManager;
 use crate::widgets;
 
 /// Compute the right panel Rect (before any pane splitting).
-fn right_panel_rect(size: Rect) -> Rect {
+fn right_panel_rect(size: Rect, sidebar_pct: u16) -> Rect {
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -22,13 +22,13 @@ fn right_panel_rect(size: Rect) -> Rect {
 
     Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+        .constraints([Constraint::Percentage(sidebar_pct), Constraint::Percentage(100 - sidebar_pct)])
         .split(outer[1])[1]
 }
 
 /// Compute inner Rects for each pane by splitting the right panel horizontally.
-pub fn compute_pane_rects(size: Rect, pane_count: usize) -> Vec<Rect> {
-    let panel = right_panel_rect(size);
+pub fn compute_pane_rects(size: Rect, pane_count: usize, sidebar_pct: u16) -> Vec<Rect> {
+    let panel = right_panel_rect(size, sidebar_pct);
     if pane_count <= 1 {
         return vec![panel];
     }
@@ -43,8 +43,8 @@ pub fn compute_pane_rects(size: Rect, pane_count: usize) -> Vec<Rect> {
 }
 
 /// Compute the inner Rect where the terminal PTY is rendered (single pane).
-pub fn compute_pty_rect(size: Rect) -> Rect {
-    let panel = right_panel_rect(size);
+pub fn compute_pty_rect(size: Rect, sidebar_pct: u16) -> Rect {
+    let panel = right_panel_rect(size, sidebar_pct);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Thick);
@@ -101,9 +101,10 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     frame.render_widget(header, outer[0]);
 
     // Main layout: left panel | right panel
+    let sidebar_pct = app.sidebar_width;
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+        .constraints([Constraint::Percentage(sidebar_pct), Constraint::Percentage(100 - sidebar_pct)])
         .split(outer[1]);
 
     // Left panel (sidebar)
@@ -123,7 +124,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
         }
     });
     if let Some(panes) = pane_snapshot {
-        let pane_rects = compute_pane_rects(size, panes.len());
+        let pane_rects = compute_pane_rects(size, panes.len(), sidebar_pct);
         for (i, (content, pane_focused)) in panes.iter().enumerate() {
             match content {
                 crate::app::PaneContent::Terminal(session_id)

@@ -24,10 +24,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let kb_log = KeybindingsConfig::format(&kb.git_log);
     let kb_cmd_palette = KeybindingsConfig::format(&kb.command_palette);
     let kb_shell = KeybindingsConfig::format(&kb.shell);
+    let kb_sidebar_grow = KeybindingsConfig::format(&kb.sidebar_grow);
+    let kb_sidebar_shrink = KeybindingsConfig::format(&kb.sidebar_shrink);
 
     let view_bindings = format!(
-        "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search  {}: Git  {}: Blame  {}: Log  {}: Shell  {}: Palette",
-        kb_worktrees, kb_terminal, kb_files, kb_editor, kb_search, kb_git, kb_blame, kb_log, kb_shell, kb_cmd_palette
+        "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search  {}: Git  {}: Blame  {}: Log  {}: Shell  {}: Palette  {}/{}: Resize sidebar",
+        kb_worktrees, kb_terminal, kb_files, kb_editor, kb_search, kb_git, kb_blame, kb_log, kb_shell, kb_cmd_palette, kb_sidebar_grow, kb_sidebar_shrink
     );
 
     let (title, bindings): (&str, Vec<(&str, &str)>) = match app.focused_view() {

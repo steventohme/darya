@@ -5,6 +5,7 @@ use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState};
 use ratatui::Frame;
 
 use crate::app::{App, GitFileStatus};
+use crate::icons;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
     // Lazily refresh git indicators only when the file explorer is visible
@@ -24,12 +25,16 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
         .iter()
         .map(|entry| {
             let indent = "  ".repeat(entry.depth);
-            let (icon, style) = if entry.is_dir {
-                let expanded = app.file_explorer.expanded.contains(&entry.path);
-                let icon = if expanded { "▾ " } else { "▸ " };
-                (icon, Style::default().fg(app.theme.session_active))
+            let expanded = entry.is_dir && app.file_explorer.expanded.contains(&entry.path);
+            let fi = if entry.is_dir {
+                if expanded { icons::dir_icon_open() } else { icons::file_icon(&entry.name, true) }
             } else {
-                ("  ", Style::default().fg(app.theme.fg))
+                icons::file_icon(&entry.name, false)
+            };
+            let name_style = if entry.is_dir {
+                Style::default().fg(app.theme.session_active)
+            } else {
+                Style::default().fg(app.theme.fg)
             };
 
             let marker = if entry.is_dir {
@@ -61,11 +66,22 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                 }
             };
 
-            let line = Line::from(vec![
-                Span::styled(format!("{}{}", indent, icon), style),
-                Span::styled(&entry.name, style),
-                marker,
-            ]);
+            let line = if entry.is_dir {
+                let arrow = if expanded { "▾" } else { "▸" };
+                Line::from(vec![
+                    Span::styled(format!("{}{} ", indent, arrow), name_style),
+                    Span::styled(format!("{} ", fi.icon), Style::default().fg(fi.color)),
+                    Span::styled(&entry.name, name_style),
+                    marker,
+                ])
+            } else {
+                Line::from(vec![
+                    Span::styled(indent, name_style),
+                    Span::styled(format!("{} ", fi.icon), Style::default().fg(fi.color)),
+                    Span::styled(&entry.name, name_style),
+                    marker,
+                ])
+            };
             ListItem::new(line)
         })
         .collect();

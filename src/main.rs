@@ -40,9 +40,9 @@ fn find_git_root() -> color_eyre::Result<PathBuf> {
 }
 
 /// Calculate the terminal area available for the PTY (excluding borders and sidebar).
-fn pty_size(terminal: &Terminal<CrosstermBackend<io::Stdout>>) -> (u16, u16) {
+fn pty_size(terminal: &Terminal<CrosstermBackend<io::Stdout>>, sidebar_pct: u16) -> (u16, u16) {
     let size = terminal.size().unwrap_or_default();
-    let rect = ui::compute_pty_rect(size.into());
+    let rect = ui::compute_pty_rect(size.into(), sidebar_pct);
     (rect.height.max(1), rect.width.max(1))
 }
 
@@ -55,7 +55,7 @@ fn pane_sizes(
     let size = terminal.size().unwrap_or_default();
     if let Some(ref layout) = app.pane_layout {
         if layout.panes.len() > 1 {
-            let rects = ui::compute_pane_rects(size.into(), layout.panes.len());
+            let rects = ui::compute_pane_rects(size.into(), layout.panes.len(), app.sidebar_width);
             let block = ratatui::widgets::Block::default()
                 .borders(ratatui::widgets::Borders::ALL)
                 .border_type(ratatui::widgets::BorderType::Thick);
@@ -163,7 +163,7 @@ async fn main() -> color_eyre::Result<()> {
         }
     }
 
-    let (pty_rows, _pty_cols) = pty_size(&terminal);
+    let (pty_rows, _pty_cols) = pty_size(&terminal, app.sidebar_width);
     app.terminal_height = pty_rows;
     let (mut events, event_tx) = create_event_handler();
     let watcher_tx = event_tx.clone();
@@ -270,6 +270,38 @@ async fn run_loop(
             if let Some(layout) = app.pending_layout.take() {
                 app.restore_approved = false;
                 restore_sessions(terminal, app, session_manager, &layout);
+            }
+        }
+
+        // Handle sidebar resize — trigger PTY resize for all sessions
+        if app.sidebar_resized {
+            app.sidebar_resized = false;
+            let full_size = terminal.size().unwrap_or_default();
+            let rect = ui::compute_pty_rect(full_size.into(), app.sidebar_width);
+            app.terminal_height = rect.height.max(1);
+
+            let mut paned_sids: Vec<String> = Vec::new();
+            if let Some(ref layout) = app.pane_layout {
+                if layout.panes.len() > 1 {
+                    let pane_rects = ui::compute_pane_rects(full_size.into(), layout.panes.len(), app.sidebar_width);
+                    let block = ratatui::widgets::Block::default()
+                        .borders(ratatui::widgets::Borders::ALL)
+                        .border_type(ratatui::widgets::BorderType::Thick);
+                    for (i, content) in layout.panes.iter().enumerate() {
+                        if let Some(sid) = content.session_id() {
+                            let inner = block.inner(pane_rects[i]);
+                            if let Some(session) = session_manager.get_mut(sid) {
+                                let _ = session.resize(inner.height.max(1), inner.width.max(1));
+                            }
+                            paned_sids.push(sid.to_string());
+                        }
+                    }
+                }
+            }
+            if paned_sids.is_empty() {
+                session_manager.resize_all(rect.height.max(1), rect.width.max(1));
+            } else {
+                session_manager.resize_all_except(&paned_sids, rect.height.max(1), rect.width.max(1));
             }
         }
 
@@ -466,7 +498,7 @@ fn process_event(
                             app.input_mode = InputMode::Terminal;
                         } else {
                             // No session yet — spawn one
-                            let (rows, cols) = pty_size(terminal);
+                            let (rows, cols) = pty_size(terminal, app.sidebar_width);
                             let command = match kind {
                                 SessionKind::Claude => config::resolve_session_command(&wt_path, &app.session_command),
                                 SessionKind::Shell => config::resolve_shell_command(&wt_path, &app.shell_command),
@@ -508,7 +540,7 @@ fn process_event(
                         session_manager.remove(&old_id);
                         app.cleanup_session(&old_id);
 
-                        let (rows, cols) = pty_size(terminal);
+                        let (rows, cols) = pty_size(terminal, app.sidebar_width);
                         let command = match kind {
                             SessionKind::Claude => config::resolve_session_command(&wt_path, &app.session_command),
                             SessionKind::Shell => config::resolve_shell_command(&wt_path, &app.shell_command),
@@ -546,7 +578,7 @@ fn process_event(
                         session_manager.remove(&old_id);
                         app.cleanup_session(&old_id);
 
-                        let (rows, cols) = pty_size(terminal);
+                        let (rows, cols) = pty_size(terminal, app.sidebar_width);
                         let command = match kind {
                             SessionKind::Claude => config::resolve_session_command(&wt_path, &app.session_command),
                             SessionKind::Shell => config::resolve_shell_command(&wt_path, &app.shell_command),
@@ -611,7 +643,7 @@ fn process_event(
                     let sizes = pane_sizes(terminal, app);
                     if sizes.is_empty() {
                         // Back to single pane — resize all to full
-                        let (rows, cols) = pty_size(terminal);
+                        let (rows, cols) = pty_size(terminal, app.sidebar_width);
                         session_manager.resize_all(rows, cols);
                     } else {
                         for (sid, rows, cols) in sizes {
@@ -702,7 +734,7 @@ fn process_event(
             // Handle resize
             if let AppEvent::Resize(w, h) = &event {
                 let full_size = Rect::new(0, 0, *w, *h);
-                let rect = ui::compute_pty_rect(full_size);
+                let rect = ui::compute_pty_rect(full_size, app.sidebar_width);
                 app.terminal_height = rect.height.max(1);
 
                 // Collect all pane session IDs that need custom sizing
@@ -711,7 +743,7 @@ fn process_event(
                 // Resize panes (only Terminal/Shell have PTY sessions)
                 if let Some(ref layout) = app.pane_layout {
                     if layout.panes.len() > 1 {
-                        let pane_rects = ui::compute_pane_rects(full_size, layout.panes.len());
+                        let pane_rects = ui::compute_pane_rects(full_size, layout.panes.len(), app.sidebar_width);
                         let block = ratatui::widgets::Block::default()
                             .borders(ratatui::widgets::Borders::ALL)
                             .border_type(ratatui::widgets::BorderType::Thick);
@@ -772,7 +804,7 @@ fn restore_sessions(
     session_manager: &mut SessionManager,
     layout: &config::LayoutConfig,
 ) {
-    let (rows, cols) = pty_size(terminal);
+    let (rows, cols) = pty_size(terminal, app.sidebar_width);
 
     for saved in &layout.sessions {
         let saved_path = PathBuf::from(&saved.path);

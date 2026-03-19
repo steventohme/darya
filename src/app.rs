@@ -14,6 +14,13 @@ use crate::sidebar::types::SessionKind;
 
 const IGNORED_NAMES: &[&str] = &["target", "node_modules", "__pycache__"];
 
+/// Sidebar width as a percentage (minimum).
+pub const SIDEBAR_MIN_WIDTH: u16 = 15;
+/// Sidebar width as a percentage (maximum).
+pub const SIDEBAR_MAX_WIDTH: u16 = 50;
+/// Sidebar width step size for resize.
+pub const SIDEBAR_STEP: u16 = 2;
+
 /// Wrapping move-up for list navigation. Returns new index.
 pub fn wrapping_prev(selected: usize, len: usize) -> usize {
     if len == 0 { return 0; }
@@ -407,7 +414,7 @@ impl FileExplorerState {
 
         for entry in read_dir.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with('.') || IGNORED_NAMES.contains(&name.as_str()) {
+            if IGNORED_NAMES.contains(&name.as_str()) {
                 continue;
             }
             let path = entry.path();
@@ -749,6 +756,8 @@ pub enum CommandId {
     AddSection,
     AddShellSlot,
     AssignColor,
+    SidebarGrow,
+    SidebarShrink,
 }
 
 #[derive(Debug, Clone)]
@@ -793,6 +802,8 @@ impl CommandPaletteState {
             PaletteCommand { id: CommandId::AddSection, name: "Sidebar: Add Section".to_string(), keybinding: Some("Shift+N".to_string()) },
             PaletteCommand { id: CommandId::AddShellSlot, name: "Sidebar: Add Shell Slot".to_string(), keybinding: Some("Shift+S".to_string()) },
             PaletteCommand { id: CommandId::AssignColor, name: "Sidebar: Assign Color".to_string(), keybinding: Some("c".to_string()) },
+            PaletteCommand { id: CommandId::SidebarGrow, name: "Sidebar: Grow".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.sidebar_grow)) },
+            PaletteCommand { id: CommandId::SidebarShrink, name: "Sidebar: Shrink".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.sidebar_shrink)) },
         ];
         let results = all_commands.clone();
         Self {
@@ -1716,6 +1727,10 @@ pub struct App {
     pub pending_layout: Option<config::LayoutConfig>,
     /// Set to true when user approves session restore via prompt
     pub restore_approved: bool,
+    /// Sidebar width as a percentage (default 25).
+    pub sidebar_width: u16,
+    /// Set when sidebar was resized and PTY needs a resize.
+    pub sidebar_resized: bool,
 }
 
 impl App {
@@ -1761,6 +1776,8 @@ impl App {
             pending_removed_sessions: Vec::new(),
             pending_layout: None,
             restore_approved: false,
+            sidebar_width: 25,
+            sidebar_resized: false,
         }
     }
 
@@ -2392,12 +2409,32 @@ impl App {
                     self.prompt = Some(Prompt::ColorPicker { target, cursor: 0 });
                 }
             }
+            CommandId::SidebarGrow => {
+                self.sidebar_width = (self.sidebar_width + SIDEBAR_STEP).min(SIDEBAR_MAX_WIDTH);
+                self.sidebar_resized = true;
+            }
+            CommandId::SidebarShrink => {
+                self.sidebar_width = self.sidebar_width.saturating_sub(SIDEBAR_STEP).max(SIDEBAR_MIN_WIDTH);
+                self.sidebar_resized = true;
+            }
         }
     }
 
     fn handle_nav_key(&mut self, key: KeyEvent) {
-        // Panel-aware view switching via configurable keybindings
+        // Sidebar resize keybindings (global in nav mode)
         let kb = &self.keybindings;
+        if KeybindingsConfig::matches(&kb.sidebar_grow, key.modifiers, key.code) {
+            self.sidebar_width = (self.sidebar_width + SIDEBAR_STEP).min(SIDEBAR_MAX_WIDTH);
+            self.sidebar_resized = true;
+            return;
+        }
+        if KeybindingsConfig::matches(&kb.sidebar_shrink, key.modifiers, key.code) {
+            self.sidebar_width = self.sidebar_width.saturating_sub(SIDEBAR_STEP).max(SIDEBAR_MIN_WIDTH);
+            self.sidebar_resized = true;
+            return;
+        }
+
+        // Panel-aware view switching via configurable keybindings
         if KeybindingsConfig::matches(&kb.worktrees, key.modifiers, key.code) {
             self.set_sidebar_view(SidebarView::Worktrees); return;
         }

@@ -1,6 +1,7 @@
 pub mod app;
 pub mod config;
 pub mod error;
+pub mod icons;
 pub mod event;
 pub mod session;
 pub mod sidebar;

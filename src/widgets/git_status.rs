@@ -5,6 +5,7 @@ use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState};
 use ratatui::Frame;
 
 use crate::app::{App, GitFileStatus, GitStatusCategory};
+use crate::icons;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
     if let Some(ref mut gs) = app.git_status {
@@ -51,12 +52,19 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         GitStatusCategory::Untracked => "",
                     };
 
+                    let filename = entry.path.rsplit('/').next().unwrap_or(&entry.path);
+                    let fi = icons::file_icon(filename, false);
+
                     let line = Line::from(vec![
                         Span::styled(
                             format!("{} ", status_char),
                             Style::default()
                                 .fg(status_color)
                                 .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            format!("{} ", fi.icon),
+                            Style::default().fg(fi.color),
                         ),
                         Span::styled(
                             prefix.to_string(),

@@ -139,6 +139,8 @@ struct KeybindingsToml {
     git_log: Option<String>,
     command_palette: Option<String>,
     shell: Option<String>,
+    sidebar_grow: Option<String>,
+    sidebar_shrink: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -157,6 +159,8 @@ pub struct KeybindingsConfig {
     pub git_log: (KeyModifiers, KeyCode),
     pub command_palette: (KeyModifiers, KeyCode),
     pub shell: (KeyModifiers, KeyCode),
+    pub sidebar_grow: (KeyModifiers, KeyCode),
+    pub sidebar_shrink: (KeyModifiers, KeyCode),
 }
 
 impl Default for KeybindingsConfig {
@@ -176,6 +180,8 @@ impl Default for KeybindingsConfig {
             git_log: (KeyModifiers::SUPER, KeyCode::Char('8')),
             command_palette: (KeyModifiers::SUPER, KeyCode::Char('k')),
             shell: (KeyModifiers::SUPER, KeyCode::Char('9')),
+            sidebar_grow: (KeyModifiers::SUPER, KeyCode::Char('=')),
+            sidebar_shrink: (KeyModifiers::SUPER, KeyCode::Char('-')),
         }
     }
 }
@@ -500,6 +506,8 @@ pub fn load_config() -> AppConfig {
         apply_kb!(git_log);
         apply_kb!(command_palette);
         apply_kb!(shell);
+        apply_kb!(sidebar_grow);
+        apply_kb!(sidebar_shrink);
     }
 
     if let Some(ref s) = config.session {

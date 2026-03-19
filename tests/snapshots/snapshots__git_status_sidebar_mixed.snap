@@ -4,9 +4,9 @@ expression: output
 ---
  darya
 ┏ Git Status — 3 changes┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃M [staged] src/app.rs  ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
-┃M src/ui.rs            ┃┃                                                                         ┃
-┃? new_file.txt         ┃┃                                                                         ┃
+┃M  [staged] src/app.rs┃┃  Press Enter on a worktree to start a Claude Code session               ┃
+┃M  src/ui.rs          ┃┃                                                                         ┃
+┃?  new_file.txt       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃

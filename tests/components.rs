@@ -154,8 +154,14 @@ fn file_explorer_ignores_hidden_and_target() {
     std::fs::write(root.join(".dotfile"), "x").unwrap();
 
     let state = FileExplorerState::new(root.to_path_buf());
-    assert_eq!(state.entries.len(), 1);
-    assert_eq!(state.entries[0].name, "visible.txt");
+    // Dotfiles/dirs are visible; only IGNORED_NAMES (target, node_modules) are filtered
+    assert_eq!(state.entries.len(), 3);
+    let names: Vec<&str> = state.entries.iter().map(|e| e.name.as_str()).collect();
+    assert!(names.contains(&".hidden"));
+    assert!(names.contains(&".dotfile"));
+    assert!(names.contains(&"visible.txt"));
+    assert!(!names.contains(&"target"));
+    assert!(!names.contains(&"node_modules"));
 }
 
 #[test]
@@ -540,4 +546,38 @@ fn diff_view_scroll_up_down_clamped() {
     assert_eq!(dv.scroll_offset, 2);
     dv.scroll_up(100);
     assert_eq!(dv.scroll_offset, 0); // clamped at 0
+}
+
+// ── Sidebar resize ─────────────────────────────────────────
+
+#[test]
+fn sidebar_width_defaults_to_25() {
+    use darya::app::{App, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH};
+    use darya::config::{KeybindingsConfig, Theme};
+    let app = App::new(vec![], Theme::dark(), true, KeybindingsConfig::default(), "claude".into(), "/bin/sh".into());
+    assert_eq!(app.sidebar_width, 25);
+    assert!(!app.sidebar_resized);
+    // Verify constants are sensible
+    assert!(SIDEBAR_MIN_WIDTH < SIDEBAR_MAX_WIDTH);
+    assert!(app.sidebar_width >= SIDEBAR_MIN_WIDTH);
+    assert!(app.sidebar_width <= SIDEBAR_MAX_WIDTH);
+}
+
+#[test]
+fn sidebar_resize_respects_bounds() {
+    use darya::app::{App, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_STEP};
+    use darya::config::{KeybindingsConfig, Theme};
+    let mut app = App::new(vec![], Theme::dark(), true, KeybindingsConfig::default(), "claude".into(), "/bin/sh".into());
+
+    // Grow to max
+    for _ in 0..50 {
+        app.sidebar_width = (app.sidebar_width + SIDEBAR_STEP).min(SIDEBAR_MAX_WIDTH);
+    }
+    assert_eq!(app.sidebar_width, SIDEBAR_MAX_WIDTH);
+
+    // Shrink to min
+    for _ in 0..50 {
+        app.sidebar_width = app.sidebar_width.saturating_sub(SIDEBAR_STEP).max(SIDEBAR_MIN_WIDTH);
+    }
+    assert_eq!(app.sidebar_width, SIDEBAR_MIN_WIDTH);
 }
