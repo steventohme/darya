@@ -6,6 +6,7 @@ use std::time::Instant;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Index2, Lines as EdtuiLines};
 
+use ratatui::layout::Rect;
 use ratatui::style::Color;
 
 use crate::config;
@@ -1677,6 +1678,20 @@ pub fn is_edtui_compatible(key: &KeyEvent) -> bool {
     )
 }
 
+/// Mouse text selection state for click-drag copy.
+#[derive(Debug, Clone)]
+pub struct TextSelection {
+    pub session_id: String,
+    /// Inner rect of the pane (for rendering highlight).
+    pub pane_inner: Rect,
+    /// Start position in vt100 screen coords (row, col).
+    pub start: (u16, u16),
+    /// End position in vt100 screen coords (row, col).
+    pub end: (u16, u16),
+    /// Whether a drag is in progress.
+    pub active: bool,
+}
+
 pub struct App {
     pub running: bool,
     pub input_mode: InputMode,
@@ -1731,6 +1746,8 @@ pub struct App {
     pub sidebar_width: u16,
     /// Set when sidebar was resized and PTY needs a resize.
     pub sidebar_resized: bool,
+    /// Active mouse text selection (click-drag to copy).
+    pub text_selection: Option<TextSelection>,
 }
 
 impl App {
@@ -1778,6 +1795,7 @@ impl App {
             restore_approved: false,
             sidebar_width: 25,
             sidebar_resized: false,
+            text_selection: None,
         }
     }
 
@@ -1970,6 +1988,9 @@ impl App {
                 self.activity.tick();
             }
             AppEvent::Paste(_) => {
+                // Handled in main.rs process_event() before reaching here
+            }
+            AppEvent::MouseDown { .. } | AppEvent::MouseDrag { .. } | AppEvent::MouseUp { .. } => {
                 // Handled in main.rs process_event() before reaching here
             }
         }
@@ -3188,6 +3209,46 @@ impl App {
             .map(|id| id.as_str() == session_id)
             .unwrap_or(false)
             && (self.main_view == MainView::Terminal || self.main_view == MainView::Shell)
+    }
+
+    /// Hit-test which terminal/shell pane contains the given absolute (column, row) coords.
+    /// Returns the session ID and the pane's inner rect (excluding border).
+    pub fn pane_session_at_coords(&self, col: u16, row: u16, terminal_size: Rect) -> Option<(String, Rect)> {
+        use ratatui::widgets::{Block, BorderType, Borders};
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Thick);
+
+        if let Some(ref layout) = self.pane_layout {
+            if layout.panes.len() > 1 {
+                let rects = crate::ui::compute_pane_rects(terminal_size, layout.panes.len(), self.sidebar_width);
+                for (i, content) in layout.panes.iter().enumerate() {
+                    if let Some(sid) = content.session_id() {
+                        let inner = block.inner(rects[i]);
+                        if col >= inner.x && col < inner.x + inner.width
+                            && row >= inner.y && row < inner.y + inner.height
+                        {
+                            return Some((sid.to_string(), inner));
+                        }
+                    }
+                }
+                return None;
+            }
+        }
+        // Single pane: use the right panel rect
+        let panel = crate::ui::compute_pty_rect(terminal_size, self.sidebar_width);
+        if col >= panel.x && col < panel.x + panel.width
+            && row >= panel.y && row < panel.y + panel.height
+        {
+            // Determine which session is active based on main_view
+            let session_id = match self.main_view {
+                MainView::Terminal => self.active_session_id().map(|s| s.to_string()),
+                MainView::Shell => self.active_shell_session_id().map(|s| s.to_string()),
+                _ => None,
+            };
+            return session_id.map(|sid| (sid, panel));
+        }
+        None
     }
 
     /// Reverse lookup: find the worktree name for a given session ID.

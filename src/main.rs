@@ -366,6 +366,11 @@ fn process_event(
     wt_manager: &WorktreeManager,
     pending_native: &mut std::collections::HashMap<String, (std::time::Instant, String)>,
 ) {
+        if let AppEvent::Key(_) = event {
+                // Clear text selection on any keypress
+                app.text_selection = None;
+        }
+
         if let AppEvent::Key(key) = event {
                 // Clear status message on any keypress
                 app.status_message = None;
@@ -697,10 +702,67 @@ fn process_event(
 
             // Handle mouse scroll — works in ALL modes
             if let AppEvent::MouseScroll { delta } = event {
+                app.text_selection = None;
                 if *delta > 0 {
                     app.scroll_up(*delta as usize);
                 } else if *delta < 0 {
                     app.scroll_down((-delta) as usize);
+                }
+            }
+
+            // Handle mouse down — start text selection
+            if let AppEvent::MouseDown { column, row } = event {
+                let term_size = terminal.size().unwrap_or_default();
+                if let Some((session_id, inner)) = app.pane_session_at_coords(*column, *row, term_size.into()) {
+                    let screen_row = row.saturating_sub(inner.y);
+                    let screen_col = column.saturating_sub(inner.x);
+                    app.text_selection = Some(app::TextSelection {
+                        session_id,
+                        pane_inner: inner,
+                        start: (screen_row, screen_col),
+                        end: (screen_row, screen_col),
+                        active: true,
+                    });
+                } else {
+                    app.text_selection = None;
+                }
+            }
+
+            // Handle mouse drag — extend text selection
+            if let AppEvent::MouseDrag { column, row } = event {
+                if let Some(ref mut sel) = app.text_selection {
+                    if sel.active {
+                        let inner = sel.pane_inner;
+                        let clamped_col = (*column).clamp(inner.x, inner.x + inner.width.saturating_sub(1));
+                        let clamped_row = (*row).clamp(inner.y, inner.y + inner.height.saturating_sub(1));
+                        sel.end = (clamped_row.saturating_sub(inner.y), clamped_col.saturating_sub(inner.x));
+                    }
+                }
+            }
+
+            // Handle mouse up — finalize selection, extract text, copy to clipboard
+            if let AppEvent::MouseUp { column, row } = event {
+                if let Some(ref mut sel) = app.text_selection {
+                    if sel.active {
+                        let inner = sel.pane_inner;
+                        let clamped_col = (*column).clamp(inner.x, inner.x + inner.width.saturating_sub(1));
+                        let clamped_row = (*row).clamp(inner.y, inner.y + inner.height.saturating_sub(1));
+                        sel.end = (clamped_row.saturating_sub(inner.y), clamped_col.saturating_sub(inner.x));
+                        sel.active = false;
+                    }
+                }
+                // Extract text and copy to clipboard
+                if let Some(ref sel) = app.text_selection {
+                    if !sel.active {
+                        let text = extract_selection_text(sel, session_manager, app);
+                        if !text.is_empty() {
+                            copy_to_clipboard(&text);
+                            app.status_message = Some("Copied to clipboard".to_string());
+                        } else {
+                            // Empty selection (single click) — clear it
+                            app.text_selection = None;
+                        }
+                    }
                 }
             }
 
@@ -880,6 +942,110 @@ fn restore_sessions(
             _ => app.panel_focus,
         };
     }
+}
+
+/// Extract text from a finalized TextSelection using the vt100 screen contents.
+fn extract_selection_text(
+    sel: &app::TextSelection,
+    session_manager: &SessionManager,
+    app: &App,
+) -> String {
+    let Some(session) = session_manager.get(&sel.session_id) else {
+        return String::new();
+    };
+    let Ok(mut parser) = session.parser.write() else {
+        return String::new();
+    };
+
+    let offset = app.scroll_offset_for(&sel.session_id);
+    parser.screen_mut().set_scrollback(offset);
+
+    let screen = parser.screen();
+
+    // Account for bottom-align shift: find last content row and compute shift
+    let rows = screen.size().0;
+    let cols = screen.size().1;
+    let mut last_content_row: u16 = 0;
+    if app.terminal_start_bottom {
+        for r in (0..rows).rev() {
+            let mut has_content = false;
+            for c in 0..cols {
+                let cell = screen.cell(r, c);
+                if let Some(cell) = cell {
+                    if cell.contents() != " " && !cell.contents().is_empty() {
+                        has_content = true;
+                        break;
+                    }
+                }
+            }
+            if has_content {
+                last_content_row = r;
+                break;
+            }
+        }
+    }
+
+    let pane_height = sel.pane_inner.height;
+    let shift = if app.terminal_start_bottom && pane_height > 0 {
+        (pane_height.saturating_sub(1)).saturating_sub(last_content_row)
+    } else {
+        0
+    };
+
+    // Map selection coords back to screen coords accounting for bottom-align shift
+    let (mut sr, sc) = sel.start;
+    let (mut er, ec) = sel.end;
+    sr = sr.saturating_sub(shift);
+    er = er.saturating_sub(shift);
+
+    // Normalize: ensure start is before end
+    let (start_row, start_col, end_row, end_col) = if (sr, sc) <= (er, ec) {
+        (sr, sc, er, ec)
+    } else {
+        (er, ec, sr, sc)
+    };
+
+    screen.contents_between(
+        start_row,
+        start_col,
+        end_row,
+        end_col.saturating_add(1).min(cols),
+    )
+}
+
+/// Copy text to clipboard using OSC 52 escape sequence (terminal-native, works in
+/// iTerm2, Kitty, and over SSH without needing pbcopy).
+fn copy_to_clipboard(text: &str) {
+    let encoded = base64_encode(text.as_bytes());
+    // OSC 52: \x1b]52;c;<base64>\x07
+    let osc = format!("\x1b]52;c;{}\x07", encoded);
+    let _ = io::stdout().write_all(osc.as_bytes());
+    let _ = io::stdout().flush();
+}
+
+/// Minimal base64 encoder (no external dependency).
+fn base64_encode(data: &[u8]) -> String {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        result.push(CHARS[((triple >> 18) & 0x3F) as usize] as char);
+        result.push(CHARS[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            result.push(CHARS[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+        if chunk.len() > 2 {
+            result.push(CHARS[(triple & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+    }
+    result
 }
 
 /// Convert a crossterm KeyEvent to raw bytes for the PTY.

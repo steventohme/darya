@@ -125,6 +125,21 @@ pub fn shift_key(code: KeyCode) -> AppEvent {
     AppEvent::Key(KeyEvent::new(code, KeyModifiers::SHIFT))
 }
 
+/// Create a MouseDown event at (col, row).
+pub fn mouse_down(column: u16, row: u16) -> AppEvent {
+    AppEvent::MouseDown { column, row }
+}
+
+/// Create a MouseDrag event at (col, row).
+pub fn mouse_drag(column: u16, row: u16) -> AppEvent {
+    AppEvent::MouseDrag { column, row }
+}
+
+/// Create a MouseUp event at (col, row).
+pub fn mouse_up(column: u16, row: u16) -> AppEvent {
+    AppEvent::MouseUp { column, row }
+}
+
 /// Create an App with `n` worktrees where the first two worktrees have active sessions.
 pub fn make_app_with_two_sessions(n: usize) -> App {
     assert!(n >= 2);

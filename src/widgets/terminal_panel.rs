@@ -90,6 +90,42 @@ pub fn render_session(
                 }
             }
 
+            // Render text selection highlight (after bottom-align shift so coords are correct)
+            if let Some(ref sel) = app.text_selection {
+                if sel.session_id == session_id && !sel.pane_inner.is_empty() {
+                    // Normalize start/end so start is before end
+                    let (start_row, start_col, end_row, end_col) =
+                        if sel.start <= sel.end {
+                            (sel.start.0, sel.start.1, sel.end.0, sel.end.1)
+                        } else {
+                            (sel.end.0, sel.end.1, sel.start.0, sel.start.1)
+                        };
+
+                    for row in start_row..=end_row {
+                        let abs_y = inner.y + row;
+                        if abs_y >= inner.y + inner.height {
+                            break;
+                        }
+
+                        let col_start = if row == start_row { start_col } else { 0 };
+                        let col_end = if row == end_row {
+                            end_col
+                        } else {
+                            inner.width.saturating_sub(1)
+                        };
+
+                        for col in col_start..=col_end {
+                            let abs_x = inner.x + col;
+                            if abs_x >= inner.x + inner.width {
+                                break;
+                            }
+                            let cell = &mut buf[(abs_x, abs_y)];
+                            std::mem::swap(&mut cell.fg, &mut cell.bg);
+                        }
+                    }
+                }
+            }
+
             // Show scroll indicator when scrolled back
             if offset > 0 && inner.height > 0 {
                 let indicator_area = Rect::new(inner.x, inner.y, inner.width, 1);
