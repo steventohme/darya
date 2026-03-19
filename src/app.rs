@@ -1904,8 +1904,8 @@ impl App {
 
     pub fn set_sidebar_view(&mut self, view: SidebarView) {
         if matches!(view, SidebarView::GitStatus) && self.git_status.is_none() {
-            let path = self.sidebar_tree.selected_item()
-                .map(|item| item.path.clone())
+            let path = self.sidebar_tree.selected_path()
+                .cloned()
                 .unwrap_or_else(|| self.file_explorer.root.clone());
             self.git_status = Some(GitStatusState::new(path));
         }
@@ -2454,8 +2454,7 @@ impl App {
             CommandId::ViewEditor => self.set_main_view(MainView::Editor),
             CommandId::ViewSearch => self.set_sidebar_view(SidebarView::Search),
             CommandId::ViewGitStatus => {
-                if let Some(item) = self.sidebar_tree.selected_item() {
-                    let path = item.path.clone();
+                if let Some(path) = self.sidebar_tree.selected_path().cloned() {
                     self.git_status = Some(GitStatusState::new(path));
                 }
                 self.set_sidebar_view(SidebarView::GitStatus);
@@ -2473,8 +2472,7 @@ impl App {
                 self.input_mode = InputMode::Navigation;
             }
             CommandId::RefreshGitStatus => {
-                if let Some(item) = self.sidebar_tree.selected_item() {
-                    let path = item.path.clone();
+                if let Some(path) = self.sidebar_tree.selected_path().cloned() {
                     self.git_status = Some(GitStatusState::new(path));
                     self.status_message = Some("Git status refreshed".to_string());
                 }
@@ -2636,8 +2634,7 @@ impl App {
         }
         if KeybindingsConfig::matches(&kb.git_status, key.modifiers, key.code) {
             // Refresh git status on activation
-            if let Some(item) = self.sidebar_tree.selected_item() {
-                let path = item.path.clone();
+            if let Some(path) = self.sidebar_tree.selected_path().cloned() {
                 self.git_status = Some(GitStatusState::new(path));
             }
             self.set_sidebar_view(SidebarView::GitStatus); return;

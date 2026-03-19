@@ -193,6 +193,20 @@ impl SidebarTree {
         }
     }
 
+    /// Get the path for the current cursor position.
+    /// For items/sessions, returns the item's path.
+    /// For section headers, returns the first item's path in that section.
+    pub fn selected_path(&self) -> Option<&std::path::PathBuf> {
+        match self.visible.get(self.cursor)? {
+            TreeNode::Section(si) => {
+                let section = self.sections.get(*si)?;
+                section.items.first().map(|item| &item.path)
+            }
+            TreeNode::Item(si, ii) => Some(&self.sections.get(*si)?.items.get(*ii)?.path),
+            TreeNode::Session(si, ii, _) => Some(&self.sections.get(*si)?.items.get(*ii)?.path),
+        }
+    }
+
     /// Get the mutable SidebarItem the cursor is on (or parent for session).
     pub fn selected_item_mut(&mut self) -> Option<&mut SidebarItem> {
         match self.visible.get(self.cursor)?.clone() {
