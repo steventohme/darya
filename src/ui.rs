@@ -116,9 +116,9 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     // Left panel (sidebar) — optionally split to include planet at bottom
     let left_focused = app.panel_focus == PanelFocus::Left;
     if app.show_planet && app.planet_kind.is_some() && app.planet_animation.is_some() {
-        // Small planet: ~8 cells tall, capped width to keep it compact
-        let max_planet_h: u16 = 8;
-        let planet_height = max_planet_h.min(main_chunks[0].height / 4);
+        // Scale planet height with screen size, capped at 1/3 of sidebar
+        let max_planet_h: u16 = 16;
+        let planet_height = max_planet_h.min(main_chunks[0].height / 3);
         let sidebar_split = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(0), Constraint::Length(planet_height)])
@@ -129,7 +129,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
         // Render planet animation — render smaller than the area, with padding
         if let Some(ref anim) = app.planet_animation {
             let anim_frame = anim.frame_at(app.planet_tick / 2); // ~10fps
-            let render_h = planet_height.saturating_sub(2); // 1 row padding top+bottom
+            let render_h = planet_height.saturating_sub(4); // 2 for box borders + 1 padding each side
             let render_w = (render_h * 2).min(sidebar_split[1].width);
             let planet_lines = planet::renderer::render_frame(
                 anim_frame,
