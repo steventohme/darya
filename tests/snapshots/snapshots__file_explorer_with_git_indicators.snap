@@ -4,7 +4,7 @@ expression: output
 ---
  darya
 ┏ my-project ━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃▶ ▾  src ●            ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
+┃▶ ▾  src              ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
 ┃     app.rs M         ┃┃                                                                         ┃
 ┃     main.rs A        ┃┃                                                                         ┃
 ┃   README.md ?        ┃┃                                                                         ┃

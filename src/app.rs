@@ -1903,6 +1903,12 @@ impl App {
     }
 
     pub fn set_sidebar_view(&mut self, view: SidebarView) {
+        if matches!(view, SidebarView::GitStatus) && self.git_status.is_none() {
+            let path = self.sidebar_tree.selected_item()
+                .map(|item| item.path.clone())
+                .unwrap_or_else(|| self.file_explorer.root.clone());
+            self.git_status = Some(GitStatusState::new(path));
+        }
         self.sidebar_view = view;
         self.panel_focus = PanelFocus::Left;
     }
@@ -2660,7 +2666,8 @@ impl App {
         {
             match self.panel_focus {
                 PanelFocus::Left => {
-                    self.sidebar_view = self.sidebar_view.next();
+                    let next = self.sidebar_view.next();
+                    self.set_sidebar_view(next);
                 }
                 PanelFocus::Right => {
                     self.main_view = self.main_view.next();
@@ -2672,11 +2679,13 @@ impl App {
         // where h/l do expand/collapse in the tree)
         if self.panel_focus == PanelFocus::Left && self.sidebar_view != SidebarView::Worktrees {
             if key.code == KeyCode::Char('l') {
-                self.sidebar_view = self.sidebar_view.next();
+                let next = self.sidebar_view.next();
+                self.set_sidebar_view(next);
                 return;
             }
             if key.code == KeyCode::Char('h') {
-                self.sidebar_view = self.sidebar_view.prev();
+                let prev = self.sidebar_view.prev();
+                self.set_sidebar_view(prev);
                 return;
             }
         }
