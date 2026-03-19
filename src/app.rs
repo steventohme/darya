@@ -392,6 +392,8 @@ pub struct FileExplorerState {
     pub expanded: HashSet<PathBuf>,
     pub root: PathBuf,
     pub git_indicators: HashMap<String, GitFileStatus>,
+    /// Pre-computed set of directory relative paths that contain dirty files.
+    pub dirty_dirs: HashSet<String>,
     /// Whether git indicators need to be recomputed before next render.
     pub git_indicators_stale: bool,
 }
@@ -404,6 +406,7 @@ impl FileExplorerState {
             expanded: HashSet::new(),
             root,
             git_indicators: HashMap::new(),
+            dirty_dirs: HashSet::new(),
             git_indicators_stale: true,
         };
         state.refresh();
@@ -528,10 +531,24 @@ impl FileExplorerState {
     pub fn refresh_git_indicators(&mut self) {
         self.git_indicators_stale = false;
         self.git_indicators.clear();
+        self.dirty_dirs.clear();
         let Ok(entries) = run_git_status(&self.root) else {
             return;
         };
         for entry in entries {
+            // Pre-compute all ancestor directories that contain dirty files.
+            let path = std::path::Path::new(&entry.path);
+            let mut current = path.parent();
+            while let Some(dir) = current {
+                let dir_str = dir.to_string_lossy().to_string();
+                if dir_str.is_empty() {
+                    break;
+                }
+                if !self.dirty_dirs.insert(dir_str) {
+                    break; // already recorded this ancestor and all its parents
+                }
+                current = dir.parent();
+            }
             self.git_indicators
                 .entry(entry.path.clone())
                 .and_modify(|existing| {
@@ -551,6 +568,7 @@ impl FileExplorerState {
             self.selected = 0;
             self.refresh();
             self.git_indicators.clear();
+            self.dirty_dirs.clear();
             self.git_indicators_stale = true;
         }
     }

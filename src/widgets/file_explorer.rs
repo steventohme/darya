@@ -38,15 +38,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
             };
 
             let marker = if entry.is_dir {
-                // Check if any dirty descendant exists under this directory
+                // O(1) lookup in pre-computed dirty dirs set
                 let dir_rel = entry.path
                     .strip_prefix(&root)
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default();
-                let prefix = format!("{}/", dir_rel);
-                let has_dirty = app.file_explorer.git_indicators.keys()
-                    .any(|k| k.starts_with(&prefix));
-                if has_dirty {
+                if app.file_explorer.dirty_dirs.contains(&dir_rel) {
                     Span::styled(" ●", Style::default().fg(Color::DarkGray))
                 } else {
                     Span::raw("")
