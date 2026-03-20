@@ -2,6 +2,14 @@
 name = "darya"
 version = "0.1.0"
 edition = "2021"
+description = "A terminal workspace for developers who use git worktrees"
+license = "MIT"
+repository = "https://github.com/steventohme/darya"
+readme = "README.md"
+keywords = ["tui", "terminal", "git", "worktree", "workspace"]
+categories = ["command-line-utilities", "development-tools"]
+authors = ["Steven Tohme"]
+rust-version = "1.70"
 
 [dependencies]
 ratatui = { version = "0.30", features = ["crossterm"] }

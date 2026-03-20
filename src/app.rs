@@ -4,7 +4,9 @@ use std::process::Command;
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use edtui::{EditorEventHandler, EditorMode, EditorState as EdtuiState, Index2, Lines as EdtuiLines};
+use edtui::{
+    EditorEventHandler, EditorMode, EditorState as EdtuiState, Index2, Lines as EdtuiLines,
+};
 
 use ratatui::layout::Rect;
 use ratatui::style::Color;
@@ -26,13 +28,21 @@ pub const SIDEBAR_STEP: u16 = 2;
 
 /// Wrapping move-up for list navigation. Returns new index.
 pub fn wrapping_prev(selected: usize, len: usize) -> usize {
-    if len == 0 { return 0; }
-    if selected == 0 { len - 1 } else { selected - 1 }
+    if len == 0 {
+        return 0;
+    }
+    if selected == 0 {
+        len - 1
+    } else {
+        selected - 1
+    }
 }
 
 /// Wrapping move-down for list navigation. Returns new index.
 pub fn wrapping_next(selected: usize, len: usize) -> usize {
-    if len == 0 { return 0; }
+    if len == 0 {
+        return 0;
+    }
     (selected + 1) % len
 }
 
@@ -46,29 +56,29 @@ pub enum ColorTarget {
 
 /// Preset colors for the color picker (None = clear). 7 columns × 2 rows.
 pub const PRESET_COLORS: &[Option<Color>] = &[
-    None,                                        // clear
-    Some(Color::Rgb(0xE0, 0x7A, 0x2A)),         // amber (border accent)
-    Some(Color::Rgb(0xD4, 0x9A, 0x6A)),         // warm sand
-    Some(Color::Rgb(0xCC, 0x8A, 0x4E)),         // copper
-    Some(Color::Rgb(0xC4, 0x6B, 0x5E)),         // terracotta
-    Some(Color::Rgb(0xB0, 0x5A, 0x78)),         // dusty rose
-    Some(Color::Rgb(0x9A, 0x6E, 0xB0)),         // muted lavender
-    Some(Color::Rgb(0x72, 0xA5, 0xC5)),         // slate blue
-    Some(Color::Rgb(0x6B, 0xC2, 0xA5)),         // sage teal
-    Some(Color::Rgb(0x7A, 0xB0, 0x7A)),         // muted green
-    Some(Color::Rgb(0xA0, 0xB8, 0x70)),         // olive
-    Some(Color::Rgb(0xD4, 0xC4, 0x7A)),         // soft gold
-    Some(Color::Rgb(0xB0, 0xB0, 0xB0)),         // silver
-    Some(Color::Rgb(0x78, 0x88, 0x98)),         // cool gray
+    None,                               // clear
+    Some(Color::Rgb(0xE0, 0x7A, 0x2A)), // amber (border accent)
+    Some(Color::Rgb(0xD4, 0x9A, 0x6A)), // warm sand
+    Some(Color::Rgb(0xCC, 0x8A, 0x4E)), // copper
+    Some(Color::Rgb(0xC4, 0x6B, 0x5E)), // terracotta
+    Some(Color::Rgb(0xB0, 0x5A, 0x78)), // dusty rose
+    Some(Color::Rgb(0x9A, 0x6E, 0xB0)), // muted lavender
+    Some(Color::Rgb(0x72, 0xA5, 0xC5)), // slate blue
+    Some(Color::Rgb(0x6B, 0xC2, 0xA5)), // sage teal
+    Some(Color::Rgb(0x7A, 0xB0, 0x7A)), // muted green
+    Some(Color::Rgb(0xA0, 0xB8, 0x70)), // olive
+    Some(Color::Rgb(0xD4, 0xC4, 0x7A)), // soft gold
+    Some(Color::Rgb(0xB0, 0xB0, 0xB0)), // silver
+    Some(Color::Rgb(0x78, 0x88, 0x98)), // cool gray
 ];
 const MAX_FILE_SIZE: u64 = 1_048_576; // 1MB
 const MAX_PANES: usize = 3;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PaneContent {
-    Terminal(String),  // Claude session ID
-    Shell(String),     // Shell session ID
-    Editor,            // File editor (uses app.editor state)
+    Terminal(String), // Claude session ID
+    Shell(String),    // Shell session ID
+    Editor,           // File editor (uses app.editor state)
 }
 
 impl PaneContent {
@@ -98,9 +108,9 @@ pub enum SplitDirection {
 
 #[derive(Debug, Clone)]
 pub struct PaneLayout {
-    pub panes: Vec<PaneContent>,  // pane contents, left to right (or top to bottom), max 3
-    pub focused: usize,            // index into panes — input goes here
-    pub direction: SplitDirection,  // Horizontal = side-by-side, Vertical = stacked
+    pub panes: Vec<PaneContent>, // pane contents, left to right (or top to bottom), max 3
+    pub focused: usize,          // index into panes — input goes here
+    pub direction: SplitDirection, // Horizontal = side-by-side, Vertical = stacked
 }
 
 use crate::config::{KeybindingsConfig, Theme};
@@ -227,7 +237,10 @@ pub enum Prompt {
     /// Add a named shell session slot
     AddShellSlot { input: String },
     /// Confirming section deletion
-    ConfirmDeleteSection { section_name: String, section_idx: usize },
+    ConfirmDeleteSection {
+        section_name: String,
+        section_idx: usize,
+    },
     /// Color picker overlay
     ColorPicker { target: ColorTarget, cursor: usize },
     /// First-launch setup guide for Cmd key configuration
@@ -592,8 +605,7 @@ pub struct EditorViewState {
 
 impl EditorViewState {
     pub fn open(path: PathBuf) -> Result<Self, String> {
-        let metadata =
-            std::fs::metadata(&path).map_err(|e| format!("Cannot read file: {}", e))?;
+        let metadata = std::fs::metadata(&path).map_err(|e| format!("Cannot read file: {}", e))?;
         if metadata.len() > MAX_FILE_SIZE {
             return Err(format!(
                 "File too large ({}KB > 1MB)",
@@ -626,8 +638,8 @@ impl EditorViewState {
     /// Reload the file from disk if content has changed.
     /// Returns Ok(true) if reloaded, Ok(false) if unchanged.
     pub fn reload(&mut self) -> Result<bool, String> {
-        let content =
-            std::fs::read_to_string(&self.file_path).map_err(|e| format!("Cannot read file: {}", e))?;
+        let content = std::fs::read_to_string(&self.file_path)
+            .map_err(|e| format!("Cannot read file: {}", e))?;
         let current = self.editor_state.lines.to_string();
         if content == current {
             return Ok(false);
@@ -651,8 +663,7 @@ impl EditorViewState {
 
     pub fn save(&mut self) -> Result<(), String> {
         let content = self.editor_state.lines.to_string();
-        std::fs::write(&self.file_path, content)
-            .map_err(|e| format!("Failed to save: {}", e))?;
+        std::fs::write(&self.file_path, content).map_err(|e| format!("Failed to save: {}", e))?;
         self.modified = false;
         Ok(())
     }
@@ -711,7 +722,9 @@ impl FuzzyFinderState {
             .filter_map(|f| {
                 let mut buf = Vec::new();
                 let haystack = nucleo_matcher::Utf32Str::new(f, &mut buf);
-                pattern.score(haystack, &mut matcher).map(|s| (s, f.as_str()))
+                pattern
+                    .score(haystack, &mut matcher)
+                    .map(|s| (s, f.as_str()))
             })
             .collect();
 
@@ -750,7 +763,7 @@ fn walk_project_files(root: &Path) -> Vec<String> {
         .build();
 
     for entry in walker.flatten() {
-        if entry.file_type().map_or(false, |ft| ft.is_file()) {
+        if entry.file_type().is_some_and(|ft| ft.is_file()) {
             if let Ok(rel) = entry.path().strip_prefix(root) {
                 files.push(rel.to_string_lossy().to_string());
             }
@@ -814,37 +827,161 @@ pub struct CommandPaletteState {
 impl CommandPaletteState {
     pub fn new(keybindings: &KeybindingsConfig) -> Self {
         let all_commands = vec![
-            PaletteCommand { id: CommandId::ViewWorktrees, name: "View: Worktrees".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.worktrees)) },
-            PaletteCommand { id: CommandId::ViewTerminal, name: "View: Terminal".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.terminal)) },
-            PaletteCommand { id: CommandId::ViewFiles, name: "View: Files".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.files)) },
-            PaletteCommand { id: CommandId::ViewEditor, name: "View: Editor".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.editor)) },
-            PaletteCommand { id: CommandId::ViewSearch, name: "View: Search".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.search)) },
-            PaletteCommand { id: CommandId::ViewGitStatus, name: "View: Git Status".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.git_status)) },
-            PaletteCommand { id: CommandId::ViewGitBlame, name: "View: Git Blame".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.git_blame)) },
-            PaletteCommand { id: CommandId::ViewGitLog, name: "View: Git Log".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.git_log)) },
-            PaletteCommand { id: CommandId::ViewShell, name: "View: Shell".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.shell)) },
-            PaletteCommand { id: CommandId::StartSession, name: "Session: Start".to_string(), keybinding: None },
-            PaletteCommand { id: CommandId::RestartSession, name: "Session: Restart".to_string(), keybinding: None },
-            PaletteCommand { id: CommandId::CloseSession, name: "Session: Close".to_string(), keybinding: None },
-            PaletteCommand { id: CommandId::FuzzyFinder, name: "Find File".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.fuzzy_finder)) },
-            PaletteCommand { id: CommandId::ProjectSearch, name: "Search Project".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.project_search)) },
-            PaletteCommand { id: CommandId::RefreshGitStatus, name: "Refresh Git Status".to_string(), keybinding: None },
-            PaletteCommand { id: CommandId::SplitPane, name: "Split: Same Type".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.split_pane)) },
-            PaletteCommand { id: CommandId::SplitTerminal, name: "Split: Terminal".to_string(), keybinding: None },
-            PaletteCommand { id: CommandId::SplitShell, name: "Split: Shell".to_string(), keybinding: None },
-            PaletteCommand { id: CommandId::SplitEditor, name: "Split: Editor".to_string(), keybinding: None },
-            PaletteCommand { id: CommandId::ClosePane, name: "Close Pane".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.close_pane)) },
-            PaletteCommand { id: CommandId::ToggleHelp, name: "Toggle Help".to_string(), keybinding: Some("?".to_string()) },
-            PaletteCommand { id: CommandId::Quit, name: "Quit".to_string(), keybinding: Some("q".to_string()) },
-            PaletteCommand { id: CommandId::AddSection, name: "Sidebar: Add Section".to_string(), keybinding: Some("Shift+N".to_string()) },
-            PaletteCommand { id: CommandId::AddShellSlot, name: "Sidebar: Add Shell Slot".to_string(), keybinding: Some("Shift+S".to_string()) },
-            PaletteCommand { id: CommandId::AssignColor, name: "Sidebar: Assign Color".to_string(), keybinding: Some("c".to_string()) },
-            PaletteCommand { id: CommandId::SidebarGrow, name: "Sidebar: Grow".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.sidebar_grow)) },
-            PaletteCommand { id: CommandId::SidebarShrink, name: "Sidebar: Shrink".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.sidebar_shrink)) },
-            PaletteCommand { id: CommandId::SplitPaneVertical, name: "Split: Vertical Same Type".to_string(), keybinding: Some(KeybindingsConfig::format(&keybindings.split_pane_vertical)) },
-            PaletteCommand { id: CommandId::ToggleSplitDirection, name: "Toggle Split Direction".to_string(), keybinding: None },
-            PaletteCommand { id: CommandId::ThemePicker, name: "Theme: Choose Planet".to_string(), keybinding: None },
-            PaletteCommand { id: CommandId::TogglePlanet, name: "Theme: Toggle Planet Display".to_string(), keybinding: None },
+            PaletteCommand {
+                id: CommandId::ViewWorktrees,
+                name: "View: Worktrees".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.worktrees)),
+            },
+            PaletteCommand {
+                id: CommandId::ViewTerminal,
+                name: "View: Terminal".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.terminal)),
+            },
+            PaletteCommand {
+                id: CommandId::ViewFiles,
+                name: "View: Files".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.files)),
+            },
+            PaletteCommand {
+                id: CommandId::ViewEditor,
+                name: "View: Editor".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.editor)),
+            },
+            PaletteCommand {
+                id: CommandId::ViewSearch,
+                name: "View: Search".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.search)),
+            },
+            PaletteCommand {
+                id: CommandId::ViewGitStatus,
+                name: "View: Git Status".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.git_status)),
+            },
+            PaletteCommand {
+                id: CommandId::ViewGitBlame,
+                name: "View: Git Blame".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.git_blame)),
+            },
+            PaletteCommand {
+                id: CommandId::ViewGitLog,
+                name: "View: Git Log".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.git_log)),
+            },
+            PaletteCommand {
+                id: CommandId::ViewShell,
+                name: "View: Shell".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.shell)),
+            },
+            PaletteCommand {
+                id: CommandId::StartSession,
+                name: "Session: Start".to_string(),
+                keybinding: None,
+            },
+            PaletteCommand {
+                id: CommandId::RestartSession,
+                name: "Session: Restart".to_string(),
+                keybinding: None,
+            },
+            PaletteCommand {
+                id: CommandId::CloseSession,
+                name: "Session: Close".to_string(),
+                keybinding: None,
+            },
+            PaletteCommand {
+                id: CommandId::FuzzyFinder,
+                name: "Find File".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.fuzzy_finder)),
+            },
+            PaletteCommand {
+                id: CommandId::ProjectSearch,
+                name: "Search Project".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.project_search)),
+            },
+            PaletteCommand {
+                id: CommandId::RefreshGitStatus,
+                name: "Refresh Git Status".to_string(),
+                keybinding: None,
+            },
+            PaletteCommand {
+                id: CommandId::SplitPane,
+                name: "Split: Same Type".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.split_pane)),
+            },
+            PaletteCommand {
+                id: CommandId::SplitTerminal,
+                name: "Split: Terminal".to_string(),
+                keybinding: None,
+            },
+            PaletteCommand {
+                id: CommandId::SplitShell,
+                name: "Split: Shell".to_string(),
+                keybinding: None,
+            },
+            PaletteCommand {
+                id: CommandId::SplitEditor,
+                name: "Split: Editor".to_string(),
+                keybinding: None,
+            },
+            PaletteCommand {
+                id: CommandId::ClosePane,
+                name: "Close Pane".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.close_pane)),
+            },
+            PaletteCommand {
+                id: CommandId::ToggleHelp,
+                name: "Toggle Help".to_string(),
+                keybinding: Some("?".to_string()),
+            },
+            PaletteCommand {
+                id: CommandId::Quit,
+                name: "Quit".to_string(),
+                keybinding: Some("q".to_string()),
+            },
+            PaletteCommand {
+                id: CommandId::AddSection,
+                name: "Sidebar: Add Section".to_string(),
+                keybinding: Some("Shift+N".to_string()),
+            },
+            PaletteCommand {
+                id: CommandId::AddShellSlot,
+                name: "Sidebar: Add Shell Slot".to_string(),
+                keybinding: Some("Shift+S".to_string()),
+            },
+            PaletteCommand {
+                id: CommandId::AssignColor,
+                name: "Sidebar: Assign Color".to_string(),
+                keybinding: Some("c".to_string()),
+            },
+            PaletteCommand {
+                id: CommandId::SidebarGrow,
+                name: "Sidebar: Grow".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.sidebar_grow)),
+            },
+            PaletteCommand {
+                id: CommandId::SidebarShrink,
+                name: "Sidebar: Shrink".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.sidebar_shrink)),
+            },
+            PaletteCommand {
+                id: CommandId::SplitPaneVertical,
+                name: "Split: Vertical Same Type".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.split_pane_vertical)),
+            },
+            PaletteCommand {
+                id: CommandId::ToggleSplitDirection,
+                name: "Toggle Split Direction".to_string(),
+                keybinding: None,
+            },
+            PaletteCommand {
+                id: CommandId::ThemePicker,
+                name: "Theme: Choose Planet".to_string(),
+                keybinding: None,
+            },
+            PaletteCommand {
+                id: CommandId::TogglePlanet,
+                name: "Theme: Toggle Planet Display".to_string(),
+                keybinding: None,
+            },
         ];
         let results = all_commands.clone();
         Self {
@@ -948,7 +1085,13 @@ impl SearchViewState {
 
 fn run_ripgrep(query: &str, root: &Path) -> Result<Vec<SearchResult>, String> {
     let output = std::process::Command::new("rg")
-        .args(["--line-number", "--no-heading", "--color=never", "--max-count=200", query])
+        .args([
+            "--line-number",
+            "--no-heading",
+            "--color=never",
+            "--max-count=200",
+            query,
+        ])
         .current_dir(root)
         .output()
         .map_err(|e| format!("Failed to run rg: {}. Is ripgrep installed?", e))?;
@@ -1031,7 +1174,13 @@ impl GitStatusState {
             Ok(entries) => (entries, None),
             Err(e) => (Vec::new(), Some(e)),
         };
-        Self { entries, selected: 0, error, worktree_path, stale: false }
+        Self {
+            entries,
+            selected: 0,
+            error,
+            worktree_path,
+            stale: false,
+        }
     }
 
     pub fn mark_stale(&mut self) {
@@ -1200,7 +1349,10 @@ impl DiffViewState {
     pub fn new(file: &str, root: &Path, category: GitStatusCategory) -> Self {
         let lines = match run_git_diff(file, root, category) {
             Ok(lines) => lines,
-            Err(e) => vec![DiffLine { kind: DiffLineKind::Header, content: format!("Error: {}", e) }],
+            Err(e) => vec![DiffLine {
+                kind: DiffLineKind::Header,
+                content: format!("Error: {}", e),
+            }],
         };
         Self {
             file_path: file.to_string(),
@@ -1220,29 +1372,27 @@ impl DiffViewState {
     }
 }
 
-pub fn run_git_diff(file: &str, root: &Path, category: GitStatusCategory) -> Result<Vec<DiffLine>, String> {
+pub fn run_git_diff(
+    file: &str,
+    root: &Path,
+    category: GitStatusCategory,
+) -> Result<Vec<DiffLine>, String> {
     let output = match category {
-        GitStatusCategory::Staged => {
-            Command::new("git")
-                .args(["diff", "--cached", "--", file])
-                .current_dir(root)
-                .output()
-                .map_err(|e| format!("Failed to run git diff: {}", e))?
-        }
-        GitStatusCategory::Unstaged => {
-            Command::new("git")
-                .args(["diff", "--", file])
-                .current_dir(root)
-                .output()
-                .map_err(|e| format!("Failed to run git diff: {}", e))?
-        }
-        GitStatusCategory::Untracked => {
-            Command::new("git")
-                .args(["diff", "--no-index", "/dev/null", file])
-                .current_dir(root)
-                .output()
-                .map_err(|e| format!("Failed to run git diff: {}", e))?
-        }
+        GitStatusCategory::Staged => Command::new("git")
+            .args(["diff", "--cached", "--", file])
+            .current_dir(root)
+            .output()
+            .map_err(|e| format!("Failed to run git diff: {}", e))?,
+        GitStatusCategory::Unstaged => Command::new("git")
+            .args(["diff", "--", file])
+            .current_dir(root)
+            .output()
+            .map_err(|e| format!("Failed to run git diff: {}", e))?,
+        GitStatusCategory::Untracked => Command::new("git")
+            .args(["diff", "--no-index", "/dev/null", file])
+            .current_dir(root)
+            .output()
+            .map_err(|e| format!("Failed to run git diff: {}", e))?,
     };
 
     // git diff --no-index exits 1 when files differ (expected for untracked)
@@ -1260,9 +1410,12 @@ pub fn run_git_diff(file: &str, root: &Path, category: GitStatusCategory) -> Res
 pub fn parse_diff_lines(text: &str) -> Vec<DiffLine> {
     let mut lines = Vec::new();
     for line in text.lines().take(5000) {
-        let kind = if line.starts_with("+++") || line.starts_with("---") || line.starts_with("diff ") || line.starts_with("index ") {
-            DiffLineKind::Header
-        } else if line.starts_with("@@") {
+        let kind = if line.starts_with("+++")
+            || line.starts_with("---")
+            || line.starts_with("diff ")
+            || line.starts_with("index ")
+            || line.starts_with("@@")
+        {
             DiffLineKind::Header
         } else if line.starts_with('+') {
             DiffLineKind::Addition
@@ -1271,7 +1424,10 @@ pub fn parse_diff_lines(text: &str) -> Vec<DiffLine> {
         } else {
             DiffLineKind::Context
         };
-        lines.push(DiffLine { kind, content: line.to_string() });
+        lines.push(DiffLine {
+            kind,
+            content: line.to_string(),
+        });
     }
     lines
 }
@@ -1319,13 +1475,10 @@ impl GitBlameState {
 
     pub fn refresh(&mut self) {
         self.stale = false;
-        match run_git_blame(&self.file_path, &self.worktree_path) {
-            Ok(lines) => {
-                self.lines = lines;
-                let max_scroll = self.lines.len().saturating_sub(self.visible_height);
-                self.scroll_offset = self.scroll_offset.min(max_scroll);
-            }
-            Err(_) => {}
+        if let Ok(lines) = run_git_blame(&self.file_path, &self.worktree_path) {
+            self.lines = lines;
+            let max_scroll = self.lines.len().saturating_sub(self.visible_height);
+            self.scroll_offset = self.scroll_offset.min(max_scroll);
         }
     }
 }
@@ -1359,9 +1512,8 @@ fn parse_blame_porcelain(text: &str) -> Result<Vec<BlameLine>, String> {
     let mut current_line_number: usize = 0;
 
     for line in text.lines() {
-        if line.starts_with('\t') {
+        if let Some(content) = line.strip_prefix('\t') {
             // Content line — emit BlameLine
-            let content = &line[1..];
             let elapsed = now.saturating_sub(current_time);
             let is_recent = elapsed < 7 * 24 * 3600;
             lines.push(BlameLine {
@@ -1376,14 +1528,17 @@ fn parse_blame_porcelain(text: &str) -> Result<Vec<BlameLine>, String> {
                 content: content.to_string(),
                 is_recent,
             });
-        } else if line.starts_with("author ") {
-            current_author = line[7..].to_string();
-        } else if line.starts_with("author-time ") {
-            current_time = line[12..].parse().unwrap_or(0);
+        } else if let Some(author) = line.strip_prefix("author ") {
+            current_author = author.to_string();
+        } else if let Some(time_str) = line.strip_prefix("author-time ") {
+            current_time = time_str.parse().unwrap_or(0);
         } else {
             // Check if it's a commit header line: 40-char hash + line numbers
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 3 && parts[0].len() == 40 && parts[0].chars().all(|c| c.is_ascii_hexdigit()) {
+            if parts.len() >= 3
+                && parts[0].len() == 40
+                && parts[0].chars().all(|c| c.is_ascii_hexdigit())
+            {
                 current_hash = parts[0].to_string();
                 current_line_number = parts[2].parse().unwrap_or(0);
             }
@@ -1463,14 +1618,11 @@ impl GitLogState {
 
     pub fn refresh(&mut self) {
         self.stale = false;
-        match run_git_log(&self.worktree_path, self.file_filter.as_deref()) {
-            Ok(entries) => {
-                self.entries = entries;
-                if !self.entries.is_empty() && self.selected >= self.entries.len() {
-                    self.selected = self.entries.len() - 1;
-                }
+        if let Ok(entries) = run_git_log(&self.worktree_path, self.file_filter.as_deref()) {
+            self.entries = entries;
+            if !self.entries.is_empty() && self.selected >= self.entries.len() {
+                self.selected = self.entries.len() - 1;
             }
-            Err(_) => {}
         }
     }
 }
@@ -1479,13 +1631,13 @@ pub fn run_git_log(root: &Path, file_filter: Option<&str>) -> Result<Vec<GitLogE
     let mut args = vec!["log", "--format=%h%x00%s%x00%an%x00%cr", "-200"];
     let dashdash;
     if let Some(file) = file_filter {
-        dashdash = format!("{}", file);
+        dashdash = file.to_string();
         args.push("--");
         args.push(&dashdash);
     }
 
     let output = Command::new("git")
-        .args(&args)
+        .args(args)
         .current_dir(root)
         .output()
         .map_err(|e| format!("Failed to run git log: {}", e))?;
@@ -1513,7 +1665,11 @@ pub fn run_git_log(root: &Path, file_filter: Option<&str>) -> Result<Vec<GitLogE
 
 pub fn run_git_show(hash: &str, root: &Path) -> Result<Vec<DiffLine>, String> {
     let output = Command::new("git")
-        .args(["show", "--format=commit %H%nAuthor: %an%nDate:   %ci%n%n    %s%n", hash])
+        .args([
+            "show",
+            "--format=commit %H%nAuthor: %an%nDate:   %ci%n%n    %s%n",
+            hash,
+        ])
         .current_dir(root)
         .output()
         .map_err(|e| format!("Failed to run git show: {}", e))?;
@@ -1532,6 +1688,7 @@ pub fn run_git_show(hash: &str, root: &Path) -> Result<Vec<DiffLine>, String> {
 /// Tracks bouncing-block animation for worktrees with active PTY output.
 /// Uses input suppression so typing echoes don't trigger it — any output
 /// that arrives without recent user input (i.e. Claude working) activates.
+#[derive(Default)]
 pub struct ActivityAnimation {
     /// Whether each session had output this tick
     had_output: HashSet<String>,
@@ -1558,28 +1715,20 @@ const SCANNER_CYCLE_LEN: usize = 18;
 /// Head position for each frame in the 18-frame scanner cycle.
 const SCANNER_HEAD: [usize; SCANNER_CYCLE_LEN] = [
     0, 1, 2, 3, 4, // forward
-    4, 4, 4,        // hold at end
-    3, 2, 1, 0,     // backward
+    4, 4, 4, // hold at end
+    3, 2, 1, 0, // backward
     0, 0, 0, 0, 0, 0, // hold at start
 ];
 
 /// Direction at each frame: true = forward (trail behind), false = backward (trail ahead).
 const SCANNER_FWD: [bool; SCANNER_CYCLE_LEN] = [
-    true, true, true, true, true,
-    true, true, true,
+    true, true, true, true, true, true, true, true, false, false, false, false, false, false,
     false, false, false, false,
-    false, false, false, false, false, false,
 ];
 
 impl ActivityAnimation {
     pub fn new() -> Self {
-        Self {
-            had_output: HashSet::new(),
-            last_active: HashMap::new(),
-            last_input: HashMap::new(),
-            frame: HashMap::new(),
-            tick_parity: false,
-        }
+        Self::default()
     }
 
     /// Record a PtyOutput event for a session.
@@ -1590,7 +1739,8 @@ impl ActivityAnimation {
     /// Record that user input was just sent to a session's PTY.
     /// Suppresses animation briefly to filter out echoed keystrokes.
     pub fn mark_input(&mut self, session_id: &str) {
-        self.last_input.insert(session_id.to_string(), Instant::now());
+        self.last_input
+            .insert(session_id.to_string(), Instant::now());
     }
 
     /// Advance animation frames. Called on each Tick (50ms).
@@ -1598,7 +1748,8 @@ impl ActivityAnimation {
         let now = Instant::now();
 
         // Expire old activity
-        self.last_active.retain(|_, t| now.duration_since(*t).as_millis() < ACTIVITY_TIMEOUT_MS);
+        self.last_active
+            .retain(|_, t| now.duration_since(*t).as_millis() < ACTIVITY_TIMEOUT_MS);
 
         // Advance frames for existing active sessions, remove expired
         let active_ids: HashSet<&String> = self.last_active.keys().collect();
@@ -1614,7 +1765,9 @@ impl ActivityAnimation {
         // Process sessions that had output this tick
         for id in self.had_output.drain() {
             // Check if user recently typed into this session
-            let suppressed = self.last_input.get(&id)
+            let suppressed = self
+                .last_input
+                .get(&id)
                 .map(|t| now.duration_since(*t).as_millis() < INPUT_SUPPRESSION_MS)
                 .unwrap_or(false);
 
@@ -1625,7 +1778,8 @@ impl ActivityAnimation {
         }
 
         // Clean up stale input timestamps
-        self.last_input.retain(|_, t| now.duration_since(*t).as_millis() < INPUT_SUPPRESSION_MS * 2);
+        self.last_input
+            .retain(|_, t| now.duration_since(*t).as_millis() < INPUT_SUPPRESSION_MS * 2);
     }
 
     /// Whether this session has an active animation.
@@ -1650,8 +1804,8 @@ impl ActivityAnimation {
 
         // During hold frames, compute how many hold ticks have elapsed
         // to fade the trail out progressively.
-        let is_hold_end = f >= 5 && f <= 7;
-        let is_hold_start = f >= 12 && f <= 17;
+        let is_hold_end = (5..=7).contains(&f);
+        let is_hold_start = (12..=17).contains(&f);
         let hold_elapsed = if is_hold_end {
             f - 5 // 0, 1, 2
         } else if is_hold_start {
@@ -1669,7 +1823,7 @@ impl ActivityAnimation {
         // Place trail segments, fading during holds
         for step in 1..=2u8 {
             let pos = head as isize + trail_dir * step as isize;
-            if pos >= 0 && pos < 5 {
+            if (0..5).contains(&pos) {
                 let base_brightness = 3 - step; // 2 for step 1, 1 for step 2
                 let brightness = base_brightness.saturating_sub(hold_elapsed as u8);
                 if brightness > 0 {
@@ -1803,7 +1957,14 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(worktrees: Vec<Worktree>, theme: Theme, terminal_start_bottom: bool, keybindings: KeybindingsConfig, session_command: String, shell_command: String) -> Self {
+    pub fn new(
+        worktrees: Vec<Worktree>,
+        theme: Theme,
+        terminal_start_bottom: bool,
+        keybindings: KeybindingsConfig,
+        session_command: String,
+        shell_command: String,
+    ) -> Self {
         let explorer_root = worktrees
             .first()
             .map(|wt| wt.path.clone())
@@ -1867,12 +2028,26 @@ impl App {
     /// Get the active session ID of the given kind (derived from sidebar tree cursor).
     fn active_session_id_of_kind(&self, kind: SessionKind) -> Option<&str> {
         use crate::sidebar::tree::TreeNode;
-        if let Some(TreeNode::Session(si, ii, slot_idx)) = self.sidebar_tree.visible.get(self.sidebar_tree.cursor) {
-            let slot = self.sidebar_tree.sections.get(*si)?.items.get(*ii)?.sessions.get(*slot_idx)?;
-            return if slot.kind == kind { slot.session_id.as_deref() } else { None };
+        if let Some(TreeNode::Session(si, ii, slot_idx)) =
+            self.sidebar_tree.visible.get(self.sidebar_tree.cursor)
+        {
+            let slot = self
+                .sidebar_tree
+                .sections
+                .get(*si)?
+                .items
+                .get(*ii)?
+                .sessions
+                .get(*slot_idx)?;
+            return if slot.kind == kind {
+                slot.session_id.as_deref()
+            } else {
+                None
+            };
         }
         let item = self.sidebar_tree.selected_item()?;
-        item.sessions.iter()
+        item.sessions
+            .iter()
             .find(|s| s.kind == kind)
             .and_then(|s| s.session_id.as_deref())
     }
@@ -1904,7 +2079,9 @@ impl App {
 
     pub fn set_sidebar_view(&mut self, view: SidebarView) {
         if matches!(view, SidebarView::GitStatus) && self.git_status.is_none() {
-            let path = self.sidebar_tree.selected_path()
+            let path = self
+                .sidebar_tree
+                .selected_path()
                 .cloned()
                 .unwrap_or_else(|| self.file_explorer.root.clone());
             self.git_status = Some(GitStatusState::new(path));
@@ -2005,9 +2182,8 @@ impl App {
                 if let Some(ref mut editor) = self.editor {
                     if paths.iter().any(|p| p == &editor.file_path) {
                         if editor.modified {
-                            self.status_message = Some(
-                                "File changed on disk (unsaved edits preserved)".to_string(),
-                            );
+                            self.status_message =
+                                Some("File changed on disk (unsaved edits preserved)".to_string());
                         } else {
                             match editor.reload() {
                                 Ok(true) => {
@@ -2072,7 +2248,11 @@ impl App {
         // Fuzzy finder, project search, command palette, and shell keybindings are handled specially
         if KeybindingsConfig::matches(&self.keybindings.fuzzy_finder, key.modifiers, key.code)
             || KeybindingsConfig::matches(&self.keybindings.project_search, key.modifiers, key.code)
-            || KeybindingsConfig::matches(&self.keybindings.command_palette, key.modifiers, key.code)
+            || KeybindingsConfig::matches(
+                &self.keybindings.command_palette,
+                key.modifiers,
+                key.code,
+            )
         {
             return;
         }
@@ -2161,17 +2341,27 @@ impl App {
                 KeyCode::Enter => {
                     if !input.is_empty() {
                         let label = input.clone();
-                        self.sidebar_tree.add_session_slot(SessionKind::Shell, label.clone());
+                        self.sidebar_tree
+                            .add_session_slot(SessionKind::Shell, label.clone());
                         self.prompt = None;
                         self.status_message = Some(format!("Added shell slot '{}'", label));
                     }
                 }
-                KeyCode::Esc => { self.prompt = None; }
-                KeyCode::Backspace => { input.pop(); }
-                KeyCode::Char(c) => { input.push(c); }
+                KeyCode::Esc => {
+                    self.prompt = None;
+                }
+                KeyCode::Backspace => {
+                    input.pop();
+                }
+                KeyCode::Char(c) => {
+                    input.push(c);
+                }
                 _ => {}
             },
-            Prompt::ConfirmDeleteSection { section_idx, section_name } => match key.code {
+            Prompt::ConfirmDeleteSection {
+                section_idx,
+                section_name,
+            } => match key.code {
                 KeyCode::Char('y') | KeyCode::Char('Y') => {
                     let section_idx = *section_idx;
                     let section_name = section_name.clone();
@@ -2209,7 +2399,10 @@ impl App {
                 }
                 _ => {}
             },
-            Prompt::ThemePicker { selected, previous_theme } => match key.code {
+            Prompt::ThemePicker {
+                selected,
+                previous_theme,
+            } => match key.code {
                 KeyCode::Left | KeyCode::Right => {
                     let len = PlanetKind::all().len();
                     *selected = if key.code == KeyCode::Left {
@@ -2219,7 +2412,11 @@ impl App {
                     };
                     let planet = PlanetKind::all()[*selected];
                     let is_dark = self.theme.mode == config::ThemeMode::Dark;
-                    self.theme = if is_dark { planet.dark_theme() } else { planet.light_theme() };
+                    self.theme = if is_dark {
+                        planet.dark_theme()
+                    } else {
+                        planet.light_theme()
+                    };
                     self.planet_animation = Some(PlanetAnimation::load(planet));
                 }
                 KeyCode::Char('d') => {
@@ -2255,17 +2452,25 @@ impl App {
             },
             Prompt::ColorPicker { target, cursor } => match key.code {
                 KeyCode::Left | KeyCode::Char('h') => {
-                    if *cursor > 0 { *cursor -= 1; }
+                    if *cursor > 0 {
+                        *cursor -= 1;
+                    }
                 }
                 KeyCode::Right | KeyCode::Char('l') => {
-                    if *cursor + 1 < PRESET_COLORS.len() { *cursor += 1; }
+                    if *cursor + 1 < PRESET_COLORS.len() {
+                        *cursor += 1;
+                    }
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
                     // Grid is 7 columns
-                    if *cursor >= 7 { *cursor -= 7; }
+                    if *cursor >= 7 {
+                        *cursor -= 7;
+                    }
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
-                    if *cursor + 7 < PRESET_COLORS.len() { *cursor += 7; }
+                    if *cursor + 7 < PRESET_COLORS.len() {
+                        *cursor += 7;
+                    }
                 }
                 KeyCode::Enter => {
                     let color = PRESET_COLORS[*cursor];
@@ -2278,15 +2483,23 @@ impl App {
                             }
                         }
                         ColorTarget::Item(si, ii) => {
-                            if let Some(item) = self.sidebar_tree.sections.get_mut(si)
-                                .and_then(|s| s.items.get_mut(ii)) {
+                            if let Some(item) = self
+                                .sidebar_tree
+                                .sections
+                                .get_mut(si)
+                                .and_then(|s| s.items.get_mut(ii))
+                            {
                                 item.color = color;
                             }
                         }
                         ColorTarget::Session(si, ii, slot) => {
-                            if let Some(s) = self.sidebar_tree.sections.get_mut(si)
+                            if let Some(s) = self
+                                .sidebar_tree
+                                .sections
+                                .get_mut(si)
                                 .and_then(|s| s.items.get_mut(ii))
-                                .and_then(|item| item.sessions.get_mut(slot)) {
+                                .and_then(|item| item.sessions.get_mut(slot))
+                            {
                                 s.color = color;
                             }
                         }
@@ -2337,7 +2550,8 @@ impl App {
                             .file_name()
                             .map(|n| n.to_string_lossy().to_string())
                             .unwrap_or_else(|| "section".to_string());
-                        self.sidebar_tree.add_section(name.clone(), Some(path.clone()));
+                        self.sidebar_tree
+                            .add_section(name.clone(), Some(path.clone()));
                         let section_idx = self.sidebar_tree.sections.len() - 1;
                         self.pending_section_refresh = Some((section_idx, path));
                         self.dir_browser = None;
@@ -2468,7 +2682,9 @@ impl App {
                 self.input_mode = InputMode::Navigation;
             }
             CommandId::ProjectSearch => {
-                self.prompt = Some(Prompt::SearchInput { input: String::new() });
+                self.prompt = Some(Prompt::SearchInput {
+                    input: String::new(),
+                });
                 self.input_mode = InputMode::Navigation;
             }
             CommandId::RefreshGitStatus => {
@@ -2511,10 +2727,14 @@ impl App {
                 self.running = false;
             }
             CommandId::StartSession => {
-                self.status_message = Some("Use Enter in worktree list to start a session".to_string());
+                self.status_message =
+                    Some("Use Enter in worktree list to start a session".to_string());
             }
             CommandId::RestartSession => {
-                self.status_message = Some("Use 'r' to restart exited session, Shift+R to force-restart any session".to_string());
+                self.status_message = Some(
+                    "Use 'r' to restart exited session, Shift+R to force-restart any session"
+                        .to_string(),
+                );
             }
             CommandId::CloseSession => {
                 self.status_message = Some("Use Ctrl+C to close the active session".to_string());
@@ -2526,7 +2746,9 @@ impl App {
                 self.dir_browser = Some(DirBrowser::new(home));
             }
             CommandId::AddShellSlot => {
-                self.prompt = Some(Prompt::AddShellSlot { input: String::new() });
+                self.prompt = Some(Prompt::AddShellSlot {
+                    input: String::new(),
+                });
             }
             CommandId::AssignColor => {
                 use crate::sidebar::tree::TreeNode;
@@ -2544,7 +2766,10 @@ impl App {
                 self.sidebar_resized = true;
             }
             CommandId::SidebarShrink => {
-                self.sidebar_width = self.sidebar_width.saturating_sub(SIDEBAR_STEP).max(SIDEBAR_MIN_WIDTH);
+                self.sidebar_width = self
+                    .sidebar_width
+                    .saturating_sub(SIDEBAR_STEP)
+                    .max(SIDEBAR_MIN_WIDTH);
                 self.sidebar_resized = true;
             }
             CommandId::SplitPaneVertical => {
@@ -2611,42 +2836,54 @@ impl App {
             return;
         }
         if KeybindingsConfig::matches(&kb.sidebar_shrink, key.modifiers, key.code) {
-            self.sidebar_width = self.sidebar_width.saturating_sub(SIDEBAR_STEP).max(SIDEBAR_MIN_WIDTH);
+            self.sidebar_width = self
+                .sidebar_width
+                .saturating_sub(SIDEBAR_STEP)
+                .max(SIDEBAR_MIN_WIDTH);
             self.sidebar_resized = true;
             return;
         }
 
         // Panel-aware view switching via configurable keybindings
         if KeybindingsConfig::matches(&kb.worktrees, key.modifiers, key.code) {
-            self.set_sidebar_view(SidebarView::Worktrees); return;
+            self.set_sidebar_view(SidebarView::Worktrees);
+            return;
         }
         if KeybindingsConfig::matches(&kb.terminal, key.modifiers, key.code) {
-            self.set_main_view(MainView::Terminal); return;
+            self.set_main_view(MainView::Terminal);
+            return;
         }
         if KeybindingsConfig::matches(&kb.files, key.modifiers, key.code) {
-            self.set_sidebar_view(SidebarView::FileExplorer); return;
+            self.set_sidebar_view(SidebarView::FileExplorer);
+            return;
         }
         if KeybindingsConfig::matches(&kb.editor, key.modifiers, key.code) {
-            self.set_main_view(MainView::Editor); return;
+            self.set_main_view(MainView::Editor);
+            return;
         }
         if KeybindingsConfig::matches(&kb.search, key.modifiers, key.code) {
-            self.set_sidebar_view(SidebarView::Search); return;
+            self.set_sidebar_view(SidebarView::Search);
+            return;
         }
         if KeybindingsConfig::matches(&kb.git_status, key.modifiers, key.code) {
             // Refresh git status on activation
             if let Some(path) = self.sidebar_tree.selected_path().cloned() {
                 self.git_status = Some(GitStatusState::new(path));
             }
-            self.set_sidebar_view(SidebarView::GitStatus); return;
+            self.set_sidebar_view(SidebarView::GitStatus);
+            return;
         }
         if KeybindingsConfig::matches(&kb.git_blame, key.modifiers, key.code) {
-            self.open_git_blame(); return;
+            self.open_git_blame();
+            return;
         }
         if KeybindingsConfig::matches(&kb.git_log, key.modifiers, key.code) {
-            self.open_git_log(); return;
+            self.open_git_log();
+            return;
         }
         if KeybindingsConfig::matches(&kb.shell, key.modifiers, key.code) {
-            self.set_main_view(MainView::Shell); return;
+            self.set_main_view(MainView::Shell);
+            return;
         }
 
         if key.code == KeyCode::Char('?') {
@@ -2716,7 +2953,9 @@ impl App {
                 use crate::sidebar::tree::TreeNode;
                 if let Some(&node) = self.sidebar_tree.selected_node() {
                     match node {
-                        TreeNode::Section(_) => { self.sidebar_tree.toggle_collapse(); }
+                        TreeNode::Section(_) => {
+                            self.sidebar_tree.toggle_collapse();
+                        }
                         TreeNode::Item(..) => {
                             // Signal session spawn — handled by main loop
                         }
@@ -2956,7 +3195,9 @@ impl App {
                 editor.modified = true;
             }
             if is_edtui_compatible(&key) {
-                editor.event_handler.on_key_event(key, &mut editor.editor_state);
+                editor
+                    .event_handler
+                    .on_key_event(key, &mut editor.editor_state);
             }
             return;
         }
@@ -2970,7 +3211,6 @@ impl App {
             }
             KeyCode::Char('b') => {
                 self.open_git_blame();
-                return;
             }
             KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
@@ -2995,7 +3235,9 @@ impl App {
             _ => {
                 // Forward navigation keys to edtui in Normal mode
                 if is_edtui_compatible(&key) {
-                    editor.event_handler.on_key_event(key, &mut editor.editor_state);
+                    editor
+                        .event_handler
+                        .on_key_event(key, &mut editor.editor_state);
                     // Force back to Normal in case edtui changed mode
                     editor.editor_state.mode = EditorMode::Normal;
                 }
@@ -3295,8 +3537,16 @@ impl App {
         // When cursor lands on a specific session slot, update main_view to match its kind
         // so the right panel renders the correct session type.
         use crate::sidebar::tree::TreeNode;
-        if let Some(TreeNode::Session(si, ii, slot_idx)) = self.sidebar_tree.visible.get(self.sidebar_tree.cursor).copied() {
-            if let Some(slot) = self.sidebar_tree.sections.get(si)
+        if let Some(TreeNode::Session(si, ii, slot_idx)) = self
+            .sidebar_tree
+            .visible
+            .get(self.sidebar_tree.cursor)
+            .copied()
+        {
+            if let Some(slot) = self
+                .sidebar_tree
+                .sections
+                .get(si)
                 .and_then(|s| s.items.get(ii))
                 .and_then(|item| item.sessions.get(slot_idx))
             {
@@ -3335,11 +3585,19 @@ impl App {
         }
         // If cursor is on a specific session slot, use it directly (handles multiple slots of same kind)
         use crate::sidebar::tree::TreeNode;
-        if let Some(TreeNode::Session(si, ii, slot_idx)) = self.sidebar_tree.visible.get(self.sidebar_tree.cursor) {
-            return self.sidebar_tree.sections.get(*si)?
-                .items.get(*ii)?
-                .sessions.get(*slot_idx)?
-                .session_id.as_ref();
+        if let Some(TreeNode::Session(si, ii, slot_idx)) =
+            self.sidebar_tree.visible.get(self.sidebar_tree.cursor)
+        {
+            return self
+                .sidebar_tree
+                .sections
+                .get(*si)?
+                .items
+                .get(*ii)?
+                .sessions
+                .get(*slot_idx)?
+                .session_id
+                .as_ref();
         }
         // Cursor on Item or Section: fall back to kind-based lookup
         let item = self.sidebar_tree.selected_item()?;
@@ -3348,14 +3606,16 @@ impl App {
         } else {
             SessionKind::Claude
         };
-        item.sessions.iter()
+        item.sessions
+            .iter()
             .find(|s| s.kind == target_kind)
             .and_then(|s| s.session_id.as_ref())
     }
 
     /// Returns the focused pane content, if in split mode.
     pub fn focused_pane_content(&self) -> Option<&PaneContent> {
-        self.pane_layout.as_ref()
+        self.pane_layout
+            .as_ref()
             .and_then(|layout| layout.panes.get(layout.focused))
     }
 
@@ -3363,9 +3623,10 @@ impl App {
     pub fn is_session_visible(&self, session_id: &str) -> bool {
         // Check pane layout for any Terminal/Shell pane with this session ID
         if let Some(ref layout) = self.pane_layout {
-            return layout.panes.iter().any(|pane| {
-                pane.session_id() == Some(session_id)
-            });
+            return layout
+                .panes
+                .iter()
+                .any(|pane| pane.session_id() == Some(session_id));
         }
         // No split: check if focused session matches
         self.focused_session_id()
@@ -3376,7 +3637,12 @@ impl App {
 
     /// Hit-test which terminal/shell pane contains the given absolute (column, row) coords.
     /// Returns the session ID and the pane's inner rect (excluding border).
-    pub fn pane_session_at_coords(&self, col: u16, row: u16, terminal_size: Rect) -> Option<(String, Rect)> {
+    pub fn pane_session_at_coords(
+        &self,
+        col: u16,
+        row: u16,
+        terminal_size: Rect,
+    ) -> Option<(String, Rect)> {
         use ratatui::widgets::{Block, BorderType, Borders};
         let block = Block::default()
             .borders(Borders::ALL)
@@ -3384,12 +3650,19 @@ impl App {
 
         if let Some(ref layout) = self.pane_layout {
             if layout.panes.len() > 1 {
-                let rects = crate::ui::compute_pane_rects(terminal_size, layout.panes.len(), self.sidebar_width, layout.direction);
+                let rects = crate::ui::compute_pane_rects(
+                    terminal_size,
+                    layout.panes.len(),
+                    self.sidebar_width,
+                    layout.direction,
+                );
                 for (i, content) in layout.panes.iter().enumerate() {
                     if let Some(sid) = content.session_id() {
                         let inner = block.inner(rects[i]);
-                        if col >= inner.x && col < inner.x + inner.width
-                            && row >= inner.y && row < inner.y + inner.height
+                        if col >= inner.x
+                            && col < inner.x + inner.width
+                            && row >= inner.y
+                            && row < inner.y + inner.height
                         {
                             return Some((sid.to_string(), inner));
                         }
@@ -3400,8 +3673,10 @@ impl App {
         }
         // Single pane: use the right panel rect
         let panel = crate::ui::compute_pty_rect(terminal_size, self.sidebar_width);
-        if col >= panel.x && col < panel.x + panel.width
-            && row >= panel.y && row < panel.y + panel.height
+        if col >= panel.x
+            && col < panel.x + panel.width
+            && row >= panel.y
+            && row < panel.y + panel.height
         {
             // Determine which session is active based on main_view
             let session_id = match self.main_view {
@@ -3431,12 +3706,12 @@ impl App {
         // Build initial pane from current state if no layout exists
         let current_pane = if self.pane_layout.is_none() {
             match self.main_view {
-                MainView::Terminal => {
-                    self.active_session_id().map(|id| PaneContent::Terminal(id.to_string()))
-                }
-                MainView::Shell => {
-                    self.active_shell_session_id().map(|id| PaneContent::Shell(id.to_string()))
-                }
+                MainView::Terminal => self
+                    .active_session_id()
+                    .map(|id| PaneContent::Terminal(id.to_string())),
+                MainView::Shell => self
+                    .active_shell_session_id()
+                    .map(|id| PaneContent::Shell(id.to_string())),
                 MainView::Editor => Some(PaneContent::Editor),
                 _ => None,
             }
@@ -3444,7 +3719,9 @@ impl App {
             None
         };
 
-        if self.pane_layout.is_none() {
+        if let Some(layout) = self.pane_layout.as_mut() {
+            layout.panes.push(content);
+        } else {
             let Some(first_pane) = current_pane else {
                 self.status_message = Some("No active view to split".to_string());
                 return false;
@@ -3454,8 +3731,6 @@ impl App {
                 focused: 0,
                 direction: self.split_direction,
             });
-        } else {
-            self.pane_layout.as_mut().unwrap().panes.push(content);
         }
         true
     }
@@ -3506,7 +3781,8 @@ impl App {
                 match next {
                     Some(id) => self.split_add_pane_with(PaneContent::Shell(id)),
                     None => {
-                        self.status_message = Some("No other running shell sessions to show".to_string());
+                        self.status_message =
+                            Some("No other running shell sessions to show".to_string());
                         false
                     }
                 }
@@ -3536,7 +3812,9 @@ impl App {
                 for slot in &item.sessions {
                     if slot.kind == kind {
                         if let Some(ref sid) = slot.session_id {
-                            if !current_ids.contains(&sid.as_str()) && !self.exited_sessions.contains(sid.as_str()) {
+                            if !current_ids.contains(&sid.as_str())
+                                && !self.exited_sessions.contains(sid.as_str())
+                            {
                                 return Some(sid.clone());
                             }
                         }
@@ -3549,7 +3827,9 @@ impl App {
 
     /// Collapse pane layout to single-view if only 0-1 panes remain.
     fn collapse_pane_layout_if_needed(&mut self) {
-        let Some(ref layout) = self.pane_layout else { return };
+        let Some(ref layout) = self.pane_layout else {
+            return;
+        };
         if layout.panes.len() <= 1 {
             if let Some(remaining) = layout.panes.first() {
                 match remaining {
@@ -3564,7 +3844,9 @@ impl App {
 
     /// Remove the focused pane. Collapses to single mode if <=1 remains.
     pub fn close_focused_pane(&mut self) {
-        let Some(ref mut layout) = self.pane_layout else { return };
+        let Some(ref mut layout) = self.pane_layout else {
+            return;
+        };
         if layout.panes.len() <= 1 {
             self.pane_layout = None;
             return;
@@ -3594,8 +3876,14 @@ impl App {
 
     /// Remove a session from the pane layout if present. Collapses if needed.
     pub fn remove_session_from_panes(&mut self, session_id: &str) {
-        let Some(ref mut layout) = self.pane_layout else { return };
-        if let Some(pos) = layout.panes.iter().position(|p| p.session_id() == Some(session_id)) {
+        let Some(ref mut layout) = self.pane_layout else {
+            return;
+        };
+        if let Some(pos) = layout
+            .panes
+            .iter()
+            .position(|p| p.session_id() == Some(session_id))
+        {
             layout.panes.remove(pos);
             if layout.focused >= layout.panes.len() && layout.focused > 0 {
                 layout.focused = layout.panes.len() - 1;
@@ -3671,26 +3959,35 @@ impl App {
             }
         }
 
-        let sidebar_view = Some(match self.sidebar_view {
-            SidebarView::Worktrees => "worktrees",
-            SidebarView::FileExplorer => "files",
-            SidebarView::Search => "search",
-            SidebarView::GitStatus => "git_status",
-        }.to_string());
+        let sidebar_view = Some(
+            match self.sidebar_view {
+                SidebarView::Worktrees => "worktrees",
+                SidebarView::FileExplorer => "files",
+                SidebarView::Search => "search",
+                SidebarView::GitStatus => "git_status",
+            }
+            .to_string(),
+        );
 
-        let main_view = Some(match self.main_view {
-            MainView::Terminal => "terminal",
-            MainView::Editor => "editor",
-            MainView::DiffView => "diff",
-            MainView::GitBlame => "blame",
-            MainView::GitLog => "log",
-            MainView::Shell => "shell",
-        }.to_string());
+        let main_view = Some(
+            match self.main_view {
+                MainView::Terminal => "terminal",
+                MainView::Editor => "editor",
+                MainView::DiffView => "diff",
+                MainView::GitBlame => "blame",
+                MainView::GitLog => "log",
+                MainView::Shell => "shell",
+            }
+            .to_string(),
+        );
 
-        let panel_focus = Some(match self.panel_focus {
-            PanelFocus::Left => "left",
-            PanelFocus::Right => "right",
-        }.to_string());
+        let panel_focus = Some(
+            match self.panel_focus {
+                PanelFocus::Left => "left",
+                PanelFocus::Right => "right",
+            }
+            .to_string(),
+        );
 
         config::LayoutConfig {
             sessions,
@@ -3703,7 +4000,10 @@ impl App {
     /// Count (running, exited) sessions in a single pass.
     pub fn session_counts(&self) -> (usize, usize) {
         let ids = self.sidebar_tree.all_session_ids();
-        let exited = ids.iter().filter(|id| self.exited_sessions.contains(**id)).count();
+        let exited = ids
+            .iter()
+            .filter(|id| self.exited_sessions.contains(**id))
+            .count();
         (ids.len() - exited, exited)
     }
 
@@ -3779,7 +4079,8 @@ impl App {
             && !self.show_help
             && key.code == KeyCode::Enter
             && self.input_mode == InputMode::Navigation
-            && ((self.sidebar_view == SidebarView::Worktrees && self.panel_focus == PanelFocus::Left)
+            && ((self.sidebar_view == SidebarView::Worktrees
+                && self.panel_focus == PanelFocus::Left)
                 || (self.main_view == MainView::Terminal && self.panel_focus == PanelFocus::Right)
                 || (self.main_view == MainView::Shell && self.panel_focus == PanelFocus::Right))
     }
@@ -3793,17 +4094,25 @@ impl App {
             TreeNode::Section(_) => None,
             TreeNode::Item(si, ii) => {
                 // Return first session with an active ID
-                self.sidebar_tree.sections.get(*si)?
-                    .items.get(*ii)?
-                    .sessions.iter()
+                self.sidebar_tree
+                    .sections
+                    .get(*si)?
+                    .items
+                    .get(*ii)?
+                    .sessions
+                    .iter()
                     .find_map(|s| s.session_id.as_deref())
             }
-            TreeNode::Session(si, ii, slot) => {
-                self.sidebar_tree.sections.get(*si)?
-                    .items.get(*ii)?
-                    .sessions.get(*slot)?
-                    .session_id.as_deref()
-            }
+            TreeNode::Session(si, ii, slot) => self
+                .sidebar_tree
+                .sections
+                .get(*si)?
+                .items
+                .get(*ii)?
+                .sessions
+                .get(*slot)?
+                .session_id
+                .as_deref(),
         }
     }
 
@@ -3825,7 +4134,6 @@ impl App {
             }
         }
     }
-
 
     /// Check if user confirmed worktree creation. Returns the branch name.
     pub fn wants_create_worktree(&self, key: &KeyEvent) -> Option<String> {
@@ -3869,17 +4177,19 @@ impl App {
             }
             AppEvent::SessionDone { session_id } => {
                 // Task done = native notification only (bell already triggered iTerm2 bounce)
-                let (section, name) = match self.sidebar_tree.section_and_name_for_session(session_id) {
-                    Some(pair) => pair,
-                    None => return (None, None),
-                };
+                let (section, name) =
+                    match self.sidebar_tree.section_and_name_for_session(session_id) {
+                        Some(pair) => pair,
+                        None => return (None, None),
+                    };
                 (None, Some(format!("{}\n{} task completed", section, name)))
             }
             AppEvent::SessionExited { session_id } => {
-                let (section, name) = match self.sidebar_tree.section_and_name_for_session(session_id) {
-                    Some(pair) => pair,
-                    None => return (None, None),
-                };
+                let (section, name) =
+                    match self.sidebar_tree.section_and_name_for_session(session_id) {
+                        Some(pair) => pair,
+                        None => return (None, None),
+                    };
                 let iterm_msg = format!("{} session exited", name);
                 let native_msg = format!("{}\n{} session exited", section, name);
                 (Some(iterm_msg), Some(native_msg))

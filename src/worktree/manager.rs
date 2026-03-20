@@ -11,7 +11,10 @@ pub struct WorktreeManager {
 
 impl WorktreeManager {
     pub fn new(repo_root: PathBuf, dir_format: String) -> Self {
-        Self { repo_root, dir_format }
+        Self {
+            repo_root,
+            dir_format,
+        }
     }
 
     pub fn list(&self) -> Result<Vec<Worktree>> {
@@ -38,10 +41,15 @@ impl WorktreeManager {
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_else(|| "repo".to_string());
-        let dir_name = self.dir_format
+        let dir_name = self
+            .dir_format
             .replace("{repo}", &repo_name)
             .replace("{branch}", branch);
-        let worktree_path = self.repo_root.parent().unwrap_or(&self.repo_root).join(dir_name);
+        let worktree_path = self
+            .repo_root
+            .parent()
+            .unwrap_or(&self.repo_root)
+            .join(dir_name);
         let output = Command::new("git")
             .args([
                 "worktree",
@@ -63,7 +71,7 @@ impl WorktreeManager {
         Ok(())
     }
 
-    pub fn remove(&self, path: &PathBuf) -> Result<()> {
+    pub fn remove(&self, path: &Path) -> Result<()> {
         let output = Command::new("git")
             .args(["worktree", "remove", path.to_str().unwrap_or("")])
             .current_dir(&self.repo_root)

@@ -48,7 +48,7 @@ impl PlanetKind {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<PlanetKind> {
+    pub fn parse(s: &str) -> Option<PlanetKind> {
         match s.to_lowercase().as_str() {
             "earth" => Some(PlanetKind::Earth),
             "mars" => Some(PlanetKind::Mars),
@@ -63,12 +63,12 @@ impl PlanetKind {
     /// Accent color for this planet (used as the primary theme accent).
     pub fn accent(&self) -> Color {
         match self {
-            PlanetKind::Earth => Color::Rgb(0x3A, 0x8F, 0xD4),   // ocean blue
-            PlanetKind::Mars => Color::Rgb(0xCC, 0x44, 0x22),    // rust red
-            PlanetKind::Venus => Color::Rgb(0xE0, 0xA8, 0x4A),   // golden
+            PlanetKind::Earth => Color::Rgb(0x3A, 0x8F, 0xD4), // ocean blue
+            PlanetKind::Mars => Color::Rgb(0xCC, 0x44, 0x22),  // rust red
+            PlanetKind::Venus => Color::Rgb(0xE0, 0xA8, 0x4A), // golden
             PlanetKind::Neptune => Color::Rgb(0x4A, 0x7A, 0xCC), // deep blue
             PlanetKind::Jupiter => Color::Rgb(0xD4, 0x94, 0x4A), // storm orange
-            PlanetKind::Pluto => Color::Rgb(0x9A, 0x8A, 0xAA),   // ice purple
+            PlanetKind::Pluto => Color::Rgb(0x9A, 0x8A, 0xAA), // ice purple
         }
     }
 

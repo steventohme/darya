@@ -1,8 +1,8 @@
 pub mod app;
 pub mod config;
 pub mod error;
-pub mod icons;
 pub mod event;
+pub mod icons;
 pub mod planet;
 pub mod session;
 pub mod sidebar;

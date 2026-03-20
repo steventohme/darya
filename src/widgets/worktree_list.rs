@@ -21,7 +21,13 @@ fn lerp_color(a: ratatui::style::Color, b: ratatui::style::Color, t: f32) -> rat
                 (ab as f32 + (bb as f32 - ab as f32) * t) as u8,
             )
         }
-        _ => if t > 0.5 { b } else { a },
+        _ => {
+            if t > 0.5 {
+                b
+            } else {
+                a
+            }
+        }
     }
 }
 
@@ -56,21 +62,25 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
             match node {
                 TreeNode::Section(si) => {
                     let section = &app.sidebar_tree.sections[*si];
-                    let arrow = if section.collapsed { "\u{25B6}" } else { "\u{25BC}" };
+                    let arrow = if section.collapsed {
+                        "\u{25B6}"
+                    } else {
+                        "\u{25BC}"
+                    };
                     let name_color = section.color.unwrap_or(app.theme.fg);
-                    let spans = vec![
-                        Span::styled(
-                            format!("{} {}", arrow, section.name),
-                            Style::default()
-                                .fg(name_color)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                    ];
+                    let spans = vec![Span::styled(
+                        format!("{} {}", arrow, section.name),
+                        Style::default().fg(name_color).add_modifier(Modifier::BOLD),
+                    )];
                     ListItem::new(Line::from(spans))
                 }
                 TreeNode::Item(si, ii) => {
                     let item = &app.sidebar_tree.sections[*si].items[*ii];
-                    let arrow = if item.collapsed { "\u{25B6}" } else { "\u{25BC}" };
+                    let arrow = if item.collapsed {
+                        "\u{25B6}"
+                    } else {
+                        "\u{25BC}"
+                    };
 
                     // Find Claude session status for the indicator
                     let claude_slot = item.sessions.iter().find(|s| s.kind == SessionKind::Claude);
@@ -104,7 +114,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     let claude_status = if !is_exited && has_session {
                         session_id
                             .and_then(|id| app.session_statuses.get(id))
-                            .filter(|s| !s.is_empty() && s.contains(' ') && !s.contains("Claude Code"))
+                            .filter(|s| {
+                                !s.is_empty() && s.contains(' ') && !s.contains("Claude Code")
+                            })
                             .cloned()
                     } else {
                         None
@@ -121,7 +133,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     item_counter += 1;
 
                     // Shell session count
-                    let shell_count = item.sessions.iter()
+                    let shell_count = item
+                        .sessions
+                        .iter()
                         .filter(|s| s.kind == SessionKind::Shell && s.session_id.is_some())
                         .count();
                     let shell_indicator = if shell_count > 0 {
@@ -146,7 +160,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         vec![
                             Span::styled(
                                 format!("  {} {} {} ", hotkey, arrow, indicator),
-                                Style::default().fg(exited_color).add_modifier(Modifier::BOLD),
+                                Style::default()
+                                    .fg(exited_color)
+                                    .add_modifier(Modifier::BOLD),
                             ),
                             Span::styled(
                                 item.display_name.clone(),
@@ -158,12 +174,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                             ),
                             Span::styled(
                                 exited_marker.to_string(),
-                                Style::default().fg(exited_color).add_modifier(Modifier::DIM),
+                                Style::default()
+                                    .fg(exited_color)
+                                    .add_modifier(Modifier::DIM),
                             ),
-                            Span::styled(
-                                shell_indicator,
-                                Style::default().fg(app.theme.fg_dim),
-                            ),
+                            Span::styled(shell_indicator, Style::default().fg(app.theme.fg_dim)),
                         ]
                     } else if needs_attention {
                         let attn = app.theme.session_attention;
@@ -177,14 +192,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                 item.display_name.clone(),
                                 Style::default().fg(attn_name).add_modifier(Modifier::BOLD),
                             ),
-                            Span::styled(
-                                format!(" [{}]", branch_str),
-                                Style::default().fg(attn),
-                            ),
-                            Span::styled(
-                                shell_indicator,
-                                Style::default().fg(app.theme.fg_dim),
-                            ),
+                            Span::styled(format!(" [{}]", branch_str), Style::default().fg(attn)),
+                            Span::styled(shell_indicator, Style::default().fg(app.theme.fg_dim)),
                         ]
                     } else {
                         let mut v = vec![
@@ -200,10 +209,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                 format!(" [{}]", branch_str),
                                 Style::default().fg(app.theme.fg_dim),
                             ),
-                            Span::styled(
-                                shell_indicator,
-                                Style::default().fg(app.theme.fg_dim),
-                            ),
+                            Span::styled(shell_indicator, Style::default().fg(app.theme.fg_dim)),
                         ];
                         if let Some(ref status) = claude_status {
                             let prefix_len = 8 + item.display_name.len() + 3 + branch_str.len();
@@ -216,7 +222,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                 };
                                 v.push(Span::styled(
                                     truncated,
-                                    Style::default().fg(app.theme.session_active).add_modifier(Modifier::DIM),
+                                    Style::default()
+                                        .fg(app.theme.session_active)
+                                        .add_modifier(Modifier::DIM),
                                 ));
                             }
                         }
@@ -226,11 +234,15 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     // Right-align bouncing animation
                     if is_animating {
                         let content_width = (area.width as usize).saturating_sub(4);
-                        let text_width = 8 + item.display_name.len() + 3 + branch_str.len()
+                        let text_width = 8
+                            + item.display_name.len()
+                            + 3
+                            + branch_str.len()
                             + if is_exited { 9 } else { 0 };
                         let anim_width = 5;
                         let right_margin = 1;
-                        let padding = content_width.saturating_sub(text_width + anim_width + right_margin);
+                        let padding =
+                            content_width.saturating_sub(text_width + anim_width + right_margin);
 
                         spans.push(Span::raw(" ".repeat(padding)));
                         let trail = app.activity.trail(session_id.unwrap());
@@ -247,8 +259,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     };
 
                     let status_color = match &slot.session_id {
-                        Some(id) if app.exited_sessions.contains(id.as_str()) => app.theme.session_exited,
-                        Some(id) if app.attention_sessions.contains(id.as_str()) => app.theme.session_attention,
+                        Some(id) if app.exited_sessions.contains(id.as_str()) => {
+                            app.theme.session_exited
+                        }
+                        Some(id) if app.attention_sessions.contains(id.as_str()) => {
+                            app.theme.session_attention
+                        }
                         Some(_) => label_color,
                         None => app.theme.fg_dim,
                     };
@@ -264,28 +280,25 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     // Show Claude status text for active sessions (no [exited] or (not started)).
                     // Filter out bare directory names — only show multi-word status updates.
                     let claude_status = if status_suffix.is_empty() {
-                        slot.session_id.as_ref()
+                        slot.session_id
+                            .as_ref()
                             .and_then(|id| app.session_statuses.get(id))
-                            .filter(|s| !s.is_empty() && s.contains(' ') && !s.contains("Claude Code"))
+                            .filter(|s| {
+                                !s.is_empty() && s.contains(' ') && !s.contains("Claude Code")
+                            })
                             .cloned()
                     } else {
                         None
                     };
 
                     let mut spans = vec![
-                        Span::styled(
-                            format!("    {} ", icon),
-                            Style::default().fg(status_color),
-                        ),
-                        Span::styled(
-                            slot.label.clone(),
-                            Style::default().fg(label_fg),
-                        ),
+                        Span::styled(format!("    {} ", icon), Style::default().fg(status_color)),
+                        Span::styled(slot.label.clone(), Style::default().fg(label_fg)),
                     ];
 
                     if let Some(status) = claude_status {
-                        let max_status_len = (area.width as usize)
-                            .saturating_sub(8 + slot.label.len());
+                        let max_status_len =
+                            (area.width as usize).saturating_sub(8 + slot.label.len());
                         let truncated = if status.len() > max_status_len && max_status_len > 1 {
                             format!("{}…", &status[..max_status_len.saturating_sub(1)])
                         } else {
@@ -293,7 +306,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         };
                         spans.push(Span::styled(
                             format!(" {}", truncated),
-                            Style::default().fg(app.theme.session_active).add_modifier(Modifier::DIM),
+                            Style::default()
+                                .fg(app.theme.session_active)
+                                .add_modifier(Modifier::DIM),
                         ));
                     } else {
                         spans.push(Span::styled(

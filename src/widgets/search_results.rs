@@ -7,7 +7,11 @@ use ratatui::Frame;
 use crate::app::App;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
-    let border_color = if is_focused { app.theme.border_active } else { app.theme.border_inactive };
+    let border_color = if is_focused {
+        app.theme.border_active
+    } else {
+        app.theme.border_inactive
+    };
 
     let search = app.search.as_ref();
     let (title, items, selected) = match search {
@@ -59,13 +63,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
         .border_style(Style::default().fg(border_color))
         .style(Style::default().bg(app.theme.bg));
 
-    let list = List::new(items)
-        .block(block)
-        .highlight_style(
-            Style::default()
-                .bg(app.theme.highlight_bg)
-                .add_modifier(Modifier::BOLD),
-        );
+    let list = List::new(items).block(block).highlight_style(
+        Style::default()
+            .bg(app.theme.highlight_bg)
+            .add_modifier(Modifier::BOLD),
+    );
 
     let mut state = ListState::default().with_selected(Some(selected));
     frame.render_stateful_widget(list, area, &mut state);

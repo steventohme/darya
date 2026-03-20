@@ -57,9 +57,18 @@ pub fn create_event_handler() -> (EventHandler, mpsc::UnboundedSender<AppEvent>)
                         Event::Mouse(mouse) => match mouse.kind {
                             MouseEventKind::ScrollUp => Some(AppEvent::MouseScroll { delta: 3 }),
                             MouseEventKind::ScrollDown => Some(AppEvent::MouseScroll { delta: -3 }),
-                            MouseEventKind::Down(MouseButton::Left) => Some(AppEvent::MouseDown { column: mouse.column, row: mouse.row }),
-                            MouseEventKind::Drag(MouseButton::Left) => Some(AppEvent::MouseDrag { column: mouse.column, row: mouse.row }),
-                            MouseEventKind::Up(MouseButton::Left) => Some(AppEvent::MouseUp { column: mouse.column, row: mouse.row }),
+                            MouseEventKind::Down(MouseButton::Left) => Some(AppEvent::MouseDown {
+                                column: mouse.column,
+                                row: mouse.row,
+                            }),
+                            MouseEventKind::Drag(MouseButton::Left) => Some(AppEvent::MouseDrag {
+                                column: mouse.column,
+                                row: mouse.row,
+                            }),
+                            MouseEventKind::Up(MouseButton::Left) => Some(AppEvent::MouseUp {
+                                column: mouse.column,
+                                row: mouse.row,
+                            }),
                             _ => None,
                         },
                         Event::Paste(text) => Some(AppEvent::Paste(text)),

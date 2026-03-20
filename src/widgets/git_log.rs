@@ -11,7 +11,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
         gl.ensure_fresh();
     }
 
-    let border_color = if is_focused { app.theme.border_active } else { app.theme.border_inactive };
+    let border_color = if is_focused {
+        app.theme.border_active
+    } else {
+        app.theme.border_inactive
+    };
 
     let gl = app.git_log.as_mut();
     let (title, items, selected, visible_height) = match gl {
@@ -44,10 +48,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
 
                     let line = Line::from(vec![
                         Span::styled(format!("{} ", entry.hash_short), hash_style),
-                        Span::styled(
-                            entry.subject.clone(),
-                            Style::default().fg(subject_color),
-                        ),
+                        Span::styled(entry.subject.clone(), Style::default().fg(subject_color)),
                         Span::styled(
                             format!("  {} ", entry.author),
                             Style::default().fg(app.theme.fg_dim),
@@ -73,13 +74,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
         .border_style(Style::default().fg(border_color))
         .style(Style::default().bg(app.theme.bg));
 
-    let list = List::new(items)
-        .block(block)
-        .highlight_style(
-            Style::default()
-                .bg(app.theme.highlight_bg)
-                .add_modifier(Modifier::BOLD),
-        );
+    let list = List::new(items).block(block).highlight_style(
+        Style::default()
+            .bg(app.theme.highlight_bg)
+            .add_modifier(Modifier::BOLD),
+    );
 
     let mut state = ListState::default().with_selected(Some(selected));
     frame.render_stateful_widget(list, area, &mut state);

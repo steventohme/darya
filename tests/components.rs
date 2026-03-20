@@ -8,9 +8,9 @@ use darya::app::{
     GitFileStatus, GitStatusCategory, GitStatusState, SearchViewState, SplitDirection,
 };
 use darya::config::{parse_keybinding, KeybindingsConfig, ThemeMode};
-use darya::planet::types::PlanetKind;
 use darya::planet::renderer;
 use darya::planet::sprites::PlanetAnimation;
+use darya::planet::types::PlanetKind;
 use darya::ui::compute_pane_rects;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
@@ -85,7 +85,7 @@ fn file_explorer_enter_on_dir_expands() {
     assert_eq!(state.selected, 0);
     let result = state.enter();
     assert!(result.is_none()); // dirs don't return a path
-    // Now entries should include nested.txt under alpha
+                               // Now entries should include nested.txt under alpha
     assert_eq!(state.entries.len(), 4); // alpha/, nested.txt, beta.txt, gamma.rs
     assert!(state.expanded.contains(&dir.path().join("alpha")));
 }
@@ -220,7 +220,11 @@ fn search_no_matches_returns_empty() {
 fn search_move_up_down() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
-    std::fs::write(root.join("test.txt"), "line1 match\nline2 match\nline3 match\n").unwrap();
+    std::fs::write(
+        root.join("test.txt"),
+        "line1 match\nline2 match\nline3 match\n",
+    )
+    .unwrap();
 
     let mut state = SearchViewState::new("match", root);
     assert_eq!(state.selected, 0);
@@ -558,9 +562,16 @@ fn diff_view_scroll_up_down_clamped() {
 
 #[test]
 fn sidebar_width_defaults_to_25() {
-    use darya::app::{App, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH};
+    use darya::app::{App, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH};
     use darya::config::{KeybindingsConfig, Theme};
-    let app = App::new(vec![], Theme::dark(), true, KeybindingsConfig::default(), "claude".into(), "/bin/sh".into());
+    let app = App::new(
+        vec![],
+        Theme::dark(),
+        true,
+        KeybindingsConfig::default(),
+        "claude".into(),
+        "/bin/sh".into(),
+    );
     assert_eq!(app.sidebar_width, 25);
     assert!(!app.sidebar_resized);
     // Verify constants are sensible
@@ -571,9 +582,16 @@ fn sidebar_width_defaults_to_25() {
 
 #[test]
 fn sidebar_resize_respects_bounds() {
-    use darya::app::{App, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_STEP};
+    use darya::app::{App, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_STEP};
     use darya::config::{KeybindingsConfig, Theme};
-    let mut app = App::new(vec![], Theme::dark(), true, KeybindingsConfig::default(), "claude".into(), "/bin/sh".into());
+    let mut app = App::new(
+        vec![],
+        Theme::dark(),
+        true,
+        KeybindingsConfig::default(),
+        "claude".into(),
+        "/bin/sh".into(),
+    );
 
     // Grow to max
     for _ in 0..50 {
@@ -583,7 +601,10 @@ fn sidebar_resize_respects_bounds() {
 
     // Shrink to min
     for _ in 0..50 {
-        app.sidebar_width = app.sidebar_width.saturating_sub(SIDEBAR_STEP).max(SIDEBAR_MIN_WIDTH);
+        app.sidebar_width = app
+            .sidebar_width
+            .saturating_sub(SIDEBAR_STEP)
+            .max(SIDEBAR_MIN_WIDTH);
     }
     assert_eq!(app.sidebar_width, SIDEBAR_MIN_WIDTH);
 }
@@ -621,16 +642,16 @@ fn planet_kind_all_returns_6_variants() {
 fn planet_kind_from_str_round_trips() {
     for planet in PlanetKind::all() {
         let name = planet.name();
-        let parsed = PlanetKind::from_str(name);
+        let parsed = PlanetKind::parse(name);
         assert_eq!(parsed, Some(*planet), "failed to round-trip {}", name);
     }
 }
 
 #[test]
 fn planet_kind_from_str_case_insensitive() {
-    assert_eq!(PlanetKind::from_str("EARTH"), Some(PlanetKind::Earth));
-    assert_eq!(PlanetKind::from_str("Mars"), Some(PlanetKind::Mars));
-    assert_eq!(PlanetKind::from_str("invalid"), None);
+    assert_eq!(PlanetKind::parse("EARTH"), Some(PlanetKind::Earth));
+    assert_eq!(PlanetKind::parse("Mars"), Some(PlanetKind::Mars));
+    assert_eq!(PlanetKind::parse("invalid"), None);
 }
 
 #[test]

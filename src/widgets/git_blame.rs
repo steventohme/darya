@@ -67,10 +67,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     format!("{} ", author_truncated),
                     Style::default().fg(app.theme.fg_dim),
                 ),
-                Span::styled(
-                    format!("{} ", date_truncated),
-                    hash_style,
-                ),
+                Span::styled(format!("{} ", date_truncated), hash_style),
                 Span::styled(
                     format!("{:>4} ", bl.line_number),
                     Style::default()

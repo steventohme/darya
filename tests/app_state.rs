@@ -5,18 +5,20 @@ use std::path::PathBuf;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use darya::app::{
-    is_edtui_compatible, status_priority, EditorViewState,
-    GitStatusCategory, GitStatusEntry, GitStatusState, GitFileStatus,
-    InputMode, MainView, PaneContent, PanelFocus, Prompt, SidebarView, SplitDirection, ViewKind,
-    BlameLine, GitBlameState, GitLogEntry, GitLogState,
-    format_relative_time,
-    CommandId, CommandPaletteState, ColorTarget,
+    format_relative_time, is_edtui_compatible, status_priority, BlameLine, ColorTarget, CommandId,
+    CommandPaletteState, EditorViewState, GitBlameState, GitFileStatus, GitLogEntry, GitLogState,
+    GitStatusCategory, GitStatusEntry, GitStatusState, InputMode, MainView, PaneContent,
+    PanelFocus, Prompt, SidebarView, SplitDirection, ViewKind,
 };
 use darya::config;
 use darya::event::AppEvent;
 use darya::planet::types::PlanetKind;
 
-use helpers::{key, cmd_key, make_app, make_app_with_session, make_app_with_two_sessions, selected_item_index, set_session, set_shell_session, active_session_id, active_shell_session_id, item_path};
+use helpers::{
+    active_session_id, active_shell_session_id, cmd_key, item_path, key, make_app,
+    make_app_with_session, make_app_with_two_sessions, selected_item_index, set_session,
+    set_shell_session,
+};
 
 // ── Navigation ──────────────────────────────────────────────
 
@@ -446,7 +448,8 @@ fn tab_from_worktrees_without_session_stays_nav() {
 fn needs_session_spawn_on_enter_in_worktree_view() {
     let mut app = make_app(2);
     app.sidebar_tree.cursor = 1; // on an item
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
     assert!(app.needs_session_spawn(&key_event));
 }
 
@@ -454,8 +457,11 @@ fn needs_session_spawn_on_enter_in_worktree_view() {
 fn needs_session_spawn_false_when_prompt_active() {
     let mut app = make_app(2);
     app.sidebar_tree.cursor = 1;
-    app.prompt = Some(Prompt::CreateWorktree { input: String::new() });
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+    app.prompt = Some(Prompt::CreateWorktree {
+        input: String::new(),
+    });
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
     assert!(!app.needs_session_spawn(&key_event));
 }
 
@@ -465,7 +471,8 @@ fn needs_session_restart_on_r_with_exited_session() {
     app.sidebar_tree.cursor = 1;
     let sid = active_session_id(&app).unwrap().to_string();
     app.exited_sessions.insert(sid);
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('r'), crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Char('r'), crossterm::event::KeyModifiers::NONE);
     assert!(app.needs_session_restart(&key_event));
 }
 
@@ -473,7 +480,8 @@ fn needs_session_restart_on_r_with_exited_session() {
 fn needs_session_restart_false_without_exited() {
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('r'), crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Char('r'), crossterm::event::KeyModifiers::NONE);
     assert!(!app.needs_session_restart(&key_event));
 }
 
@@ -483,7 +491,8 @@ fn needs_session_restart_false_without_exited() {
 fn needs_session_force_restart_on_shift_r_with_running_session() {
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
     assert!(app.needs_session_force_restart(&key_event));
 }
 
@@ -493,7 +502,8 @@ fn needs_session_force_restart_on_shift_r_with_exited_session() {
     app.sidebar_tree.cursor = 1;
     let sid = active_session_id(&app).unwrap().to_string();
     app.exited_sessions.insert(sid);
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
     assert!(app.needs_session_force_restart(&key_event));
 }
 
@@ -501,7 +511,8 @@ fn needs_session_force_restart_on_shift_r_with_exited_session() {
 fn needs_session_force_restart_false_without_session() {
     let mut app = make_app(2);
     app.sidebar_tree.cursor = 1;
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
     assert!(!app.needs_session_force_restart(&key_event));
 }
 
@@ -510,7 +521,8 @@ fn needs_session_force_restart_false_in_terminal_mode() {
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
     app.input_mode = InputMode::Terminal;
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Char('R'), crossterm::event::KeyModifiers::SHIFT);
     assert!(!app.needs_session_force_restart(&key_event));
 }
 
@@ -520,7 +532,8 @@ fn needs_session_force_restart_false_in_terminal_mode() {
 fn needs_session_close_on_backspace_with_session() {
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
     assert!(app.needs_session_close(&key_event));
 }
 
@@ -528,7 +541,8 @@ fn needs_session_close_on_backspace_with_session() {
 fn needs_session_close_false_without_session() {
     let mut app = make_app(2);
     app.sidebar_tree.cursor = 1;
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
     assert!(!app.needs_session_close(&key_event));
 }
 
@@ -537,7 +551,8 @@ fn needs_session_close_false_in_terminal_mode() {
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
     app.input_mode = InputMode::Terminal;
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
     assert!(!app.needs_session_close(&key_event));
 }
 
@@ -545,8 +560,11 @@ fn needs_session_close_false_in_terminal_mode() {
 fn needs_session_close_false_when_prompt_active() {
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
-    app.prompt = Some(Prompt::CreateWorktree { input: String::new() });
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
+    app.prompt = Some(Prompt::CreateWorktree {
+        input: String::new(),
+    });
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
     assert!(!app.needs_session_close(&key_event));
 }
 
@@ -558,8 +576,12 @@ fn wants_create_worktree_returns_input_on_enter() {
     app.prompt = Some(Prompt::CreateWorktree {
         input: "my-branch".to_string(),
     });
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
-    assert_eq!(app.wants_create_worktree(&key_event), Some("my-branch".to_string()));
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+    assert_eq!(
+        app.wants_create_worktree(&key_event),
+        Some("my-branch".to_string())
+    );
 }
 
 #[test]
@@ -568,7 +590,8 @@ fn wants_create_worktree_none_on_empty_input() {
     app.prompt = Some(Prompt::CreateWorktree {
         input: String::new(),
     });
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
     assert_eq!(app.wants_create_worktree(&key_event), None);
 }
 
@@ -578,7 +601,8 @@ fn wants_delete_worktree_on_y() {
     app.prompt = Some(Prompt::ConfirmDelete {
         worktree_name: "test".to_string(),
     });
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('y'), crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Char('y'), crossterm::event::KeyModifiers::NONE);
     assert!(app.wants_delete_worktree(&key_event));
 }
 
@@ -588,7 +612,8 @@ fn wants_delete_worktree_false_on_n() {
     app.prompt = Some(Prompt::ConfirmDelete {
         worktree_name: "test".to_string(),
     });
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('n'), crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Char('n'), crossterm::event::KeyModifiers::NONE);
     assert!(!app.wants_delete_worktree(&key_event));
 }
 
@@ -607,7 +632,7 @@ fn cmd_6_sets_sidebar_git_status() {
 fn make_app_with_git_status(n: usize) -> darya::app::App {
     let mut app = make_app(n);
     app.sidebar_tree.cursor = 1; // select item 0
-    // Set up a mock git status state with test entries
+                                 // Set up a mock git status state with test entries
     app.git_status = Some(GitStatusState {
         entries: vec![
             GitStatusEntry {
@@ -756,7 +781,9 @@ fn pty_output_activates_animation_after_tick() {
     let sid = active_session_id(&app).unwrap().to_string();
     assert!(!app.activity.is_active(&sid));
     // Output + tick (no recent input) → active
-    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::PtyOutput {
+        session_id: sid.clone(),
+    });
     app.handle_event(&AppEvent::Tick);
     assert!(app.activity.is_active(&sid));
 }
@@ -768,7 +795,9 @@ fn output_suppressed_after_user_input() {
     let sid = active_session_id(&app).unwrap().to_string();
     // Simulate user typing: mark_input then echo arrives as PtyOutput
     app.activity.mark_input(&sid);
-    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::PtyOutput {
+        session_id: sid.clone(),
+    });
     app.handle_event(&AppEvent::Tick);
     // Should NOT activate — the output was just an echo
     assert!(!app.activity.is_active(&sid));
@@ -779,13 +808,19 @@ fn tick_advances_animation_trail() {
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
     let sid = active_session_id(&app).unwrap().to_string();
-    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::PtyOutput {
+        session_id: sid.clone(),
+    });
     app.handle_event(&AppEvent::Tick);
     let trail_before = app.activity.trail(&sid);
     // Two ticks needed to advance (100ms per frame via parity skip)
-    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::PtyOutput {
+        session_id: sid.clone(),
+    });
     app.handle_event(&AppEvent::Tick);
-    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::PtyOutput {
+        session_id: sid.clone(),
+    });
     app.handle_event(&AppEvent::Tick);
     let trail_after = app.activity.trail(&sid);
     assert_ne!(trail_before, trail_after);
@@ -797,7 +832,9 @@ fn animation_scanner_cycle() {
     app.sidebar_tree.cursor = 1;
     let sid = active_session_id(&app).unwrap().to_string();
     // Initial output to start animation
-    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::PtyOutput {
+        session_id: sid.clone(),
+    });
     app.handle_event(&AppEvent::Tick);
 
     // Collect head positions over a full 18-frame scanner cycle
@@ -806,9 +843,13 @@ fn animation_scanner_cycle() {
     for _ in 0..18 {
         positions.push(app.activity.position(&sid));
         // Two ticks per frame advance
-        app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+        app.handle_event(&AppEvent::PtyOutput {
+            session_id: sid.clone(),
+        });
         app.handle_event(&AppEvent::Tick);
-        app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+        app.handle_event(&AppEvent::PtyOutput {
+            session_id: sid.clone(),
+        });
         app.handle_event(&AppEvent::Tick);
     }
     // Forward 5, hold end 3, backward 4, hold start 6
@@ -822,13 +863,19 @@ fn animation_scanner_cycle() {
     let mut app2 = make_app_with_session(2);
     app2.sidebar_tree.cursor = 1;
     let sid2 = active_session_id(&app2).unwrap().to_string();
-    app2.handle_event(&AppEvent::PtyOutput { session_id: sid2.clone() });
+    app2.handle_event(&AppEvent::PtyOutput {
+        session_id: sid2.clone(),
+    });
     app2.handle_event(&AppEvent::Tick);
     // Advance 2 frames (head should be at pos 2)
     for _ in 0..2 {
-        app2.handle_event(&AppEvent::PtyOutput { session_id: sid2.clone() });
+        app2.handle_event(&AppEvent::PtyOutput {
+            session_id: sid2.clone(),
+        });
         app2.handle_event(&AppEvent::Tick);
-        app2.handle_event(&AppEvent::PtyOutput { session_id: sid2.clone() });
+        app2.handle_event(&AppEvent::PtyOutput {
+            session_id: sid2.clone(),
+        });
         app2.handle_event(&AppEvent::Tick);
     }
     let trail = app2.activity.trail(&sid2);
@@ -841,10 +888,14 @@ fn session_exited_cleans_up_animation() {
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
     let sid = active_session_id(&app).unwrap().to_string();
-    app.handle_event(&AppEvent::PtyOutput { session_id: sid.clone() });
+    app.handle_event(&AppEvent::PtyOutput {
+        session_id: sid.clone(),
+    });
     app.handle_event(&AppEvent::Tick);
     assert!(app.activity.is_active(&sid));
-    app.handle_event(&AppEvent::SessionExited { session_id: sid.clone() });
+    app.handle_event(&AppEvent::SessionExited {
+        session_id: sid.clone(),
+    });
     assert!(!app.activity.is_active(&sid));
 }
 
@@ -859,13 +910,17 @@ fn animation_independent_per_session() {
     let sid1 = active_session_id(&app).unwrap().to_string();
 
     // Only activate session 1
-    app.handle_event(&AppEvent::PtyOutput { session_id: sid1.clone() });
+    app.handle_event(&AppEvent::PtyOutput {
+        session_id: sid1.clone(),
+    });
     app.handle_event(&AppEvent::Tick);
     assert!(app.activity.is_active(&sid1));
     assert!(!app.activity.is_active(&sid2));
 
     // Now activate session 2 too
-    app.handle_event(&AppEvent::PtyOutput { session_id: sid2.clone() });
+    app.handle_event(&AppEvent::PtyOutput {
+        session_id: sid2.clone(),
+    });
     app.handle_event(&AppEvent::Tick);
     assert!(app.activity.is_active(&sid1));
     assert!(app.activity.is_active(&sid2));
@@ -1047,7 +1102,9 @@ fn file_changed_reloads_open_editor() {
     let (mut app, tmp, _dir) = make_app_with_open_file("original\n");
     // Modify file on disk
     std::fs::write(&tmp, "changed content\n").unwrap();
-    app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.clone()] });
+    app.handle_event(&AppEvent::FileChanged {
+        paths: vec![tmp.clone()],
+    });
     // Editor should have reloaded
     let editor = app.editor.as_ref().unwrap();
     assert_eq!(editor.editor_state.lines.to_string(), "changed content\n");
@@ -1062,19 +1119,27 @@ fn file_changed_does_not_overwrite_modified_editor() {
     app.editor.as_mut().unwrap().modified = true;
     // Modify file on disk
     std::fs::write(&tmp, "changed content\n").unwrap();
-    app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.clone()] });
+    app.handle_event(&AppEvent::FileChanged {
+        paths: vec![tmp.clone()],
+    });
     // Editor should still have original content
     let editor = app.editor.as_ref().unwrap();
     assert_eq!(editor.editor_state.lines.to_string(), "original\n");
     assert!(editor.modified);
-    assert!(app.status_message.as_deref().unwrap().contains("unsaved edits preserved"));
+    assert!(app
+        .status_message
+        .as_deref()
+        .unwrap()
+        .contains("unsaved edits preserved"));
 }
 
 #[test]
 fn file_changed_ignores_unrelated_path() {
     let (mut app, _tmp, _dir) = make_app_with_open_file("original\n");
     let unrelated = PathBuf::from("/tmp/some_other_file.txt");
-    app.handle_event(&AppEvent::FileChanged { paths: vec![unrelated] });
+    app.handle_event(&AppEvent::FileChanged {
+        paths: vec![unrelated],
+    });
     // No status message, content unchanged
     assert!(app.status_message.is_none());
     let editor = app.editor.as_ref().unwrap();
@@ -1085,7 +1150,9 @@ fn file_changed_ignores_unrelated_path() {
 fn file_changed_without_editor_is_noop() {
     let mut app = make_app(2);
     assert!(app.editor.is_none());
-    app.handle_event(&AppEvent::FileChanged { paths: vec![PathBuf::from("/tmp/foo.txt")] });
+    app.handle_event(&AppEvent::FileChanged {
+        paths: vec![PathBuf::from("/tmp/foo.txt")],
+    });
     assert!(app.status_message.is_none());
 }
 
@@ -1100,14 +1167,20 @@ fn files_created_or_deleted_refreshes_explorer() {
     app.handle_event(&AppEvent::FilesCreatedOrDeleted);
     // Explorer should now include the new file
     assert!(app.file_explorer.entries.len() > initial_count);
-    assert!(app.file_explorer.entries.iter().any(|e| e.name == "new_file.txt"));
+    assert!(app
+        .file_explorer
+        .entries
+        .iter()
+        .any(|e| e.name == "new_file.txt"));
 }
 
 #[test]
 fn file_changed_identical_content_no_message() {
     let (mut app, tmp, _dir) = make_app_with_open_file("same content\n");
     // File on disk is identical to editor content — no rewrite needed, just send event
-    app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.clone()] });
+    app.handle_event(&AppEvent::FileChanged {
+        paths: vec![tmp.clone()],
+    });
     // No status message when content is identical
     assert!(app.status_message.is_none());
 }
@@ -1156,8 +1229,14 @@ fn split_add_pane_creates_layout() {
     assert_eq!(layout.panes.len(), 2);
     assert_eq!(layout.focused, 0);
     // First pane is the active session, second is the next available
-    assert_eq!(layout.panes[0], darya::app::PaneContent::Terminal("test-session-1".to_string()));
-    assert_eq!(layout.panes[1], darya::app::PaneContent::Terminal("test-session-2".to_string()));
+    assert_eq!(
+        layout.panes[0],
+        darya::app::PaneContent::Terminal("test-session-1".to_string())
+    );
+    assert_eq!(
+        layout.panes[1],
+        darya::app::PaneContent::Terminal("test-session-2".to_string())
+    );
 }
 
 #[test]
@@ -1169,7 +1248,11 @@ fn split_add_pane_fails_without_other_sessions() {
     // Only one session exists
     assert!(!app.split_add_pane());
     assert!(app.pane_layout.is_none());
-    assert!(app.status_message.as_ref().unwrap().contains("No other running"));
+    assert!(app
+        .status_message
+        .as_ref()
+        .unwrap()
+        .contains("No other running"));
 }
 
 #[test]
@@ -1249,13 +1332,22 @@ fn focused_session_id_single_vs_split() {
     app.main_view = MainView::Terminal;
 
     // Single mode: returns active_session_id
-    assert_eq!(app.focused_session_id(), Some(&"test-session-1".to_string()));
+    assert_eq!(
+        app.focused_session_id(),
+        Some(&"test-session-1".to_string())
+    );
 
     // Split mode: returns pane-focused session
     app.split_add_pane();
-    assert_eq!(app.focused_session_id(), Some(&"test-session-1".to_string()));
+    assert_eq!(
+        app.focused_session_id(),
+        Some(&"test-session-1".to_string())
+    );
     app.cycle_pane_focus_next();
-    assert_eq!(app.focused_session_id(), Some(&"test-session-2".to_string()));
+    assert_eq!(
+        app.focused_session_id(),
+        Some(&"test-session-2".to_string())
+    );
 }
 
 #[test]
@@ -1284,7 +1376,10 @@ fn split_preserves_across_view_switch() {
     // Switch to editor and back
     app.main_view = MainView::Editor;
     app.main_view = MainView::Terminal;
-    assert_eq!(app.pane_layout.as_ref().unwrap().panes, before.unwrap().panes);
+    assert_eq!(
+        app.pane_layout.as_ref().unwrap().panes,
+        before.unwrap().panes
+    );
 }
 
 #[test]
@@ -1394,7 +1489,9 @@ fn status_priority_ordering() {
 fn git_indicators_cleared_on_set_root() {
     let mut app = make_app(2);
     // Manually inject a fake indicator
-    app.file_explorer.git_indicators.insert("foo.rs".to_string(), GitFileStatus::Modified);
+    app.file_explorer
+        .git_indicators
+        .insert("foo.rs".to_string(), GitFileStatus::Modified);
     assert!(!app.file_explorer.git_indicators.is_empty());
     // Set root to a non-git temp path — indicators should be cleared
     let tmp = tempfile::tempdir().unwrap();
@@ -1409,7 +1506,9 @@ fn file_changed_refreshes_git_indicators() {
     let mut app = make_app(2);
     app.file_explorer.set_root(tmp.path().to_path_buf());
     app.file_explorer.git_indicators_stale = false; // pretend we already loaded
-    app.handle_event(&AppEvent::FileChanged { paths: vec![tmp.path().join("a.txt")] });
+    app.handle_event(&AppEvent::FileChanged {
+        paths: vec![tmp.path().join("a.txt")],
+    });
     assert!(app.file_explorer.git_indicators_stale);
 }
 
@@ -1635,14 +1734,18 @@ fn cmd_7_opens_git_blame_view() {
     // Without an editor open, should show status message
     let mut app = make_app(3);
     app.handle_event(&cmd_key('7'));
-    assert!(app.status_message.as_ref().unwrap().contains("No file open"));
+    assert!(app
+        .status_message
+        .as_ref()
+        .unwrap()
+        .contains("No file open"));
 }
 
 #[test]
 fn cmd_8_opens_git_log_view() {
     let mut app = make_app(3);
     app.sidebar_tree.cursor = 1; // select item 0 so worktree path is available
-    // This will try to run git log on a non-git dir, should show error
+                                 // This will try to run git log on a non-git dir, should show error
     app.handle_event(&cmd_key('8'));
     // Either it succeeds (if in a git repo) or shows an error
     assert!(app.main_view == MainView::GitLog || app.status_message.is_some());
@@ -1824,8 +1927,12 @@ fn command_palette_enter_executes_selected() {
     let mut app = make_app(3);
     app.command_palette = Some(CommandPaletteState::new(&app.keybindings));
     // Navigate to "Quit" — find its index
-    let quit_idx = app.command_palette.as_ref().unwrap()
-        .results.iter()
+    let quit_idx = app
+        .command_palette
+        .as_ref()
+        .unwrap()
+        .results
+        .iter()
         .position(|c| c.id == CommandId::Quit)
         .unwrap();
     // Set selected directly
@@ -1921,7 +2028,9 @@ fn file_changed_refreshes_git_views() {
         stale: false,
     });
     // File change marks views stale for lazy refresh on next render
-    app.handle_event(&AppEvent::FileChanged { paths: vec![PathBuf::from("/tmp/foo.rs")] });
+    app.handle_event(&AppEvent::FileChanged {
+        paths: vec![PathBuf::from("/tmp/foo.rs")],
+    });
     assert!(app.git_log.as_ref().unwrap().stale);
     assert!(app.git_blame.as_ref().unwrap().stale);
     assert!(app.git_status.as_ref().unwrap().stale);
@@ -1997,7 +2106,8 @@ fn shell_session_spawn_signal() {
     app.main_view = MainView::Shell;
     app.panel_focus = PanelFocus::Right;
     app.input_mode = InputMode::Navigation;
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
     // needs_session_spawn now handles shell view too
     assert!(app.needs_session_spawn(&key_event));
 }
@@ -2009,7 +2119,8 @@ fn shell_spawn_false_in_terminal_view() {
     app.main_view = MainView::Terminal;
     app.panel_focus = PanelFocus::Right;
     app.input_mode = InputMode::Navigation;
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::NONE);
     // needs_session_spawn returns true for Terminal view too, since it handles all session spawning
     assert!(app.needs_session_spawn(&key_event));
 }
@@ -2056,7 +2167,8 @@ fn shell_session_restart_signal() {
     let sid = active_shell_session_id(&app).unwrap().to_string();
     app.exited_sessions.insert(sid);
     app.input_mode = InputMode::Navigation;
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Char('r'), crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Char('r'), crossterm::event::KeyModifiers::NONE);
     // needs_session_restart now handles all session types
     assert!(app.needs_session_restart(&key_event));
 }
@@ -2064,7 +2176,8 @@ fn shell_session_restart_signal() {
 #[test]
 fn shell_session_close_signal() {
     let app = make_app_with_shell_session(3);
-    let key_event = crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
+    let key_event =
+        crossterm::event::KeyEvent::new(KeyCode::Backspace, crossterm::event::KeyModifiers::NONE);
     // needs_session_close now handles all session types
     assert!(app.needs_session_close(&key_event));
 }
@@ -2141,7 +2254,7 @@ fn resolve_shell_command_reads_local_override() {
 fn make_app_with_shell_and_terminal(n: usize) -> darya::app::App {
     let mut app = make_app(n);
     app.sidebar_tree.cursor = 1; // select item 0
-    // Claude terminal session on item 0
+                                 // Claude terminal session on item 0
     set_session(&mut app, 0, "terminal-1");
     // Shell session on item 0
     set_shell_session(&mut app, 0, "shell-1");
@@ -2161,7 +2274,10 @@ fn split_terminal_with_editor() {
     assert!(app.split_add_pane_with(PaneContent::Editor));
     let layout = app.pane_layout.as_ref().unwrap();
     assert_eq!(layout.panes.len(), 2);
-    assert_eq!(layout.panes[0], PaneContent::Terminal("test-session-1".to_string()));
+    assert_eq!(
+        layout.panes[0],
+        PaneContent::Terminal("test-session-1".to_string())
+    );
     assert_eq!(layout.panes[1], PaneContent::Editor);
 }
 
@@ -2174,7 +2290,10 @@ fn split_terminal_with_shell() {
     assert!(app.split_add_pane_with(PaneContent::Shell("shell-1".to_string())));
     let layout = app.pane_layout.as_ref().unwrap();
     assert_eq!(layout.panes.len(), 2);
-    assert_eq!(layout.panes[0], PaneContent::Terminal("terminal-1".to_string()));
+    assert_eq!(
+        layout.panes[0],
+        PaneContent::Terminal("terminal-1".to_string())
+    );
     assert_eq!(layout.panes[1], PaneContent::Shell("shell-1".to_string()));
 }
 
@@ -2189,7 +2308,10 @@ fn split_editor_with_terminal() {
     let layout = app.pane_layout.as_ref().unwrap();
     assert_eq!(layout.panes.len(), 2);
     assert_eq!(layout.panes[0], PaneContent::Editor);
-    assert_eq!(layout.panes[1], PaneContent::Terminal("test-session-1".to_string()));
+    assert_eq!(
+        layout.panes[1],
+        PaneContent::Terminal("test-session-1".to_string())
+    );
 }
 
 #[test]
@@ -2328,7 +2450,10 @@ fn split_terminal_command_from_palette() {
     app.execute_command(CommandId::SplitTerminal);
     let layout = app.pane_layout.as_ref().unwrap();
     assert_eq!(layout.panes.len(), 2);
-    assert_eq!(layout.panes[1], PaneContent::Terminal("terminal-2".to_string()));
+    assert_eq!(
+        layout.panes[1],
+        PaneContent::Terminal("terminal-2".to_string())
+    );
 }
 
 #[test]
@@ -2439,7 +2564,10 @@ fn notification_for_exit() {
 fn notification_none_for_other_events() {
     let app = make_app(2);
     assert_eq!(app.notification_for_event(&AppEvent::Tick), (None, None));
-    assert_eq!(app.notification_for_event(&AppEvent::Resize(80, 24)), (None, None));
+    assert_eq!(
+        app.notification_for_event(&AppEvent::Resize(80, 24)),
+        (None, None)
+    );
     assert_eq!(
         app.notification_for_event(&AppEvent::PtyOutput {
             session_id: "foo".to_string(),
@@ -2487,7 +2615,10 @@ fn dir_browser_jk_navigation() {
 fn add_section_with_root_path() {
     let mut app = make_app(3);
     let initial_sections = app.sidebar_tree.sections.len();
-    app.sidebar_tree.add_section("test-section".to_string(), Some(PathBuf::from("/tmp/test-root")));
+    app.sidebar_tree.add_section(
+        "test-section".to_string(),
+        Some(PathBuf::from("/tmp/test-root")),
+    );
     assert_eq!(app.sidebar_tree.sections.len(), initial_sections + 1);
     let new_section = app.sidebar_tree.sections.last().unwrap();
     assert_eq!(new_section.name, "test-section");
@@ -2497,7 +2628,8 @@ fn add_section_with_root_path() {
 #[test]
 fn add_section_without_root_path() {
     let mut app = make_app(3);
-    app.sidebar_tree.add_section("empty-section".to_string(), None);
+    app.sidebar_tree
+        .add_section("empty-section".to_string(), None);
     let new_section = app.sidebar_tree.sections.last().unwrap();
     assert_eq!(new_section.name, "empty-section");
     assert_eq!(new_section.root_path, None);
@@ -2506,7 +2638,8 @@ fn add_section_without_root_path() {
 #[test]
 fn sections_config_round_trip_with_root() {
     let mut app = make_app(3);
-    app.sidebar_tree.add_section("rooted".to_string(), Some(PathBuf::from("/tmp/my-repo")));
+    app.sidebar_tree
+        .add_section("rooted".to_string(), Some(PathBuf::from("/tmp/my-repo")));
 
     // Serialize
     let config = app.sidebar_tree.to_sections_config();
@@ -2535,7 +2668,8 @@ fn refresh_section_worktrees_populates_items() {
     use darya::worktree::types::Worktree;
 
     let mut app = make_app(3);
-    app.sidebar_tree.add_section("new-repo".to_string(), Some(PathBuf::from("/tmp/new-repo")));
+    app.sidebar_tree
+        .add_section("new-repo".to_string(), Some(PathBuf::from("/tmp/new-repo")));
     let section_idx = app.sidebar_tree.sections.len() - 1;
     assert!(app.sidebar_tree.sections[section_idx].items.is_empty());
 
@@ -2553,10 +2687,17 @@ fn refresh_section_worktrees_populates_items() {
             is_main: false,
         },
     ];
-    app.sidebar_tree.refresh_section_worktrees(section_idx, &worktrees);
+    app.sidebar_tree
+        .refresh_section_worktrees(section_idx, &worktrees);
     assert_eq!(app.sidebar_tree.sections[section_idx].items.len(), 2);
-    assert_eq!(app.sidebar_tree.sections[section_idx].items[0].display_name, "new-repo");
-    assert_eq!(app.sidebar_tree.sections[section_idx].items[1].display_name, "new-repo-feature");
+    assert_eq!(
+        app.sidebar_tree.sections[section_idx].items[0].display_name,
+        "new-repo"
+    );
+    assert_eq!(
+        app.sidebar_tree.sections[section_idx].items[1].display_name,
+        "new-repo-feature"
+    );
 }
 
 #[test]
@@ -2582,7 +2723,10 @@ fn backspace_on_section_header_opens_confirm_delete() {
         }
     }
     app.handle_event(&key(KeyCode::Backspace));
-    assert!(matches!(app.prompt, Some(Prompt::ConfirmDeleteSection { .. })));
+    assert!(matches!(
+        app.prompt,
+        Some(Prompt::ConfirmDeleteSection { .. })
+    ));
 }
 
 #[test]
@@ -2593,13 +2737,18 @@ fn backspace_on_default_section_shows_error() {
     app.handle_event(&key(KeyCode::Backspace));
     assert!(app.prompt.is_none());
     assert!(app.status_message.is_some());
-    assert!(app.status_message.as_ref().unwrap().contains("Cannot delete"));
+    assert!(app
+        .status_message
+        .as_ref()
+        .unwrap()
+        .contains("Cannot delete"));
 }
 
 #[test]
 fn confirm_delete_section_removes_it() {
     let mut app = make_app(3);
-    app.sidebar_tree.add_section("to-delete".to_string(), Some(PathBuf::from("/tmp/del")));
+    app.sidebar_tree
+        .add_section("to-delete".to_string(), Some(PathBuf::from("/tmp/del")));
     assert_eq!(app.sidebar_tree.sections.len(), 2);
 
     // Simulate confirming deletion
@@ -2610,16 +2759,21 @@ fn confirm_delete_section_removes_it() {
     app.handle_event(&key(KeyCode::Char('y')));
     assert_eq!(app.sidebar_tree.sections.len(), 1);
     assert!(app.prompt.is_none());
-    assert!(app.status_message.as_ref().unwrap().contains("Deleted section"));
+    assert!(app
+        .status_message
+        .as_ref()
+        .unwrap()
+        .contains("Deleted section"));
 }
 
 #[test]
 fn remove_section_returns_session_ids() {
     let mut app = make_app(3);
-    app.sidebar_tree.add_section("with-sessions".to_string(), None);
+    app.sidebar_tree
+        .add_section("with-sessions".to_string(), None);
     let si = app.sidebar_tree.sections.len() - 1;
     // Add an item with a session to the new section
-    use darya::sidebar::types::{SidebarItem, SessionSlot, SessionKind};
+    use darya::sidebar::types::{SessionKind, SessionSlot, SidebarItem};
     app.sidebar_tree.sections[si].items.push(SidebarItem {
         path: PathBuf::from("/tmp/test"),
         display_name: "test".to_string(),
@@ -2717,7 +2871,10 @@ fn color_picker_assigns_color_on_enter() {
     app.handle_event(&key(KeyCode::Right));
     app.handle_event(&key(KeyCode::Enter));
     assert!(app.prompt.is_none());
-    assert_eq!(app.sidebar_tree.sections[0].items[0].color, Some(Color::Rgb(0xE0, 0x7A, 0x2A)));
+    assert_eq!(
+        app.sidebar_tree.sections[0].items[0].color,
+        Some(Color::Rgb(0xE0, 0x7A, 0x2A))
+    );
 }
 
 #[test]
@@ -2748,18 +2905,27 @@ fn color_picker_on_section() {
     let mut app = helpers::make_app(2);
     app.sidebar_tree.cursor = 0;
     app.handle_event(&key(KeyCode::Char('c')));
-    assert!(matches!(app.prompt, Some(Prompt::ColorPicker { target: ColorTarget::Section(0), .. })));
+    assert!(matches!(
+        app.prompt,
+        Some(Prompt::ColorPicker {
+            target: ColorTarget::Section(0),
+            ..
+        })
+    ));
     app.handle_event(&key(KeyCode::Right));
     app.handle_event(&key(KeyCode::Right));
     app.handle_event(&key(KeyCode::Right));
     app.handle_event(&key(KeyCode::Enter));
-    assert_eq!(app.sidebar_tree.sections[0].color, Some(Color::Rgb(0xCC, 0x8A, 0x4E)));
+    assert_eq!(
+        app.sidebar_tree.sections[0].color,
+        Some(Color::Rgb(0xCC, 0x8A, 0x4E))
+    );
 }
 
 #[test]
 fn color_roundtrip_through_toml() {
-    use ratatui::style::Color;
     use darya::worktree::types::Worktree;
+    use ratatui::style::Color;
 
     let mut app = helpers::make_app(1);
     app.sidebar_tree.sections[0].color = Some(Color::Rgb(0xFF, 0x55, 0x33));
@@ -2767,19 +2933,27 @@ fn color_roundtrip_through_toml() {
 
     let config = app.sidebar_tree.to_sections_config();
     assert_eq!(config.sections[0].color.as_deref(), Some("#FF5533"));
-    assert_eq!(config.sections[0].items[0].color.as_deref(), Some("#33CC33"));
+    assert_eq!(
+        config.sections[0].items[0].color.as_deref(),
+        Some("#33CC33")
+    );
 
-    let worktrees: Vec<Worktree> = app.sidebar_tree.sections[0].items.iter().map(|item| {
-        Worktree {
+    let worktrees: Vec<Worktree> = app.sidebar_tree.sections[0]
+        .items
+        .iter()
+        .map(|item| Worktree {
             path: item.path.clone(),
             name: item.display_name.clone(),
             branch: item.branch.clone(),
             is_main: item.is_main,
-        }
-    }).collect();
+        })
+        .collect();
     let tree = darya::sidebar::tree::SidebarTree::from_config(&config, &worktrees);
     assert_eq!(tree.sections[0].color, Some(Color::Rgb(0xFF, 0x55, 0x33)));
-    assert_eq!(tree.sections[0].items[0].color, Some(Color::Rgb(0x33, 0xCC, 0x33)));
+    assert_eq!(
+        tree.sections[0].items[0].color,
+        Some(Color::Rgb(0x33, 0xCC, 0x33))
+    );
 }
 
 // ── Layout Persistence ──────────────────────────────────────
@@ -2792,9 +2966,15 @@ fn to_layout_config_collects_active_sessions() {
 
     let layout = app.to_layout_config();
     assert_eq!(layout.sessions.len(), 2);
-    assert_eq!(layout.sessions[0].path, item_path(&app, 0).to_string_lossy());
+    assert_eq!(
+        layout.sessions[0].path,
+        item_path(&app, 0).to_string_lossy()
+    );
     assert_eq!(layout.sessions[0].slot_kind, "claude");
-    assert_eq!(layout.sessions[1].path, item_path(&app, 2).to_string_lossy());
+    assert_eq!(
+        layout.sessions[1].path,
+        item_path(&app, 2).to_string_lossy()
+    );
 }
 
 #[test]
@@ -2805,7 +2985,11 @@ fn to_layout_config_includes_shell_sessions() {
 
     let layout = app.to_layout_config();
     assert_eq!(layout.sessions.len(), 2);
-    let kinds: Vec<&str> = layout.sessions.iter().map(|s| s.slot_kind.as_str()).collect();
+    let kinds: Vec<&str> = layout
+        .sessions
+        .iter()
+        .map(|s| s.slot_kind.as_str())
+        .collect();
     assert!(kinds.contains(&"claude"));
     assert!(kinds.contains(&"shell"));
 }
@@ -2942,15 +3126,24 @@ fn toggle_split_direction_flips_existing_layout() {
     app.main_view = MainView::Terminal;
     assert!(app.split_add_pane());
     // Default is Horizontal
-    assert_eq!(app.pane_layout.as_ref().unwrap().direction, SplitDirection::Horizontal);
+    assert_eq!(
+        app.pane_layout.as_ref().unwrap().direction,
+        SplitDirection::Horizontal
+    );
     app.toggle_split_direction();
-    assert_eq!(app.pane_layout.as_ref().unwrap().direction, SplitDirection::Vertical);
+    assert_eq!(
+        app.pane_layout.as_ref().unwrap().direction,
+        SplitDirection::Vertical
+    );
     assert_eq!(app.split_direction, SplitDirection::Vertical);
     assert!(app.layout_changed);
     // Toggle back
     app.layout_changed = false;
     app.toggle_split_direction();
-    assert_eq!(app.pane_layout.as_ref().unwrap().direction, SplitDirection::Horizontal);
+    assert_eq!(
+        app.pane_layout.as_ref().unwrap().direction,
+        SplitDirection::Horizontal
+    );
     assert!(app.layout_changed);
 }
 

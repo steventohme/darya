@@ -17,8 +17,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, selected: usize) {
     let theme = &app.theme;
 
     // Overlay size: ~70% of screen
-    let width = (area.width * 70 / 100).max(40).min(area.width.saturating_sub(4));
-    let height = (area.height * 70 / 100).max(16).min(area.height.saturating_sub(2));
+    let width = (area.width * 70 / 100)
+        .max(40)
+        .min(area.width.saturating_sub(4));
+    let height = (area.height * 70 / 100)
+        .max(16)
+        .min(area.height.saturating_sub(2));
     let x = (area.width.saturating_sub(width)) / 2;
     let y = (area.height.saturating_sub(height)) / 2;
     let popup_area = Rect::new(x, y, width, height);
@@ -27,7 +31,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, selected: usize) {
 
     let block = Block::default()
         .title(" Choose Your Planet ")
-        .title_style(Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD))
+        .title_style(
+            Style::default()
+                .fg(theme.border_active)
+                .add_modifier(Modifier::BOLD),
+        )
         .borders(Borders::ALL)
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(theme.border_active))
@@ -56,7 +64,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, selected: usize) {
 
     // Footer area
     let footer_y = inner.y + planet_area_height;
-    let footer_area = Rect::new(inner.x, footer_y, inner.width, footer_height.min(inner.height));
+    let footer_area = Rect::new(
+        inner.x,
+        footer_y,
+        inner.width,
+        footer_height.min(inner.height),
+    );
 
     let accent = planet.accent();
     let bold = Style::default().fg(theme.fg).add_modifier(Modifier::BOLD);
@@ -100,12 +113,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, selected: usize) {
         Span::styled(" cancel", dim),
     ]);
 
-    let footer_lines = vec![
-        name_line,
-        dots_line,
-        Line::from(""),
-        controls_line,
-    ];
+    let footer_lines = vec![name_line, dots_line, Line::from(""), controls_line];
 
     let footer_para = Paragraph::new(footer_lines).style(Style::default().bg(theme.bg));
     frame.render_widget(footer_para, footer_area);

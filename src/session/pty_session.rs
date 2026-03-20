@@ -20,13 +20,19 @@ pub struct PtyCallback {
     pub status_text: Arc<RwLock<String>>,
 }
 
-impl PtyCallback {
-    pub fn new() -> Self {
+impl Default for PtyCallback {
+    fn default() -> Self {
         Self {
             bell_count: Arc::new(AtomicUsize::new(0)),
             done_count: Arc::new(AtomicUsize::new(0)),
             status_text: Arc::new(RwLock::new(String::new())),
         }
+    }
+}
+
+impl PtyCallback {
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
@@ -118,14 +124,12 @@ impl PtySession {
 
         // Spawn child on the slave
         let slave = pair.slave;
-        std::thread::spawn(move || {
-            match slave.spawn_command(cmd) {
-                Ok(mut child) => {
-                    let _ = child.wait();
-                }
-                Err(e) => {
-                    eprintln!("Failed to spawn claude: {}", e);
-                }
+        std::thread::spawn(move || match slave.spawn_command(cmd) {
+            Ok(mut child) => {
+                let _ = child.wait();
+            }
+            Err(e) => {
+                eprintln!("Failed to spawn claude: {}", e);
             }
         });
 
@@ -206,7 +210,10 @@ impl PtySession {
     }
 
     pub fn status_text(&self) -> String {
-        self.status_text.read().map(|s| s.clone()).unwrap_or_default()
+        self.status_text
+            .read()
+            .map(|s| s.clone())
+            .unwrap_or_default()
     }
 
     pub fn write_input(&mut self, bytes: &[u8]) -> Result<()> {

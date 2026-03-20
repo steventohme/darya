@@ -69,12 +69,7 @@ async fn debounce_task(
 
         // Drain additional events arriving within 200ms of quiet
         loop {
-            match tokio::time::timeout(
-                std::time::Duration::from_millis(200),
-                raw_rx.recv(),
-            )
-            .await
-            {
+            match tokio::time::timeout(std::time::Duration::from_millis(200), raw_rx.recv()).await {
                 Ok(Some(event)) => {
                     classify_event(&event, &mut modified_paths, &mut has_create_or_delete);
                 }

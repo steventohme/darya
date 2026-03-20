@@ -94,12 +94,11 @@ pub fn render_session(
             if let Some(ref sel) = app.text_selection {
                 if sel.session_id == session_id && !sel.pane_inner.is_empty() {
                     // Normalize start/end so start is before end
-                    let (start_row, start_col, end_row, end_col) =
-                        if sel.start <= sel.end {
-                            (sel.start.0, sel.start.1, sel.end.0, sel.end.1)
-                        } else {
-                            (sel.end.0, sel.end.1, sel.start.0, sel.start.1)
-                        };
+                    let (start_row, start_col, end_row, end_col) = if sel.start <= sel.end {
+                        (sel.start.0, sel.start.1, sel.end.0, sel.end.1)
+                    } else {
+                        (sel.end.0, sel.end.1, sel.start.0, sel.start.1)
+                    };
 
                     for row in start_row..=end_row {
                         let abs_y = inner.y + row;
@@ -141,12 +140,7 @@ pub fn render_session(
 
             // Show overlay bar if session has exited
             if app.exited_sessions.contains(session_id) && inner.height > 0 {
-                let overlay_area = Rect::new(
-                    inner.x,
-                    inner.y + inner.height - 1,
-                    inner.width,
-                    1,
-                );
+                let overlay_area = Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1);
                 let overlay = Paragraph::new(" [exited] press r to restart ")
                     .alignment(Alignment::Center)
                     .style(
@@ -162,8 +156,8 @@ pub fn render_session(
     }
 
     // No session data available — show placeholder
-    let placeholder = Paragraph::new("  No session data")
-        .style(Style::default().fg(app.theme.fg_dim));
+    let placeholder =
+        Paragraph::new("  No session data").style(Style::default().fg(app.theme.fg_dim));
     frame.render_widget(placeholder, inner);
 }
 
@@ -184,25 +178,51 @@ fn render_placeholder(
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let placeholder = Paragraph::new(format!("  {}", message))
-        .style(Style::default().fg(app.theme.fg_dim));
+    let placeholder =
+        Paragraph::new(format!("  {}", message)).style(Style::default().fg(app.theme.fg_dim));
     frame.render_widget(placeholder, inner);
 }
 
 /// Render the single-pane terminal panel.
-pub fn render(frame: &mut Frame, area: Rect, app: &App, session_manager: &SessionManager, is_focused: bool) {
+pub fn render(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    session_manager: &SessionManager,
+    is_focused: bool,
+) {
     if let Some(session_id) = app.active_session_id().map(|s| s.to_string()) {
         render_session(frame, area, app, session_manager, &session_id, is_focused);
     } else {
-        render_placeholder(frame, area, app, is_focused, " Claude Code ", "Press Enter on a worktree to start a Claude Code session");
+        render_placeholder(
+            frame,
+            area,
+            app,
+            is_focused,
+            " Claude Code ",
+            "Press Enter on a worktree to start a Claude Code session",
+        );
     }
 }
 
 /// Render the single-pane shell panel.
-pub fn render_shell(frame: &mut Frame, area: Rect, app: &App, session_manager: &SessionManager, is_focused: bool) {
+pub fn render_shell(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    session_manager: &SessionManager,
+    is_focused: bool,
+) {
     if let Some(session_id) = app.active_shell_session_id().map(|s| s.to_string()) {
         render_session(frame, area, app, session_manager, &session_id, is_focused);
     } else {
-        render_placeholder(frame, area, app, is_focused, " Shell ", "Press Enter to start a shell session");
+        render_placeholder(
+            frame,
+            area,
+            app,
+            is_focused,
+            " Shell ",
+            "Press Enter to start a shell session",
+        );
     }
 }

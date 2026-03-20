@@ -5,7 +5,9 @@ use ratatui::Frame;
 
 use ratatui::text::{Line, Span};
 
-use crate::app::{App, DirBrowser, InputMode, PanelFocus, Prompt, SplitDirection, ViewKind, PRESET_COLORS};
+use crate::app::{
+    App, DirBrowser, InputMode, PanelFocus, Prompt, SplitDirection, ViewKind, PRESET_COLORS,
+};
 use crate::planet;
 use crate::session::manager::SessionManager;
 use crate::widgets;
@@ -23,13 +25,21 @@ fn right_panel_rect(size: Rect, sidebar_pct: u16) -> Rect {
 
     Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(sidebar_pct), Constraint::Percentage(100 - sidebar_pct)])
+        .constraints([
+            Constraint::Percentage(sidebar_pct),
+            Constraint::Percentage(100 - sidebar_pct),
+        ])
         .split(outer[1])[1]
 }
 
 /// Compute inner Rects for each pane by splitting the right panel.
 /// `direction` controls whether panes are side-by-side (Horizontal) or stacked (Vertical).
-pub fn compute_pane_rects(size: Rect, pane_count: usize, sidebar_pct: u16, direction: SplitDirection) -> Vec<Rect> {
+pub fn compute_pane_rects(
+    size: Rect,
+    pane_count: usize,
+    sidebar_pct: u16,
+    direction: SplitDirection,
+) -> Vec<Rect> {
     let panel = right_panel_rect(size, sidebar_pct);
     if pane_count <= 1 {
         return vec![panel];
@@ -67,7 +77,9 @@ fn render_view(
 ) {
     match view {
         ViewKind::Worktrees => widgets::worktree_list::render(frame, area, app, is_focused),
-        ViewKind::Terminal => widgets::terminal_panel::render(frame, area, app, session_manager, is_focused),
+        ViewKind::Terminal => {
+            widgets::terminal_panel::render(frame, area, app, session_manager, is_focused)
+        }
         ViewKind::FileExplorer => widgets::file_explorer::render(frame, area, app, is_focused),
         ViewKind::Editor => widgets::editor::render(frame, area, app, is_focused),
         ViewKind::Search => widgets::search_results::render(frame, area, app, is_focused),
@@ -75,7 +87,9 @@ fn render_view(
         ViewKind::DiffView => widgets::diff_view::render(frame, area, app, is_focused),
         ViewKind::GitBlame => widgets::git_blame::render(frame, area, app, is_focused),
         ViewKind::GitLog => widgets::git_log::render(frame, area, app, is_focused),
-        ViewKind::Shell => widgets::terminal_panel::render_shell(frame, area, app, session_manager, is_focused),
+        ViewKind::Shell => {
+            widgets::terminal_panel::render_shell(frame, area, app, session_manager, is_focused)
+        }
     }
 }
 
@@ -97,20 +111,22 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
         .split(size);
 
     // Header
-    let header = Paragraph::new(" darya")
-        .style(
-            Style::default()
-                .fg(app.theme.border_active)
-                .bg(app.theme.highlight_bg)
-                .add_modifier(Modifier::BOLD),
-        );
+    let header = Paragraph::new(" darya").style(
+        Style::default()
+            .fg(app.theme.border_active)
+            .bg(app.theme.highlight_bg)
+            .add_modifier(Modifier::BOLD),
+    );
     frame.render_widget(header, outer[0]);
 
     // Main layout: left panel | right panel
     let sidebar_pct = app.sidebar_width;
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(sidebar_pct), Constraint::Percentage(100 - sidebar_pct)])
+        .constraints([
+            Constraint::Percentage(sidebar_pct),
+            Constraint::Percentage(100 - sidebar_pct),
+        ])
         .split(outer[1]);
 
     // Left panel (sidebar) — optionally split to include planet at bottom
@@ -124,37 +140,54 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             .constraints([Constraint::Min(0), Constraint::Length(planet_height)])
             .split(main_chunks[0]);
 
-        render_view(frame, sidebar_split[0], app.sidebar_view.to_view_kind(), app, session_manager, left_focused);
+        render_view(
+            frame,
+            sidebar_split[0],
+            app.sidebar_view.to_view_kind(),
+            app,
+            session_manager,
+            left_focused,
+        );
 
         // Render planet animation — render smaller than the area, with padding
         if let Some(ref anim) = app.planet_animation {
             let anim_frame = anim.frame_at(app.planet_tick / 2); // ~10fps
             let render_h = planet_height.saturating_sub(4); // 2 for box borders + 1 padding each side
             let render_w = (render_h * 2).min(sidebar_split[1].width);
-            let planet_lines = planet::renderer::render_frame(
-                anim_frame,
-                render_w,
-                render_h,
-                app.theme.bg,
-            );
+            let planet_lines =
+                planet::renderer::render_frame(anim_frame, render_w, render_h, app.theme.bg);
             widgets::planet_widget::render(frame, sidebar_split[1], &planet_lines);
         }
     } else {
-        render_view(frame, main_chunks[0], app.sidebar_view.to_view_kind(), app, session_manager, left_focused);
+        render_view(
+            frame,
+            main_chunks[0],
+            app.sidebar_view.to_view_kind(),
+            app,
+            session_manager,
+            left_focused,
+        );
     }
 
     // Right panel (main) — split panes or full panel
     let right_focused = app.panel_focus == PanelFocus::Right;
     // Snapshot pane info to avoid borrow conflicts with mutable render calls
-    let pane_snapshot: Option<(Vec<(crate::app::PaneContent, bool)>, SplitDirection)> = app.pane_layout.as_ref().and_then(|layout| {
-        if layout.panes.len() > 1 {
-            Some((layout.panes.iter().enumerate().map(|(i, c)| {
-                (c.clone(), right_focused && i == layout.focused)
-            }).collect(), layout.direction))
-        } else {
-            None
-        }
-    });
+    let pane_snapshot: Option<(Vec<(crate::app::PaneContent, bool)>, SplitDirection)> =
+        app.pane_layout.as_ref().and_then(|layout| {
+            if layout.panes.len() > 1 {
+                Some((
+                    layout
+                        .panes
+                        .iter()
+                        .enumerate()
+                        .map(|(i, c)| (c.clone(), right_focused && i == layout.focused))
+                        .collect(),
+                    layout.direction,
+                ))
+            } else {
+                None
+            }
+        });
     if let Some((panes, direction)) = pane_snapshot {
         let pane_rects = compute_pane_rects(size, panes.len(), sidebar_pct, direction);
         for (i, (content, pane_focused)) in panes.iter().enumerate() {
@@ -162,7 +195,12 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
                 crate::app::PaneContent::Terminal(session_id)
                 | crate::app::PaneContent::Shell(session_id) => {
                     widgets::terminal_panel::render_session(
-                        frame, pane_rects[i], app, session_manager, session_id, *pane_focused,
+                        frame,
+                        pane_rects[i],
+                        app,
+                        session_manager,
+                        session_id,
+                        *pane_focused,
                     );
                 }
                 crate::app::PaneContent::Editor => {
@@ -171,13 +209,23 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             }
         }
     } else {
-        render_view(frame, main_chunks[1], app.main_view.to_view_kind(), app, session_manager, right_focused);
+        render_view(
+            frame,
+            main_chunks[1],
+            app.main_view.to_view_kind(),
+            app,
+            session_manager,
+            right_focused,
+        );
     }
 
     // Status bar
     if let Some(ref msg) = app.status_message {
-        let status = Paragraph::new(format!(" {} ", msg))
-            .style(Style::default().fg(app.theme.warning).bg(app.theme.status_bar_bg));
+        let status = Paragraph::new(format!(" {} ", msg)).style(
+            Style::default()
+                .fg(app.theme.warning)
+                .bg(app.theme.status_bar_bg),
+        );
         frame.render_widget(status, outer[2]);
     } else {
         let bar_width = outer[2].width as usize;
@@ -249,8 +297,11 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             right,
         );
 
-        let status = Paragraph::new(line)
-            .style(Style::default().fg(app.theme.status_bar_fg).bg(app.theme.status_bar_bg));
+        let status = Paragraph::new(line).style(
+            Style::default()
+                .fg(app.theme.status_bar_fg)
+                .bg(app.theme.status_bar_bg),
+        );
         frame.render_widget(status, outer[2]);
     }
 
@@ -302,8 +353,17 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
         return;
     }
 
-    let width = if matches!(prompt, Prompt::ColorPicker { .. }) { 30u16 } else { 50u16 }.min(area.width.saturating_sub(4));
-    let height = if matches!(prompt, Prompt::ColorPicker { .. }) { 4u16 } else { 3u16 };
+    let width = if matches!(prompt, Prompt::ColorPicker { .. }) {
+        30u16
+    } else {
+        50u16
+    }
+    .min(area.width.saturating_sub(4));
+    let height = if matches!(prompt, Prompt::ColorPicker { .. }) {
+        4u16
+    } else {
+        3u16
+    };
     let x = (area.width.saturating_sub(width)) / 2;
     let y = (area.height.saturating_sub(height)) / 2;
     let popup_area = Rect::new(x, y, width, height);
@@ -321,8 +381,12 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
             let inner = block.inner(popup_area);
             frame.render_widget(block, popup_area);
 
-            let text = Paragraph::new(format!("{}█", input))
-                .style(Style::default().fg(theme.fg).bg(theme.bg).add_modifier(Modifier::BOLD));
+            let text = Paragraph::new(format!("{}█", input)).style(
+                Style::default()
+                    .fg(theme.fg)
+                    .bg(theme.bg)
+                    .add_modifier(Modifier::BOLD),
+            );
             frame.render_widget(text, inner);
         }
         Prompt::ConfirmDelete { worktree_name } => {
@@ -349,8 +413,12 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
             let inner = block.inner(popup_area);
             frame.render_widget(block, popup_area);
 
-            let text = Paragraph::new(format!("{}█", input))
-                .style(Style::default().fg(theme.fg).bg(theme.bg).add_modifier(Modifier::BOLD));
+            let text = Paragraph::new(format!("{}█", input)).style(
+                Style::default()
+                    .fg(theme.fg)
+                    .bg(theme.bg)
+                    .add_modifier(Modifier::BOLD),
+            );
             frame.render_widget(text, inner);
         }
         Prompt::AddShellSlot { input } => {
@@ -363,8 +431,12 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
             let inner = block.inner(popup_area);
             frame.render_widget(block, popup_area);
 
-            let text = Paragraph::new(format!("{}█", input))
-                .style(Style::default().fg(theme.fg).bg(theme.bg).add_modifier(Modifier::BOLD));
+            let text = Paragraph::new(format!("{}█", input)).style(
+                Style::default()
+                    .fg(theme.fg)
+                    .bg(theme.bg)
+                    .add_modifier(Modifier::BOLD),
+            );
             frame.render_widget(text, inner);
         }
         Prompt::ConfirmDeleteSection { section_name, .. } => {
@@ -402,7 +474,9 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
                 let mut spans: Vec<Span> = Vec::new();
                 for col in 0..cols {
                     let idx = (row * cols + col) as usize;
-                    if idx >= PRESET_COLORS.len() { break; }
+                    if idx >= PRESET_COLORS.len() {
+                        break;
+                    }
                     let is_selected = idx == *cursor;
                     let swatch = match PRESET_COLORS[idx] {
                         None => "--",
@@ -410,7 +484,10 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
                     };
                     let fg = PRESET_COLORS[idx].unwrap_or(theme.fg_dim);
                     let swatch_style = Style::default().fg(fg).bg(theme.bg);
-                    let bracket_style = Style::default().fg(theme.fg).bg(theme.bg).add_modifier(Modifier::BOLD);
+                    let bracket_style = Style::default()
+                        .fg(theme.fg)
+                        .bg(theme.bg)
+                        .add_modifier(Modifier::BOLD);
                     let space_style = Style::default().bg(theme.bg);
                     if is_selected {
                         spans.push(Span::styled("[", bracket_style));
@@ -445,7 +522,11 @@ fn render_setup_guide(frame: &mut Frame, area: Rect, theme: &crate::config::Them
 
     let block = Block::default()
         .title(" Welcome to Darya ")
-        .title_style(Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD))
+        .title_style(
+            Style::default()
+                .fg(theme.border_active)
+                .add_modifier(Modifier::BOLD),
+        )
         .borders(Borders::ALL)
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(theme.border_active))
@@ -456,11 +537,16 @@ fn render_setup_guide(frame: &mut Frame, area: Rect, theme: &crate::config::Them
     let bold = Style::default().fg(theme.fg).add_modifier(Modifier::BOLD);
     let normal = Style::default().fg(theme.fg);
     let dim = Style::default().fg(theme.fg_dim);
-    let accent = Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD);
+    let accent = Style::default()
+        .fg(theme.border_active)
+        .add_modifier(Modifier::BOLD);
 
     let lines = vec![
         Line::from(""),
-        Line::from(vec![Span::styled("  Darya uses Cmd+key shortcuts:", normal)]),
+        Line::from(vec![Span::styled(
+            "  Darya uses Cmd+key shortcuts:",
+            normal,
+        )]),
         Line::from(vec![
             Span::styled("    Cmd+1", accent),
             Span::styled("  Worktrees    ", normal),
@@ -474,12 +560,27 @@ fn render_setup_guide(frame: &mut Frame, area: Rect, theme: &crate::config::Them
             Span::styled("  Command Palette", normal),
         ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  iTerm2 intercepts these by default. To fix:", normal)]),
+        Line::from(vec![Span::styled(
+            "  iTerm2 intercepts these by default. To fix:",
+            normal,
+        )]),
         Line::from(""),
-        Line::from(vec![Span::styled("  1. ", bold), Span::styled("iTerm2 \u{2192} Settings \u{2192} Keys \u{2192} Key Bindings", normal)]),
-        Line::from(vec![Span::styled("  2. ", bold), Span::styled("Remove or reassign Cmd+1 through Cmd+9", normal)]),
+        Line::from(vec![
+            Span::styled("  1. ", bold),
+            Span::styled(
+                "iTerm2 \u{2192} Settings \u{2192} Keys \u{2192} Key Bindings",
+                normal,
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  2. ", bold),
+            Span::styled("Remove or reassign Cmd+1 through Cmd+9", normal),
+        ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  Or edit ~/.config/darya/config.toml to rebind keys", dim)]),
+        Line::from(vec![Span::styled(
+            "  Or edit ~/.config/darya/config.toml to rebind keys",
+            dim,
+        )]),
         Line::from(""),
         Line::from(vec![Span::styled("  Press Enter or Esc to dismiss", dim)]),
     ];
@@ -488,7 +589,12 @@ fn render_setup_guide(frame: &mut Frame, area: Rect, theme: &crate::config::Them
     frame.render_widget(paragraph, inner);
 }
 
-fn render_restore_session(frame: &mut Frame, area: Rect, theme: &crate::config::Theme, count: usize) {
+fn render_restore_session(
+    frame: &mut Frame,
+    area: Rect,
+    theme: &crate::config::Theme,
+    count: usize,
+) {
     let width = 45u16.min(area.width.saturating_sub(4));
     let height = 5u16.min(area.height.saturating_sub(2));
     let x = (area.width.saturating_sub(width)) / 2;
@@ -499,7 +605,11 @@ fn render_restore_session(frame: &mut Frame, area: Rect, theme: &crate::config::
 
     let block = Block::default()
         .title(" Restore Sessions ")
-        .title_style(Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD))
+        .title_style(
+            Style::default()
+                .fg(theme.border_active)
+                .add_modifier(Modifier::BOLD),
+        )
         .borders(Borders::ALL)
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(theme.border_active))
@@ -510,16 +620,24 @@ fn render_restore_session(frame: &mut Frame, area: Rect, theme: &crate::config::
     let session_word = if count == 1 { "session" } else { "sessions" };
     let lines = vec![
         Line::from(""),
+        Line::from(vec![Span::styled(
+            format!("  Restore {} previous {}? ", count, session_word),
+            Style::default().fg(theme.fg),
+        )]),
         Line::from(vec![
             Span::styled(
-                format!("  Restore {} previous {}? ", count, session_word),
-                Style::default().fg(theme.fg),
+                "  y",
+                Style::default()
+                    .fg(theme.border_active)
+                    .add_modifier(Modifier::BOLD),
             ),
-        ]),
-        Line::from(vec![
-            Span::styled("  y", Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD)),
             Span::styled("/Enter: yes  ", Style::default().fg(theme.fg_dim)),
-            Span::styled("n", Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "n",
+                Style::default()
+                    .fg(theme.border_active)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled("/Esc: no", Style::default().fg(theme.fg_dim)),
         ]),
     ];
@@ -528,9 +646,18 @@ fn render_restore_session(frame: &mut Frame, area: Rect, theme: &crate::config::
     frame.render_widget(paragraph, inner);
 }
 
-fn render_dir_browser(frame: &mut Frame, area: Rect, browser: &DirBrowser, theme: &crate::config::Theme) {
-    let width = (area.width * 60 / 100).max(30).min(area.width.saturating_sub(4));
-    let height = (area.height * 70 / 100).max(10).min(area.height.saturating_sub(2));
+fn render_dir_browser(
+    frame: &mut Frame,
+    area: Rect,
+    browser: &DirBrowser,
+    theme: &crate::config::Theme,
+) {
+    let width = (area.width * 60 / 100)
+        .max(30)
+        .min(area.width.saturating_sub(4));
+    let height = (area.height * 70 / 100)
+        .max(10)
+        .min(area.height.saturating_sub(2));
     let x = (area.width.saturating_sub(width)) / 2;
     let y = (area.height.saturating_sub(height)) / 2;
     let popup_area = Rect::new(x, y, width, height);
@@ -555,9 +682,7 @@ fn render_dir_browser(frame: &mut Frame, area: Rect, browser: &DirBrowser, theme
     let total = browser.entries.len();
 
     // Scroll so selected item is visible
-    let scroll_offset = if total <= list_height {
-        0
-    } else if browser.selected < list_height / 2 {
+    let scroll_offset = if total <= list_height || browser.selected < list_height / 2 {
         0
     } else if browser.selected + list_height / 2 >= total {
         total.saturating_sub(list_height)
@@ -565,7 +690,10 @@ fn render_dir_browser(frame: &mut Frame, area: Rect, browser: &DirBrowser, theme
         browser.selected.saturating_sub(list_height / 2)
     };
 
-    let visible_entries = browser.entries.iter().enumerate()
+    let visible_entries = browser
+        .entries
+        .iter()
+        .enumerate()
         .skip(scroll_offset)
         .take(list_height);
 
@@ -596,12 +724,30 @@ fn render_dir_browser(frame: &mut Frame, area: Rect, browser: &DirBrowser, theme
     // Footer hint
     let footer_area = Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1);
     let footer = Line::from(vec![
-        Span::styled("Enter", Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Enter",
+            Style::default()
+                .fg(theme.border_active)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(": select  ", Style::default().fg(theme.fg_dim)),
-        Span::styled("Esc", Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Esc",
+            Style::default()
+                .fg(theme.border_active)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(": cancel  ", Style::default().fg(theme.fg_dim)),
-        Span::styled("h/l", Style::default().fg(theme.border_active).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "h/l",
+            Style::default()
+                .fg(theme.border_active)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(": collapse/expand", Style::default().fg(theme.fg_dim)),
     ]);
-    frame.render_widget(Paragraph::new(footer).style(Style::default().bg(theme.bg)), footer_area);
+    frame.render_widget(
+        Paragraph::new(footer).style(Style::default().bg(theme.bg)),
+        footer_area,
+    );
 }

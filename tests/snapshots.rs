@@ -5,19 +5,24 @@ use ratatui::Terminal;
 
 use darya::app::{
     App, BlameLine, CommandPaletteState, DiffLine, DiffLineKind, DiffViewState, FileExplorerState,
-    GitFileStatus, GitLogEntry, GitLogState, GitBlameState,
-    GitStatusCategory, GitStatusEntry, GitStatusState, InputMode, MainView, PaneContent, PaneLayout,
-    PanelFocus, Prompt, SidebarView, SplitDirection,
+    GitBlameState, GitFileStatus, GitLogEntry, GitLogState, GitStatusCategory, GitStatusEntry,
+    GitStatusState, InputMode, MainView, PaneContent, PaneLayout, PanelFocus, Prompt, SidebarView,
+    SplitDirection,
 };
 use darya::config::{KeybindingsConfig, Theme};
-use darya::planet::types::PlanetKind;
 use darya::planet::sprites::PlanetAnimation;
+use darya::planet::types::PlanetKind;
 use darya::session::manager::SessionManager;
 
-use helpers::{make_worktrees, item_path, set_session};
+use helpers::{item_path, make_worktrees, set_session};
 
 /// Render the full UI frame into a string buffer for snapshot comparison.
-fn render_to_string(app: &mut App, session_manager: &SessionManager, width: u16, height: u16) -> String {
+fn render_to_string(
+    app: &mut App,
+    session_manager: &SessionManager,
+    width: u16,
+    height: u16,
+) -> String {
     let backend = TestBackend::new(width, height);
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
@@ -49,7 +54,14 @@ fn buffer_to_string(buf: &ratatui::buffer::Buffer) -> String {
 
 fn make_test_app(n_worktrees: usize) -> App {
     let worktrees = make_worktrees(n_worktrees);
-    App::new(worktrees, Theme::dark(), true, KeybindingsConfig::default(), darya::config::CLAUDE_COMMAND.to_string(), "/bin/sh".to_string())
+    App::new(
+        worktrees,
+        Theme::dark(),
+        true,
+        KeybindingsConfig::default(),
+        darya::config::CLAUDE_COMMAND.to_string(),
+        "/bin/sh".to_string(),
+    )
 }
 
 fn make_session_manager() -> SessionManager {
@@ -209,12 +221,30 @@ fn snapshot_diff_view_with_changes() {
     app.diff_view = Some(DiffViewState {
         file_path: "src/app.rs".to_string(),
         lines: vec![
-            DiffLine { kind: DiffLineKind::Header, content: "diff --git a/src/app.rs b/src/app.rs".to_string() },
-            DiffLine { kind: DiffLineKind::Header, content: "@@ -1,3 +1,4 @@".to_string() },
-            DiffLine { kind: DiffLineKind::Context, content: " use std::collections::HashMap;".to_string() },
-            DiffLine { kind: DiffLineKind::Addition, content: "+use std::process::Command;".to_string() },
-            DiffLine { kind: DiffLineKind::Context, content: " use crossterm::event::KeyCode;".to_string() },
-            DiffLine { kind: DiffLineKind::Deletion, content: "-use old_crate::Something;".to_string() },
+            DiffLine {
+                kind: DiffLineKind::Header,
+                content: "diff --git a/src/app.rs b/src/app.rs".to_string(),
+            },
+            DiffLine {
+                kind: DiffLineKind::Header,
+                content: "@@ -1,3 +1,4 @@".to_string(),
+            },
+            DiffLine {
+                kind: DiffLineKind::Context,
+                content: " use std::collections::HashMap;".to_string(),
+            },
+            DiffLine {
+                kind: DiffLineKind::Addition,
+                content: "+use std::process::Command;".to_string(),
+            },
+            DiffLine {
+                kind: DiffLineKind::Context,
+                content: " use crossterm::event::KeyCode;".to_string(),
+            },
+            DiffLine {
+                kind: DiffLineKind::Deletion,
+                content: "-use old_crate::Something;".to_string(),
+            },
         ],
         scroll_offset: 0,
         visible_height: 20,
@@ -266,7 +296,10 @@ fn snapshot_split_two_panes() {
     app.main_view = MainView::Terminal;
     app.panel_focus = PanelFocus::Right;
     app.pane_layout = Some(PaneLayout {
-        panes: vec![PaneContent::Terminal("s0".to_string()), PaneContent::Terminal("s1".to_string())],
+        panes: vec![
+            PaneContent::Terminal("s0".to_string()),
+            PaneContent::Terminal("s1".to_string()),
+        ],
         focused: 0,
         direction: SplitDirection::Horizontal,
     });
@@ -286,7 +319,10 @@ fn snapshot_split_focused_pane_highlighted() {
     app.panel_focus = PanelFocus::Right;
     // Focus is on second pane
     app.pane_layout = Some(PaneLayout {
-        panes: vec![PaneContent::Terminal("s0".to_string()), PaneContent::Terminal("s1".to_string())],
+        panes: vec![
+            PaneContent::Terminal("s0".to_string()),
+            PaneContent::Terminal("s1".to_string()),
+        ],
         focused: 1,
         direction: SplitDirection::Horizontal,
     });
@@ -305,7 +341,10 @@ fn snapshot_split_two_panes_vertical() {
     app.main_view = MainView::Terminal;
     app.panel_focus = PanelFocus::Right;
     app.pane_layout = Some(PaneLayout {
-        panes: vec![PaneContent::Terminal("s0".to_string()), PaneContent::Terminal("s1".to_string())],
+        panes: vec![
+            PaneContent::Terminal("s0".to_string()),
+            PaneContent::Terminal("s1".to_string()),
+        ],
         focused: 0,
         direction: SplitDirection::Vertical,
     });
@@ -336,9 +375,15 @@ fn snapshot_file_explorer_with_git_indicators() {
     app.file_explorer.refresh();
 
     // Inject git indicators matching relative paths
-    app.file_explorer.git_indicators.insert("src/app.rs".to_string(), GitFileStatus::Modified);
-    app.file_explorer.git_indicators.insert("README.md".to_string(), GitFileStatus::Untracked);
-    app.file_explorer.git_indicators.insert("src/main.rs".to_string(), GitFileStatus::Added);
+    app.file_explorer
+        .git_indicators
+        .insert("src/app.rs".to_string(), GitFileStatus::Modified);
+    app.file_explorer
+        .git_indicators
+        .insert("README.md".to_string(), GitFileStatus::Untracked);
+    app.file_explorer
+        .git_indicators
+        .insert("src/main.rs".to_string(), GitFileStatus::Added);
     app.file_explorer.git_indicators_stale = false; // prevent ensure_git_indicators from clearing injected data
 
     app.sidebar_view = SidebarView::FileExplorer;
@@ -450,14 +495,12 @@ fn snapshot_git_log_view() {
 fn snapshot_git_log_with_file_filter() {
     let mut app = make_test_app(3);
     app.git_log = Some(GitLogState {
-        entries: vec![
-            GitLogEntry {
-                hash_short: "abc1234".to_string(),
-                subject: "Fix parser bug".to_string(),
-                author: "Alice".to_string(),
-                relative_date: "1 hour ago".to_string(),
-            },
-        ],
+        entries: vec![GitLogEntry {
+            hash_short: "abc1234".to_string(),
+            subject: "Fix parser bug".to_string(),
+            author: "Alice".to_string(),
+            relative_date: "1 hour ago".to_string(),
+        }],
         selected: 0,
         scroll_offset: 0,
         visible_height: 20,

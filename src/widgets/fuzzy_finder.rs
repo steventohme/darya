@@ -12,8 +12,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     // Centered overlay: ~60% width, ~60% height
-    let width = (area.width * 3 / 5).max(40).min(area.width.saturating_sub(4));
-    let height = (area.height * 3 / 5).max(10).min(area.height.saturating_sub(4));
+    let width = (area.width * 3 / 5)
+        .max(40)
+        .min(area.width.saturating_sub(4));
+    let height = (area.height * 3 / 5)
+        .max(10)
+        .min(area.height.saturating_sub(4));
     let x = (area.width.saturating_sub(width)) / 2;
     let y = (area.height.saturating_sub(height)) / 2;
     let popup_area = Rect::new(x, y, width, height);
@@ -35,13 +39,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     // Input field (1 line at top)
     let input_area = Rect::new(inner.x, inner.y, inner.width, 1);
-    let input_text = Paragraph::new(format!("> {}█", finder.input))
-        .style(
-            Style::default()
-                .fg(app.theme.fg)
-                .bg(app.theme.bg)
-                .add_modifier(Modifier::BOLD),
-        );
+    let input_text = Paragraph::new(format!("> {}█", finder.input)).style(
+        Style::default()
+            .fg(app.theme.fg)
+            .bg(app.theme.bg)
+            .add_modifier(Modifier::BOLD),
+    );
     frame.render_widget(input_text, input_area);
 
     // Results list (rest of the space)

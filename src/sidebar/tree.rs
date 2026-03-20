@@ -110,8 +110,7 @@ impl SidebarTree {
                 true
             }
             TreeNode::Item(si, ii) => {
-                self.sections[si].items[ii].collapsed =
-                    !self.sections[si].items[ii].collapsed;
+                self.sections[si].items[ii].collapsed = !self.sections[si].items[ii].collapsed;
                 self.rebuild_visible();
                 true
             }
@@ -209,7 +208,7 @@ impl SidebarTree {
 
     /// Get the mutable SidebarItem the cursor is on (or parent for session).
     pub fn selected_item_mut(&mut self) -> Option<&mut SidebarItem> {
-        match self.visible.get(self.cursor)?.clone() {
+        match *self.visible.get(self.cursor)? {
             TreeNode::Section(_) => None,
             TreeNode::Item(si, ii) => self.sections.get_mut(si)?.items.get_mut(ii),
             TreeNode::Session(si, ii, _) => self.sections.get_mut(si)?.items.get_mut(ii),
@@ -228,10 +227,14 @@ impl SidebarTree {
 
     /// Get mutable selected session slot.
     pub fn selected_session_mut(&mut self) -> Option<&mut SessionSlot> {
-        match self.visible.get(self.cursor)?.clone() {
-            TreeNode::Session(si, ii, slot) => {
-                self.sections.get_mut(si)?.items.get_mut(ii)?.sessions.get_mut(slot)
-            }
+        match *self.visible.get(self.cursor)? {
+            TreeNode::Session(si, ii, slot) => self
+                .sections
+                .get_mut(si)?
+                .items
+                .get_mut(ii)?
+                .sessions
+                .get_mut(slot),
             _ => None,
         }
     }
@@ -479,10 +482,7 @@ impl SidebarTree {
 
     /// Get a flat list of all items across all sections (for backward compat).
     pub fn all_items(&self) -> Vec<&SidebarItem> {
-        self.sections
-            .iter()
-            .flat_map(|s| s.items.iter())
-            .collect()
+        self.sections.iter().flat_map(|s| s.items.iter()).collect()
     }
 
     /// Get the session slot coordinates for the cursor position.
@@ -530,30 +530,45 @@ impl SidebarTree {
 
     /// Convert to config format for persistence.
     pub fn to_sections_config(&self) -> crate::config::SectionsConfig {
-        use crate::config::{SectionItemToml, SectionShellToml, SectionToml, SectionsConfig, color_to_hex};
-        let sections = self.sections.iter().map(|section| {
-            let items = section.items.iter().map(|item| {
-                let shells: Vec<SectionShellToml> = item.sessions.iter()
-                    .filter(|s| s.kind == SessionKind::Shell)
-                    .map(|s| SectionShellToml {
-                        label: s.label.clone(),
-                        command: None,
-                        color: s.color.and_then(color_to_hex),
+        use crate::config::{
+            color_to_hex, SectionItemToml, SectionShellToml, SectionToml, SectionsConfig,
+        };
+        let sections = self
+            .sections
+            .iter()
+            .map(|section| {
+                let items = section
+                    .items
+                    .iter()
+                    .map(|item| {
+                        let shells: Vec<SectionShellToml> = item
+                            .sessions
+                            .iter()
+                            .filter(|s| s.kind == SessionKind::Shell)
+                            .map(|s| SectionShellToml {
+                                label: s.label.clone(),
+                                command: None,
+                                color: s.color.and_then(color_to_hex),
+                            })
+                            .collect();
+                        SectionItemToml {
+                            path: item.path.to_string_lossy().to_string(),
+                            shells,
+                            color: item.color.and_then(color_to_hex),
+                        }
                     })
                     .collect();
-                SectionItemToml {
-                    path: item.path.to_string_lossy().to_string(),
-                    shells,
-                    color: item.color.and_then(color_to_hex),
+                SectionToml {
+                    name: section.name.clone(),
+                    root: section
+                        .root_path
+                        .as_ref()
+                        .map(|p| p.to_string_lossy().to_string()),
+                    items,
+                    color: section.color.and_then(color_to_hex),
                 }
-            }).collect();
-            SectionToml {
-                name: section.name.clone(),
-                root: section.root_path.as_ref().map(|p| p.to_string_lossy().to_string()),
-                items,
-                color: section.color.and_then(color_to_hex),
-            }
-        }).collect();
+            })
+            .collect();
         SectionsConfig { sections }
     }
 
@@ -565,47 +580,56 @@ impl SidebarTree {
             return Self::from_worktrees(worktrees);
         }
 
-        let sections: Vec<Section> = config.sections.iter().map(|sect_toml| {
-            let items: Vec<SidebarItem> = sect_toml.items.iter().map(|item_toml| {
-                let path = PathBuf::from(&item_toml.path);
-                // Match with worktree info if available
-                let wt = worktrees.iter().find(|w| w.path == path);
-                let mut sessions = vec![SessionSlot {
-                    kind: SessionKind::Claude,
-                    label: "claude".to_string(),
-                    session_id: None,
-                    color: None,
-                }];
-                // Add configured shell slots
-                for shell in &item_toml.shells {
-                    sessions.push(SessionSlot {
-                        kind: SessionKind::Shell,
-                        label: shell.label.clone(),
-                        session_id: None,
-                        color: shell.color.as_deref().and_then(parse_hex_color),
-                    });
+        let sections: Vec<Section> = config
+            .sections
+            .iter()
+            .map(|sect_toml| {
+                let items: Vec<SidebarItem> = sect_toml
+                    .items
+                    .iter()
+                    .map(|item_toml| {
+                        let path = PathBuf::from(&item_toml.path);
+                        // Match with worktree info if available
+                        let wt = worktrees.iter().find(|w| w.path == path);
+                        let mut sessions = vec![SessionSlot {
+                            kind: SessionKind::Claude,
+                            label: "claude".to_string(),
+                            session_id: None,
+                            color: None,
+                        }];
+                        // Add configured shell slots
+                        for shell in &item_toml.shells {
+                            sessions.push(SessionSlot {
+                                kind: SessionKind::Shell,
+                                label: shell.label.clone(),
+                                session_id: None,
+                                color: shell.color.as_deref().and_then(parse_hex_color),
+                            });
+                        }
+                        SidebarItem {
+                            path: path.clone(),
+                            display_name: wt.map(|w| w.name.clone()).unwrap_or_else(|| {
+                                path.file_name()
+                                    .map(|n| n.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| item_toml.path.clone())
+                            }),
+                            branch: wt.and_then(|w| w.branch.clone()),
+                            is_main: wt.map(|w| w.is_main).unwrap_or(false),
+                            collapsed: true,
+                            sessions,
+                            color: item_toml.color.as_deref().and_then(parse_hex_color),
+                        }
+                    })
+                    .collect();
+                Section {
+                    name: sect_toml.name.clone(),
+                    collapsed: false,
+                    items,
+                    root_path: sect_toml.root.as_ref().map(PathBuf::from),
+                    color: sect_toml.color.as_deref().and_then(parse_hex_color),
                 }
-                SidebarItem {
-                    path: path.clone(),
-                    display_name: wt.map(|w| w.name.clone())
-                        .unwrap_or_else(|| path.file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_else(|| item_toml.path.clone())),
-                    branch: wt.and_then(|w| w.branch.clone()),
-                    is_main: wt.map(|w| w.is_main).unwrap_or(false),
-                    collapsed: true,
-                    sessions,
-                    color: item_toml.color.as_deref().and_then(parse_hex_color),
-                }
-            }).collect();
-            Section {
-                name: sect_toml.name.clone(),
-                collapsed: false,
-                items,
-                root_path: sect_toml.root.as_ref().map(PathBuf::from),
-                color: sect_toml.color.as_deref().and_then(parse_hex_color),
-            }
-        }).collect();
+            })
+            .collect();
 
         let mut tree = Self {
             sections,

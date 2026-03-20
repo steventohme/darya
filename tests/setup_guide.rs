@@ -18,7 +18,9 @@ static HOME_LOCK: Mutex<()> = Mutex::new(());
 fn setup_done_returns_false_when_no_marker() {
     let _lock = HOME_LOCK.lock().unwrap();
     let dir = tempfile::tempdir().unwrap();
-    unsafe { std::env::set_var("HOME", dir.path()); }
+    unsafe {
+        std::env::set_var("HOME", dir.path());
+    }
     assert!(!config::setup_done());
 }
 
@@ -26,7 +28,9 @@ fn setup_done_returns_false_when_no_marker() {
 fn mark_setup_done_creates_marker() {
     let _lock = HOME_LOCK.lock().unwrap();
     let dir = tempfile::tempdir().unwrap();
-    unsafe { std::env::set_var("HOME", dir.path()); }
+    unsafe {
+        std::env::set_var("HOME", dir.path());
+    }
     assert!(!config::setup_done());
     config::mark_setup_done();
     assert!(config::setup_done());

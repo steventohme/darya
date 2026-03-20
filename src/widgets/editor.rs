@@ -29,7 +29,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
     // Build title
     let modified_indicator = if editor.modified { " [+]" } else { "" };
     let mode_label = if editor.read_only { "VIEW" } else { "EDIT" };
-    let title = format!(" {} {}{} ", editor.file_name(), mode_label, modified_indicator);
+    let title = format!(
+        " {} {}{} ",
+        editor.file_name(),
+        mode_label,
+        modified_indicator
+    );
 
     let block = Block::default()
         .title(title)
@@ -59,7 +64,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                 .bg(app.theme.fg)
                 .add_modifier(Modifier::BOLD),
         )
-        .selection_style(Style::default().fg(app.theme.bg).bg(app.theme.border_active))
+        .selection_style(
+            Style::default()
+                .fg(app.theme.bg)
+                .bg(app.theme.border_active),
+        )
         .line_numbers_style(Style::default().fg(app.theme.fg_dim))
         .hide_status_line();
 

@@ -10,14 +10,23 @@ fn make_parser() -> (Arc<RwLock<vt100::Parser<PtyCallback>>>, PtyCallback) {
     let bell_count = callback.bell_count.clone();
     let done_count = callback.done_count.clone();
     let status_text = callback.status_text.clone();
-    let parser = vt100::Parser::new_with_callbacks(24, 80, 0, PtyCallback {
-        bell_count: bell_count.clone(),
-        done_count: done_count.clone(),
-        status_text: status_text.clone(),
-    });
+    let parser = vt100::Parser::new_with_callbacks(
+        24,
+        80,
+        0,
+        PtyCallback {
+            bell_count: bell_count.clone(),
+            done_count: done_count.clone(),
+            status_text: status_text.clone(),
+        },
+    );
     (
         Arc::new(RwLock::new(parser)),
-        PtyCallback { bell_count, done_count, status_text },
+        PtyCallback {
+            bell_count,
+            done_count,
+            status_text,
+        },
     )
 }
 

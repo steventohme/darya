@@ -27,7 +27,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
             let indent = "  ".repeat(entry.depth);
             let expanded = entry.is_dir && app.file_explorer.expanded.contains(&entry.path);
             let fi = if entry.is_dir {
-                if expanded { icons::dir_icon_open() } else { icons::file_icon(&entry.name, true) }
+                if expanded {
+                    icons::dir_icon_open()
+                } else {
+                    icons::file_icon(&entry.name, true)
+                }
             } else {
                 icons::file_icon(&entry.name, false)
             };
@@ -39,8 +43,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
 
             let marker = if entry.is_dir {
                 // O(1) lookup in pre-computed dirty dirs set
-                let dir_rel = entry.path
-                    .strip_prefix(&root)
+                let dir_rel = entry
+                    .path
+                    .strip_prefix(root)
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default();
                 if app.file_explorer.dirty_dirs.contains(&dir_rel) {
@@ -49,16 +54,27 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     Span::raw("")
                 }
             } else {
-                let rel = entry.path
-                    .strip_prefix(&root)
+                let rel = entry
+                    .path
+                    .strip_prefix(root)
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default();
                 match app.file_explorer.git_indicators.get(&rel) {
-                    Some(GitFileStatus::Added) => Span::styled(" A", Style::default().fg(Color::Green)),
-                    Some(GitFileStatus::Modified) => Span::styled(" M", Style::default().fg(Color::Yellow)),
-                    Some(GitFileStatus::Deleted) => Span::styled(" D", Style::default().fg(Color::Red)),
-                    Some(GitFileStatus::Renamed) => Span::styled(" R", Style::default().fg(Color::Blue)),
-                    Some(GitFileStatus::Untracked) => Span::styled(" ?", Style::default().fg(Color::DarkGray)),
+                    Some(GitFileStatus::Added) => {
+                        Span::styled(" A", Style::default().fg(Color::Green))
+                    }
+                    Some(GitFileStatus::Modified) => {
+                        Span::styled(" M", Style::default().fg(Color::Yellow))
+                    }
+                    Some(GitFileStatus::Deleted) => {
+                        Span::styled(" D", Style::default().fg(Color::Red))
+                    }
+                    Some(GitFileStatus::Renamed) => {
+                        Span::styled(" R", Style::default().fg(Color::Blue))
+                    }
+                    Some(GitFileStatus::Untracked) => {
+                        Span::styled(" ?", Style::default().fg(Color::DarkGray))
+                    }
                     None => Span::raw(""),
                 }
             };

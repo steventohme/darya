@@ -223,7 +223,11 @@ impl KeybindingsConfig {
     }
 
     /// Check if a key event matches a binding.
-    pub fn matches(binding: &(KeyModifiers, KeyCode), modifiers: KeyModifiers, code: KeyCode) -> bool {
+    pub fn matches(
+        binding: &(KeyModifiers, KeyCode),
+        modifiers: KeyModifiers,
+        code: KeyCode,
+    ) -> bool {
         modifiers == binding.0 && code == binding.1
     }
 }
@@ -430,7 +434,17 @@ pub fn load_config() -> AppConfig {
 
     let mut show_planet = true;
 
-    let defaults = || AppConfig { theme: Theme::default(), terminal_start_bottom, worktree_dir_format: worktree_dir_format.clone(), keybindings: KeybindingsConfig::default(), session_command: CLAUDE_COMMAND.to_string(), shell_command: shell_command.clone(), auto_resume, planet: None, show_planet: true };
+    let defaults = || AppConfig {
+        theme: Theme::default(),
+        terminal_start_bottom,
+        worktree_dir_format: worktree_dir_format.clone(),
+        keybindings: KeybindingsConfig::default(),
+        session_command: CLAUDE_COMMAND.to_string(),
+        shell_command: shell_command.clone(),
+        auto_resume,
+        planet: None,
+        show_planet: true,
+    };
 
     let Some(home) = dirs_path() else {
         return defaults();
@@ -447,7 +461,9 @@ pub fn load_config() -> AppConfig {
     };
 
     // Determine if light mode
-    let is_light = config.theme.as_ref()
+    let is_light = config
+        .theme
+        .as_ref()
         .and_then(|t| t.mode.as_deref())
         .map(|m| m == "light")
         .unwrap_or(false);
@@ -455,9 +471,13 @@ pub fn load_config() -> AppConfig {
     // If a planet is set, use its palette as the base theme
     if let Some(ref t) = config.theme {
         if let Some(ref planet_name) = t.planet {
-            if let Some(kind) = crate::planet::types::PlanetKind::from_str(planet_name) {
+            if let Some(kind) = crate::planet::types::PlanetKind::parse(planet_name) {
                 planet = Some(kind);
-                theme = if is_light { kind.light_theme() } else { kind.dark_theme() };
+                theme = if is_light {
+                    kind.light_theme()
+                } else {
+                    kind.dark_theme()
+                };
             }
         }
         if let Some(val) = t.show_planet {
@@ -556,7 +576,17 @@ pub fn load_config() -> AppConfig {
         }
     }
 
-    AppConfig { theme, terminal_start_bottom, worktree_dir_format, keybindings, session_command, shell_command, auto_resume, planet, show_planet }
+    AppConfig {
+        theme,
+        terminal_start_bottom,
+        worktree_dir_format,
+        keybindings,
+        session_command,
+        shell_command,
+        auto_resume,
+        planet,
+        show_planet,
+    }
 }
 
 /// Resolve a local `.darya.toml` override for a worktree, falling back to the global value.
@@ -611,12 +641,18 @@ pub fn save_planet_choice(kind: crate::planet::types::PlanetKind, mode: ThemeMod
         .entry("theme")
         .or_insert_with(|| toml::Value::Table(toml::Table::new()));
     if let toml::Value::Table(ref mut t) = theme_table {
-        t.insert("planet".to_string(), toml::Value::String(kind.name().to_string()));
+        t.insert(
+            "planet".to_string(),
+            toml::Value::String(kind.name().to_string()),
+        );
         let mode_str = match mode {
             ThemeMode::Dark => "dark",
             ThemeMode::Light => "light",
         };
-        t.insert("mode".to_string(), toml::Value::String(mode_str.to_string()));
+        t.insert(
+            "mode".to_string(),
+            toml::Value::String(mode_str.to_string()),
+        );
     }
 
     if let Ok(toml_str) = toml::to_string_pretty(&config) {
@@ -627,7 +663,10 @@ pub fn save_planet_choice(kind: crate::planet::types::PlanetKind, mode: ThemeMod
 /// Check if the first-launch setup guide has been dismissed.
 pub fn setup_done() -> bool {
     let Some(home) = dirs_path() else { return true };
-    home.join(".config").join("darya").join(".setup_done").exists()
+    home.join(".config")
+        .join("darya")
+        .join(".setup_done")
+        .exists()
 }
 
 /// Mark the first-launch setup guide as dismissed by creating a marker file.
