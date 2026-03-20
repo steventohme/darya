@@ -20,6 +20,9 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install ripgrep
+        run: brew install ripgrep
+
       - name: Format
         run: cargo fmt --check
 
