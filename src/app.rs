@@ -155,7 +155,7 @@ impl SidebarView {
     pub fn next(self) -> Self {
         match self {
             SidebarView::Worktrees => SidebarView::FileExplorer,
-            SidebarView::FileExplorer => SidebarView::Search,
+            SidebarView::FileExplorer => SidebarView::GitStatus,
             SidebarView::Search => SidebarView::GitStatus,
             SidebarView::GitStatus => SidebarView::Worktrees,
         }
@@ -166,7 +166,7 @@ impl SidebarView {
             SidebarView::Worktrees => SidebarView::GitStatus,
             SidebarView::FileExplorer => SidebarView::Worktrees,
             SidebarView::Search => SidebarView::FileExplorer,
-            SidebarView::GitStatus => SidebarView::Search,
+            SidebarView::GitStatus => SidebarView::FileExplorer,
         }
     }
 }

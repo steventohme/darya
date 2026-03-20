@@ -341,7 +341,7 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
         }
         Prompt::SearchInput { input } => {
             let block = Block::default()
-                .title(" Search project (ripgrep) ")
+                .title(" Search project ")
                 .borders(Borders::ALL)
                 .border_type(BorderType::Thick)
                 .border_style(Style::default().fg(theme.prompt_border))

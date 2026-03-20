@@ -711,8 +711,6 @@ fn l_cycles_sidebar_forward() {
     // Start from FileExplorer to test cycling
     app.sidebar_view = SidebarView::FileExplorer;
     app.handle_event(&key(KeyCode::Char('l')));
-    assert_eq!(app.sidebar_view, SidebarView::Search);
-    app.handle_event(&key(KeyCode::Char('l')));
     assert_eq!(app.sidebar_view, SidebarView::GitStatus);
     app.handle_event(&key(KeyCode::Char('l')));
     assert_eq!(app.sidebar_view, SidebarView::Worktrees);

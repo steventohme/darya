@@ -4,18 +4,62 @@ A terminal workspace for developers who use git worktrees. Manage multiple branc
 
 ## Features
 
+### Workspace
+
 - **Git worktree management** — create, delete, and jump between worktrees
-- **Split panes** — up to 3 side-by-side terminal sessions
-- **Claude Code integration** — launch and manage AI coding sessions per worktree
-- **Shell sessions** — run shell terminals alongside Claude Code
-- **Built-in file explorer** with git status indicators
-- **Editor** with syntax highlighting (via edtui)
-- **Git views** — status, diff, blame, and log
-- **Fuzzy file finder** and project-wide search (ripgrep)
-- **Command palette** for discoverable actions
-- **Dark/light themes** with full color customization
+- **Split panes** — up to 3 side-by-side or stacked terminal sessions (horizontal & vertical)
+- **Custom sections** — organize worktrees into named groups with custom colors
 - **Layout persistence** — auto-save and restore sessions on restart
-- **Custom sections** — organize worktrees into named groups with colors
+- **Resizable sidebar** — adjust with `Cmd+=` / `Cmd+-` (15%–50%)
+
+### Sessions
+
+- **Claude Code integration** — launch and manage AI coding sessions per worktree
+- **Shell sessions** — run multiple named shell terminals per worktree
+- **Session status** — live status text from PTY window titles displayed in sidebar
+- **Activity indicators** — animated scanner for active sessions, bell detection, exit status
+- **Force-restart** — restart running or exited sessions without closing them
+
+### File Explorer
+
+- **Tree view** with expand/collapse directories
+- **File icons** with language-specific colors (Rust, Python, Go, TypeScript, and more)
+- **Git status indicators** — dirty files and directories highlighted
+- **Text selection** — click-drag to select terminal text, auto-copy via OSC 52
+
+### Git Views
+
+- **Status** — staged, unstaged, and untracked files with color-coded indicators
+- **Diff** — syntax-highlighted diffs for staged, unstaged, and untracked files
+- **Blame** — commit hash, author, and relative time per line
+- **Log** — last 200 commits with hash, subject, author, and date; select to view full diff
+
+### Editor
+
+- **Built-in editor** via edtui with syntax highlighting
+- **Edit mode** (`e`) and save (`Ctrl+S`)
+
+### Search
+
+- **Fuzzy file finder** (`Cmd+P`) with live filtering
+- **Project-wide search** (`Cmd+F`) powered by ripgrep with line numbers
+
+### Themes
+
+- **6 planet themes** — Earth, Mars, Venus, Neptune, Jupiter, Pluto
+- **Dark and light modes** — each planet adapts to both
+- **Theme picker** — browse with live planet animation preview
+- **Color picker** — assign custom colors to sections, worktrees, and sessions
+- **Full color customization** — override any color via hex values in config
+
+### Other
+
+- **Command palette** (`Cmd+K`) — searchable list of all actions with keybindings
+- **Help overlay** (`?`) — quick reference for all shortcuts
+- **First-launch setup guide** — helps configure iTerm2 keybindings
+- **Bracketed paste** — paste multi-line content into terminal sessions
+- **Mouse support** — scroll, click, and drag in terminal views
+- **Kitty keyboard protocol** — Ctrl+number keys work natively
 
 ## Install
 
@@ -60,6 +104,7 @@ All `Cmd+` shortcuts require iTerm2 to not intercept them. See the setup guide o
 | `j` / `k` | Move down / up |
 | `h` / `l` | Collapse / expand (sidebar) |
 | `Tab` | Cycle between panels and panes |
+| `Shift+Tab` | Cycle sub-views within panel |
 | `1`–`9`, `0` | Jump to worktree by number |
 | `Enter` | Start session, open file, or toggle collapse |
 | `?` | Toggle help overlay |
@@ -71,16 +116,23 @@ All `Cmd+` shortcuts require iTerm2 to not intercept them. See the setup guide o
 |-----|--------|
 | `Enter` | Start or switch to session |
 | `r` | Restart exited session |
-| `R` | Force-restart session |
+| `Shift+R` | Force-restart session |
 | `Backspace` | Close session |
-| `S` | Add shell slot |
+| `Shift+S` | Add shell slot |
 
-### Panes & Search
+### Panes
 
 | Key | Action |
 |-----|--------|
-| `Cmd+\` | Split pane |
+| `Cmd+\` | Split pane (horizontal) |
+| `Cmd+Shift+\` | Split pane (vertical) |
 | `Cmd+W` | Close pane |
+| `Tab` | Cycle between panes |
+
+### Search & Commands
+
+| Key | Action |
+|-----|--------|
 | `Cmd+P` | Fuzzy file finder |
 | `Cmd+F` | Project search |
 | `Cmd+K` | Command palette |
@@ -92,14 +144,32 @@ All `Cmd+` shortcuts require iTerm2 to not intercept them. See the setup guide o
 | `a` | Add worktree |
 | `d` | Delete worktree |
 | `c` | Assign color |
-| `N` | Create section |
+| `Shift+N` | Create section |
+| `Backspace` | Delete section |
+
+### Sidebar
+
+| Key | Action |
+|-----|--------|
+| `Cmd+=` | Grow sidebar |
+| `Cmd+-` | Shrink sidebar |
 
 ### Scrolling
 
 | Key | Action |
 |-----|--------|
 | `Shift+PageUp/Down` | Scroll terminal |
+| `PageUp/Down` | Scroll views |
 | Mouse wheel | Scroll terminal |
+
+### Input Modes
+
+| Key | Action |
+|-----|--------|
+| `i` / `Enter` | Enter terminal mode (keys → PTY) |
+| `Esc` | Exit terminal mode |
+| `e` | Enter editor edit mode |
+| `Ctrl+S` | Save file (editor) |
 
 ## Configuration
 
@@ -107,7 +177,9 @@ Config lives at `~/.config/darya/config.toml`:
 
 ```toml
 [theme]
-mode = "dark"  # or "light"
+mode = "dark"        # or "light"
+planet = "earth"     # earth, mars, venus, neptune, jupiter, pluto
+show_planet = true   # show planet animation in sidebar
 # Override any color with hex values:
 # border_active = "#E07A2A"
 # bg = "#1A1A1A"
@@ -126,6 +198,9 @@ command = "/bin/zsh"  # defaults to $SHELL
 # worktrees = "cmd+1"
 # terminal = "cmd+2"
 # fuzzy_finder = "cmd+p"
+# split_pane_vertical = "cmd+shift+\\"
+# sidebar_grow = "cmd+="
+# sidebar_shrink = "cmd+-"
 
 [worktree]
 dir_format = "{repo}-{branch}"
