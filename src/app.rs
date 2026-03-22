@@ -350,14 +350,13 @@ pub enum InputMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotePosition {
     Hidden,
-    Sidebar,      // Read-only preview in sidebar bottom
-    CenterColumn, // Full edtui editor in a center column
+    Sidebar, // Notes panel in sidebar bottom (read-only preview or inline editor)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelFocus {
     Left,
-    Center, // Notes column (only when note_position == CenterColumn)
+    Center, // Reserved for future use
     Right,
 }
 
@@ -2559,11 +2558,7 @@ impl App {
 
     /// Notes column percentage when center column is visible, None otherwise.
     pub fn notes_pct(&self) -> Option<u16> {
-        if self.note_position == NotePosition::CenterColumn {
-            Some(25)
-        } else {
-            None
-        }
+        None
     }
 
     pub fn focused_view(&self) -> ViewKind {
@@ -2613,18 +2608,8 @@ impl App {
 
     pub fn toggle_focus(&mut self) {
         self.panel_focus = match self.panel_focus {
-            PanelFocus::Left => {
-                if self.note_position == NotePosition::CenterColumn {
-                    PanelFocus::Center
-                } else {
-                    // Reset pane focus to first pane when coming from sidebar
-                    if let Some(ref mut layout) = self.pane_layout {
-                        layout.focused = 0;
-                    }
-                    PanelFocus::Right
-                }
-            }
-            PanelFocus::Center => {
+            PanelFocus::Left | PanelFocus::Center => {
+                // Reset pane focus to first pane when coming from sidebar
                 if let Some(ref mut layout) = self.pane_layout {
                     layout.focused = 0;
                 }
@@ -2634,37 +2619,38 @@ impl App {
         };
     }
 
-    /// Cycle notes position: Sidebar → CenterColumn → Hidden → Sidebar.
-    pub fn cycle_note_position(&mut self) {
-        // Auto-save current note if modified before changing position
-        if let Some(ref mut note) = self.note {
-            if note.modified {
-                let _ = note.save();
+    /// Toggle notes: Hidden → Sidebar+edit, editing → save+read-only, read-only → edit.
+    pub fn toggle_notes(&mut self) {
+        match self.note_position {
+            NotePosition::Hidden => {
+                // Show notes in sidebar and enter edit mode
+                self.note_position = NotePosition::Sidebar;
+                if let Some(ref mut note) = self.note {
+                    note.read_only = false;
+                    note.editor_state.mode = EditorMode::Insert;
+                }
+                self.panel_focus = PanelFocus::Left;
+                self.input_mode = InputMode::Editor;
             }
-            // Reset to read-only when leaving center column
-            if self.note_position == NotePosition::CenterColumn {
-                note.read_only = true;
-                if self.input_mode == InputMode::Editor && self.panel_focus == PanelFocus::Center {
-                    self.input_mode = InputMode::Navigation;
+            NotePosition::Sidebar => {
+                if let Some(ref mut note) = self.note {
+                    if note.read_only {
+                        // Read-only → enter edit mode
+                        note.read_only = false;
+                        note.editor_state.mode = EditorMode::Insert;
+                        self.panel_focus = PanelFocus::Left;
+                        self.input_mode = InputMode::Editor;
+                    } else {
+                        // Editing → save and go read-only
+                        if note.modified {
+                            let _ = note.save();
+                        }
+                        note.read_only = true;
+                        note.editor_state.mode = EditorMode::Normal;
+                        self.input_mode = InputMode::Navigation;
+                    }
                 }
             }
-        }
-        self.note_position = match self.note_position {
-            NotePosition::Sidebar => NotePosition::CenterColumn,
-            NotePosition::CenterColumn => NotePosition::Hidden,
-            NotePosition::Hidden => NotePosition::Sidebar,
-        };
-        // If entering center column, focus it
-        if self.note_position == NotePosition::CenterColumn {
-            self.panel_focus = PanelFocus::Center;
-            self.input_mode = InputMode::Navigation;
-        }
-        // If leaving center column and focus was there, move focus to left
-        if self.note_position != NotePosition::CenterColumn
-            && self.panel_focus == PanelFocus::Center
-        {
-            self.panel_focus = PanelFocus::Left;
-            self.input_mode = InputMode::Navigation;
         }
         // Trigger PTY resize since layout changed
         self.sidebar_resized = true;
@@ -2687,10 +2673,6 @@ impl App {
     /// For Editor panes in split mode, stays in Navigation.
     fn enter_terminal_if_focused(&mut self) {
         if self.panel_focus != PanelFocus::Right {
-            // If center panel focused, enter editor mode for notes
-            if self.panel_focus == PanelFocus::Center && self.note.is_some() {
-                self.input_mode = InputMode::Navigation;
-            }
             return;
         }
         // In split mode, check focused pane content type
@@ -2866,7 +2848,7 @@ impl App {
 
         // Notes toggle (works from any mode)
         if KeybindingsConfig::matches(&self.keybindings.notes_toggle, key.modifiers, key.code) {
-            self.cycle_note_position();
+            self.toggle_notes();
             return;
         }
 
@@ -2874,8 +2856,10 @@ impl App {
             InputMode::Navigation => self.handle_nav_key(key),
             InputMode::Terminal => self.handle_terminal_key(key),
             InputMode::Editor => {
-                // If center panel is focused, handle notes editing
-                if self.panel_focus == PanelFocus::Center {
+                // Handle notes editing (inline in sidebar or center)
+                if (self.panel_focus == PanelFocus::Left || self.panel_focus == PanelFocus::Center)
+                    && self.note.as_ref().map_or(false, |n| !n.read_only)
+                {
                     self.handle_notes_editor_key(key);
                 } else {
                     self.handle_editor_key(key);
@@ -3514,7 +3498,6 @@ impl App {
                     self.set_sidebar_view(next);
                 }
                 PanelFocus::Center => {
-                    // Shift+Tab from center goes to sidebar
                     self.panel_focus = PanelFocus::Left;
                     self.input_mode = InputMode::Navigation;
                 }
@@ -4674,7 +4657,7 @@ impl App {
 
         let panel_focus = Some(
             match self.panel_focus {
-                PanelFocus::Left | PanelFocus::Center => "left",
+                PanelFocus::Left | PanelFocus::Center => "left", // Center reserved
                 PanelFocus::Right => "right",
             }
             .to_string(),

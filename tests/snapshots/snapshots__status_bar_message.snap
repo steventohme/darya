@@ -3,7 +3,7 @@ source: tests/snapshots.rs
 expression: output
 ---
  darya
-┏ Notes ━━━━━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃  select a worktree    ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┃  Press Enter on a worktree to start a Claude Code session               ┃
+┏ Notes ━━━━━━━━━━━━━━━━┓┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
  Session closed

@@ -17,14 +17,14 @@ expression: output
 ┃                   ┃View: Git Log                                        Cmd+8┃                   ┃
 ┃                   ┃View: Worktrees                                      Cmd+1┃                   ┃
 ┃                   ┃View: Terminal                                       Cmd+2┃                   ┃
-┃                   ┃View: Files                                          Cmd+3┃                   ┃
-┃                   ┃View: Editor                                         Cmd+4┃                   ┃
-┃                   ┃View: Search                                         Cmd+5┃                   ┃
+┗━━━━━━━━━━━━━━━━━━━┃View: Files                                          Cmd+3┃                   ┃
+┏ Notes ━━━━━━━━━━━━┃View: Editor                                         Cmd+4┃                   ┃
+┃  select a worktree┃View: Search                                         Cmd+5┃                   ┃
 ┃                   ┃View: Shell                                          Cmd+9┃                   ┃
 ┃                   ┃Session: Start                                            ┃                   ┃
-┗━━━━━━━━━━━━━━━━━━━┃Session: Restart                                          ┃                   ┃
-┏ Notes ━━━━━━━━━━━━┃Session: Close                                            ┃                   ┃
-┃  select a worktree┃Split: Same Type                                     Cmd+\┃                   ┃
+┃                   ┃Session: Restart                                          ┃                   ┃
+┃                   ┃Session: Close                                            ┃                   ┃
+┃                   ┃Split: Same Type                                     Cmd+\┃                   ┃
 ┃                   ┃Split: Vertical Same Type                           Ctrl+.┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
 ┃                       ┃┃                                                                         ┃

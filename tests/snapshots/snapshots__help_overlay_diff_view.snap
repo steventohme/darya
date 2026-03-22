@@ -17,14 +17,14 @@ expression: output
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃ j/k, ↑/↓    Scroll line                                  ┃                   ┃
 ┃                   ┃ PgUp/PgDn   Scroll page                                  ┃                   ┃
-┃                   ┃ Esc         Back to terminal                             ┃                   ┃
-┃                   ┃ 1-9, 0      Jump to worktree                             ┃                   ┃
-┃                   ┃ Tab         Switch panel                                 ┃                   ┃
+┗━━━━━━━━━━━━━━━━━━━┃ Esc         Back to terminal                             ┃                   ┃
+┏ Notes ━━━━━━━━━━━━┃ 1-9, 0      Jump to worktree                             ┃                   ┃
+┃  select a worktree┃ Tab         Switch panel                                 ┃                   ┃
 ┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
 ┃                   ┃ Cmd+F       Project search                               ┃                   ┃
-┗━━━━━━━━━━━━━━━━━━━┃ q           Quit                                         ┃                   ┃
-┏ Notes ━━━━━━━━━━━━┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
-┃  select a worktree    ┃┃                                                                         ┃
+┃                   ┃ q           Quit                                         ┃                   ┃
+┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
+┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃

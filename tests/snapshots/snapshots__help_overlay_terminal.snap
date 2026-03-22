@@ -17,14 +17,14 @@ expression: output
 ┃                   ┃ PgUp/PgDn   Scroll output                                ┃                   ┃
 ┃                   ┃ Cmd+\       Split picker (horizontal)                    ┃                   ┃
 ┃                   ┃ Ctrl+.      Split picker (vertical)                      ┃                   ┃
-┃                   ┃ Cmd+W       Close pane                                   ┃                   ┃
-┃                   ┃             Palette: Split Terminal/Shell/Editor         ┃                   ┃
-┃                   ┃ 1-9, 0      Jump to worktree                             ┃                   ┃
+┗━━━━━━━━━━━━━━━━━━━┃ Cmd+W       Close pane                                   ┃                   ┃
+┏ Notes ━━━━━━━━━━━━┃             Palette: Split Terminal/Shell/Editor         ┃                   ┃
+┃  select a worktree┃ 1-9, 0      Jump to worktree                             ┃                   ┃
 ┃                   ┃ Tab         Cycle panes / switch panel                   ┃                   ┃
 ┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
-┗━━━━━━━━━━━━━━━━━━━┃ Cmd+F       Project search                               ┃                   ┃
-┏ Notes ━━━━━━━━━━━━┃ q           Quit                                         ┃                   ┃
-┃  select a worktree┃ Ctrl+C      Close session / Quit                         ┃                   ┃
+┃                   ┃ Cmd+F       Project search                               ┃                   ┃
+┃                   ┃ q           Quit                                         ┃                   ┃
+┃                   ┃ Ctrl+C      Close session / Quit                         ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃

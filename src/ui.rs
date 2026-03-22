@@ -180,9 +180,9 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     let show_planet = app.show_planet && app.planet_kind.is_some() && app.planet_animation.is_some();
 
     // Build sidebar vertical constraints
-    let mut sidebar_constraints: Vec<Constraint> = vec![Constraint::Min(0)]; // worktree list
+    let mut sidebar_constraints: Vec<Constraint> = vec![Constraint::Percentage(if show_sidebar_notes { 55 } else { 100 })]; // worktree list
     if show_sidebar_notes {
-        sidebar_constraints.push(Constraint::Length(8)); // notes preview
+        sidebar_constraints.push(Constraint::Percentage(45)); // notes panel
     }
     if show_planet {
         let max_planet_h: u16 = 16;
@@ -223,11 +223,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
         }
     }
 
-    // Center column (notes editor) — only when note_position == CenterColumn
-    if notes_pct.is_some() {
-        let center_focused = app.panel_focus == PanelFocus::Center;
-        widgets::notes_editor::render(frame, main_chunks[1], app, center_focused);
-    }
+    // Center column is no longer used — notes edit inline in the sidebar
 
     // Right panel (main) — split panes or full panel
     let right_focused = app.panel_focus == PanelFocus::Right;

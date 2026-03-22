@@ -756,27 +756,19 @@ fn note_save_and_reload() {
 }
 
 #[test]
-fn note_position_cycle() {
-    let mut pos = NotePosition::Sidebar;
-    // Simulate cycling
+fn note_position_toggle() {
+    // NotePosition now only has Hidden and Sidebar (no CenterColumn)
+    let mut pos = NotePosition::Hidden;
     pos = match pos {
-        NotePosition::Sidebar => NotePosition::CenterColumn,
-        NotePosition::CenterColumn => NotePosition::Hidden,
         NotePosition::Hidden => NotePosition::Sidebar,
-    };
-    assert_eq!(pos, NotePosition::CenterColumn);
-    pos = match pos {
-        NotePosition::Sidebar => NotePosition::CenterColumn,
-        NotePosition::CenterColumn => NotePosition::Hidden,
-        NotePosition::Hidden => NotePosition::Sidebar,
-    };
-    assert_eq!(pos, NotePosition::Hidden);
-    pos = match pos {
-        NotePosition::Sidebar => NotePosition::CenterColumn,
-        NotePosition::CenterColumn => NotePosition::Hidden,
-        NotePosition::Hidden => NotePosition::Sidebar,
+        NotePosition::Sidebar => NotePosition::Hidden,
     };
     assert_eq!(pos, NotePosition::Sidebar);
+    pos = match pos {
+        NotePosition::Hidden => NotePosition::Sidebar,
+        NotePosition::Sidebar => NotePosition::Hidden,
+    };
+    assert_eq!(pos, NotePosition::Hidden);
 }
 
 #[test]

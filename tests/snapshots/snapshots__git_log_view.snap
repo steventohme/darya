@@ -7,11 +7,11 @@ expression: output
 ┃│ ▼ my-project         ┃┃abc1234 Fix bug in parser  Alice 2 hours ago                             ┃
 ┃    1 ▶ ○ my-project [m┃┃def5678 Add new feature  Bob 3 days ago                                  ┃
 ┃    2 ▶ ○ my-project-fe┃┃ghi9012 Initial commit  Alice 2 weeks ago                                ┃
+┃    3 ▶ ○ my-project-fe┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┃                                                                         ┃
 ┏ Notes ━━━━━━━━━━━━━━━━┓┃                                                                         ┃
 ┃  select a worktree    ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃

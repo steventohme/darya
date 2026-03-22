@@ -7,11 +7,11 @@ expression: output
 ┃▶ ▾  src              ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
 ┃     app.rs M         ┃┃                                                                         ┃
 ┃     main.rs A        ┃┃                                                                         ┃
+┃   README.md ?        ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━┛┃                                                                         ┃
 ┏ Notes ━━━━━━━━━━━━━━━━┓┃                                                                         ┃
 ┃  select a worktree    ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃

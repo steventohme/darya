@@ -17,14 +17,14 @@ expression: output
 ┃                   ┃ h/←         Collapse / parent                            ┃                   ┃
 ┃                   ┃ a           Add worktree                                 ┃                   ┃
 ┃                   ┃ d           Delete worktree                              ┃                   ┃
-┃                   ┃ r           Restart exited session                       ┃                   ┃
-┃                   ┃ Shift+R     Force-restart session                        ┃                   ┃
-┃                   ┃ Shift+S     Add shell slot                               ┃                   ┃
+┗━━━━━━━━━━━━━━━━━━━┃ r           Restart exited session                       ┃                   ┃
+┏ Notes ━━━━━━━━━━━━┃ Shift+R     Force-restart session                        ┃                   ┃
+┃  select a worktree┃ Shift+S     Add shell slot                               ┃                   ┃
 ┃                   ┃ c           Assign color                                 ┃                   ┃
 ┃                   ┃ Shift+N     Create section                               ┃                   ┃
-┗━━━━━━━━━━━━━━━━━━━┃ Backspace   Close/delete session/section                 ┃                   ┃
-┏ Notes ━━━━━━━━━━━━┃ Tab         Switch panel                                 ┃                   ┃
-┃  select a worktree┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
+┃                   ┃ Backspace   Close/delete session/section                 ┃                   ┃
+┃                   ┃ Tab         Switch panel                                 ┃                   ┃
+┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
 ┃                   ┃ Cmd+F       Project search                               ┃                   ┃
 ┃                   ┃ q           Quit                                         ┃                   ┃
 ┃                   ┃ Ctrl+C      Close session / Quit                         ┃                   ┃
