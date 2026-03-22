@@ -22,9 +22,9 @@ expression: output
 ┃                   ┃ Tab         Switch panel                                 ┃                   ┃
 ┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
 ┃                   ┃ Cmd+F       Project search                               ┃                   ┃
-┃                   ┃ q           Quit                                         ┃                   ┃
-┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
-┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━┃ q           Quit                                         ┃                   ┃
+┏ Notes ━━━━━━━━━━━━┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
+┃  select a worktree    ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃

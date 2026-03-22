@@ -616,14 +616,14 @@ fn compute_pane_rects_horizontal_vs_vertical() {
     let size = Rect::new(0, 0, 120, 30);
     let sidebar_pct = 25;
 
-    let h_rects = compute_pane_rects(size, 2, sidebar_pct, SplitDirection::Horizontal);
+    let h_rects = compute_pane_rects(size, 2, sidebar_pct, SplitDirection::Horizontal, None);
     assert_eq!(h_rects.len(), 2);
     // Horizontal: panes split width, same height
     assert_eq!(h_rects[0].height, h_rects[1].height);
     assert!(h_rects[0].width < size.width); // each pane narrower than total
     assert_eq!(h_rects[0].y, h_rects[1].y); // same y position
 
-    let v_rects = compute_pane_rects(size, 2, sidebar_pct, SplitDirection::Vertical);
+    let v_rects = compute_pane_rects(size, 2, sidebar_pct, SplitDirection::Vertical, None);
     assert_eq!(v_rects.len(), 2);
     // Vertical: panes split height, same width
     assert_eq!(v_rects[0].width, v_rects[1].width);
@@ -709,4 +709,82 @@ fn half_block_renderer_handles_zero_size() {
     let bg = Color::Rgb(0, 0, 0);
     let lines = renderer::render_frame(frame, 0, 0, bg);
     assert!(lines.is_empty());
+}
+
+// ── NoteViewState ──────────────────────────────────────────────
+
+use darya::app::{NotePosition, NoteViewState};
+
+#[test]
+fn note_path_for_worktree_deterministic() {
+    use std::path::Path;
+    let p1 = NoteViewState::note_path_for_worktree(Path::new("/Users/foo/project"));
+    let p2 = NoteViewState::note_path_for_worktree(Path::new("/Users/foo/project"));
+    assert_eq!(p1, p2);
+    assert!(p1.to_string_lossy().ends_with(".md"));
+}
+
+#[test]
+fn note_path_for_different_worktrees_differ() {
+    use std::path::Path;
+    let p1 = NoteViewState::note_path_for_worktree(Path::new("/Users/foo/project-a"));
+    let p2 = NoteViewState::note_path_for_worktree(Path::new("/Users/foo/project-b"));
+    assert_ne!(p1, p2);
+}
+
+#[test]
+fn note_open_or_create_empty_for_missing_file() {
+    let dir = TempDir::new().unwrap();
+    let note = NoteViewState::open_or_create(dir.path());
+    assert!(!note.modified);
+    assert!(note.read_only);
+    assert_eq!(note.content_string().trim(), "");
+}
+
+#[test]
+fn note_save_and_reload() {
+    let dir = TempDir::new().unwrap();
+    let mut note = NoteViewState::open_or_create(dir.path());
+    // Manually set content via edtui
+    note.editor_state = edtui::EditorState::new(edtui::Lines::from("hello world"));
+    note.modified = true;
+    note.save().unwrap();
+    assert!(!note.modified);
+    // Reload
+    let note2 = NoteViewState::open_or_create(dir.path());
+    assert_eq!(note2.content_string().trim(), "hello world");
+}
+
+#[test]
+fn note_position_cycle() {
+    let mut pos = NotePosition::Sidebar;
+    // Simulate cycling
+    pos = match pos {
+        NotePosition::Sidebar => NotePosition::CenterColumn,
+        NotePosition::CenterColumn => NotePosition::Hidden,
+        NotePosition::Hidden => NotePosition::Sidebar,
+    };
+    assert_eq!(pos, NotePosition::CenterColumn);
+    pos = match pos {
+        NotePosition::Sidebar => NotePosition::CenterColumn,
+        NotePosition::CenterColumn => NotePosition::Hidden,
+        NotePosition::Hidden => NotePosition::Sidebar,
+    };
+    assert_eq!(pos, NotePosition::Hidden);
+    pos = match pos {
+        NotePosition::Sidebar => NotePosition::CenterColumn,
+        NotePosition::CenterColumn => NotePosition::Hidden,
+        NotePosition::Hidden => NotePosition::Sidebar,
+    };
+    assert_eq!(pos, NotePosition::Sidebar);
+}
+
+#[test]
+fn compute_pane_rects_with_notes_column() {
+    let size = Rect::new(0, 0, 120, 30);
+    let sidebar_pct = 25;
+    // With notes column, right panel should be narrower
+    let rects_no_notes = compute_pane_rects(size, 1, sidebar_pct, SplitDirection::Horizontal, None);
+    let rects_with_notes = compute_pane_rects(size, 1, sidebar_pct, SplitDirection::Horizontal, Some(25));
+    assert!(rects_with_notes[0].width < rects_no_notes[0].width);
 }

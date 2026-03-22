@@ -8,7 +8,7 @@ use darya::app::{
     format_relative_time, is_edtui_compatible, status_priority, BlameLine, BranchSwitcherState,
     ColorTarget, CommandId, CommandPaletteState, EditorViewState, GitBlameState, GitFileStatus,
     GitLogEntry, GitLogState, GitStatusCategory, GitStatusEntry, GitStatusState, InputMode,
-    MainView, PaneContent, PanelFocus, Prompt, SidebarView, SplitDirection, ViewKind,
+    MainView, PaneContent, PanelFocus, Prompt, SidebarView, SplitDirection, SplitNode, ViewKind,
 };
 use darya::config;
 use darya::event::AppEvent;
@@ -1269,15 +1269,16 @@ fn split_add_pane_creates_layout() {
     assert!(app.pane_layout.is_none());
     assert!(app.split_add_pane());
     let layout = app.pane_layout.as_ref().unwrap();
-    assert_eq!(layout.panes.len(), 2);
+    assert_eq!(layout.root.leaf_count(), 2);
     assert_eq!(layout.focused, 0);
     // First pane is the active session, second is the next available
+    let leaves = layout.root.leaves();
     assert_eq!(
-        layout.panes[0],
+        *leaves[0],
         darya::app::PaneContent::Terminal("test-session-1".to_string())
     );
     assert_eq!(
-        layout.panes[1],
+        *leaves[1],
         darya::app::PaneContent::Terminal("test-session-2".to_string())
     );
 }
@@ -1309,9 +1310,9 @@ fn split_add_pane_caps_at_three() {
 
     assert!(app.split_add_pane()); // 2 panes
     assert!(app.split_add_pane()); // 3 panes
-    assert_eq!(app.pane_layout.as_ref().unwrap().panes.len(), 3);
-    assert!(!app.split_add_pane()); // max reached
-    assert!(app.status_message.as_ref().unwrap().contains("Maximum 3"));
+    assert_eq!(app.pane_layout.as_ref().unwrap().root.leaf_count(), 3);
+    // Can keep splitting until depth limit (no longer capped at 3)
+    // The old MAX_PANES=3 is gone; now limited by MAX_SPLIT_DEPTH=4
 }
 
 #[test]
@@ -1342,8 +1343,8 @@ fn close_focused_pane_adjusts_focus() {
     layout.focused = 2;
     app.close_focused_pane();
     let layout = app.pane_layout.as_ref().unwrap();
-    assert_eq!(layout.panes.len(), 2);
-    assert!(layout.focused < layout.panes.len());
+    assert_eq!(layout.root.leaf_count(), 2);
+    assert!(layout.focused < layout.root.leaf_count());
 }
 
 #[test]
@@ -1419,9 +1420,10 @@ fn split_preserves_across_view_switch() {
     // Switch to editor and back
     app.main_view = MainView::Editor;
     app.main_view = MainView::Terminal;
+    // Layout should be preserved (leaf count and focused unchanged)
     assert_eq!(
-        app.pane_layout.as_ref().unwrap().panes,
-        before.unwrap().panes
+        app.pane_layout.as_ref().unwrap().root.leaf_count(),
+        before.unwrap().root.leaf_count()
     );
 }
 
@@ -1434,10 +1436,11 @@ fn split_from_editor_view_works() {
     // Editor can split with another editor pane
     assert!(app.split_add_pane());
     let layout = app.pane_layout.as_ref().unwrap();
-    assert_eq!(layout.panes.len(), 2);
+    assert_eq!(layout.root.leaf_count(), 2);
     // Both panes should be Editor
-    assert_eq!(layout.panes[0], darya::app::PaneContent::Editor);
-    assert_eq!(layout.panes[1], darya::app::PaneContent::Editor);
+    let leaves = layout.root.leaves();
+    assert_eq!(*leaves[0], darya::app::PaneContent::Editor);
+    assert_eq!(*leaves[1], darya::app::PaneContent::Editor);
 }
 
 #[test]
@@ -2316,12 +2319,13 @@ fn split_terminal_with_editor() {
     // Split adds editor pane alongside terminal
     assert!(app.split_add_pane_with(PaneContent::Editor));
     let layout = app.pane_layout.as_ref().unwrap();
-    assert_eq!(layout.panes.len(), 2);
+    let leaves = layout.root.leaves();
+    assert_eq!(leaves.len(), 2);
     assert_eq!(
-        layout.panes[0],
+        *leaves[0],
         PaneContent::Terminal("test-session-1".to_string())
     );
-    assert_eq!(layout.panes[1], PaneContent::Editor);
+    assert_eq!(*leaves[1], PaneContent::Editor);
 }
 
 #[test]
@@ -2332,12 +2336,13 @@ fn split_terminal_with_shell() {
 
     assert!(app.split_add_pane_with(PaneContent::Shell("shell-1".to_string())));
     let layout = app.pane_layout.as_ref().unwrap();
-    assert_eq!(layout.panes.len(), 2);
+    let leaves = layout.root.leaves();
+    assert_eq!(leaves.len(), 2);
     assert_eq!(
-        layout.panes[0],
+        *leaves[0],
         PaneContent::Terminal("terminal-1".to_string())
     );
-    assert_eq!(layout.panes[1], PaneContent::Shell("shell-1".to_string()));
+    assert_eq!(*leaves[1], PaneContent::Shell("shell-1".to_string()));
 }
 
 #[test]
@@ -2349,10 +2354,11 @@ fn split_editor_with_terminal() {
 
     assert!(app.split_add_pane_with(PaneContent::Terminal("test-session-1".to_string())));
     let layout = app.pane_layout.as_ref().unwrap();
-    assert_eq!(layout.panes.len(), 2);
-    assert_eq!(layout.panes[0], PaneContent::Editor);
+    let leaves = layout.root.leaves();
+    assert_eq!(leaves.len(), 2);
+    assert_eq!(*leaves[0], PaneContent::Editor);
     assert_eq!(
-        layout.panes[1],
+        *leaves[1],
         PaneContent::Terminal("test-session-1".to_string())
     );
 }
@@ -2479,8 +2485,9 @@ fn split_editor_command_from_palette() {
 
     app.execute_command(CommandId::SplitEditor);
     let layout = app.pane_layout.as_ref().unwrap();
-    assert_eq!(layout.panes.len(), 2);
-    assert_eq!(layout.panes[1], PaneContent::Editor);
+    let leaves = layout.root.leaves();
+    assert_eq!(leaves.len(), 2);
+    assert_eq!(*leaves[1], PaneContent::Editor);
 }
 
 #[test]
@@ -2492,9 +2499,10 @@ fn split_terminal_command_from_palette() {
     // SplitTerminal should find "terminal-2" (next available)
     app.execute_command(CommandId::SplitTerminal);
     let layout = app.pane_layout.as_ref().unwrap();
-    assert_eq!(layout.panes.len(), 2);
+    let leaves = layout.root.leaves();
+    assert_eq!(leaves.len(), 2);
     assert_eq!(
-        layout.panes[1],
+        *leaves[1],
         PaneContent::Terminal("terminal-2".to_string())
     );
 }
@@ -2508,8 +2516,9 @@ fn split_shell_command_from_palette() {
     // SplitShell uses current shell session when it's the only one
     app.execute_command(CommandId::SplitShell);
     let layout = app.pane_layout.as_ref().unwrap();
-    assert_eq!(layout.panes.len(), 2);
-    assert_eq!(layout.panes[1], PaneContent::Shell("shell-1".to_string()));
+    let leaves = layout.root.leaves();
+    assert_eq!(leaves.len(), 2);
+    assert_eq!(*leaves[1], PaneContent::Shell("shell-1".to_string()));
 }
 
 #[test]
@@ -2521,7 +2530,7 @@ fn remove_session_from_mixed_panes() {
 
     // Terminal + Editor
     app.split_add_pane_with(PaneContent::Editor);
-    assert_eq!(app.pane_layout.as_ref().unwrap().panes.len(), 2);
+    assert_eq!(app.pane_layout.as_ref().unwrap().root.leaf_count(), 2);
 
     // Remove the terminal session
     app.remove_session_from_panes("test-session-1");
@@ -3156,8 +3165,13 @@ fn split_vertical_creates_layout_with_vertical_direction() {
     app.split_direction = SplitDirection::Vertical;
     assert!(app.split_add_pane());
     let layout = app.pane_layout.as_ref().unwrap();
-    assert_eq!(layout.direction, SplitDirection::Vertical);
-    assert_eq!(layout.panes.len(), 2);
+    // Direction is stored in the root SplitNode
+    if let SplitNode::Split { direction, .. } = &layout.root {
+        assert_eq!(*direction, SplitDirection::Vertical);
+    } else {
+        panic!("Expected SplitNode::Split");
+    }
+    assert_eq!(layout.root.leaf_count(), 2);
 }
 
 #[test]
@@ -3168,24 +3182,22 @@ fn toggle_split_direction_flips_existing_layout() {
     app.main_view = MainView::Terminal;
     assert!(app.split_add_pane());
     // Default is Horizontal
-    assert_eq!(
-        app.pane_layout.as_ref().unwrap().direction,
-        SplitDirection::Horizontal
-    );
+    let root_direction = |app: &darya::app::App| -> SplitDirection {
+        if let SplitNode::Split { direction, .. } = &app.pane_layout.as_ref().unwrap().root {
+            *direction
+        } else {
+            panic!("Expected SplitNode::Split");
+        }
+    };
+    assert_eq!(root_direction(&app), SplitDirection::Horizontal);
     app.toggle_split_direction();
-    assert_eq!(
-        app.pane_layout.as_ref().unwrap().direction,
-        SplitDirection::Vertical
-    );
+    assert_eq!(root_direction(&app), SplitDirection::Vertical);
     assert_eq!(app.split_direction, SplitDirection::Vertical);
     assert!(app.layout_changed);
     // Toggle back
     app.layout_changed = false;
     app.toggle_split_direction();
-    assert_eq!(
-        app.pane_layout.as_ref().unwrap().direction,
-        SplitDirection::Horizontal
-    );
+    assert_eq!(root_direction(&app), SplitDirection::Horizontal);
     assert!(app.layout_changed);
 }
 
@@ -3197,6 +3209,200 @@ fn toggle_split_direction_noop_without_layout() {
     // Direction preference changes but no layout_changed since no layout exists
     assert_eq!(app.split_direction, SplitDirection::Vertical);
     assert!(!app.layout_changed);
+}
+
+// ── SplitNode Tree Operations ────────────────────────────────
+
+#[test]
+fn split_node_leaf_count() {
+    let leaf = SplitNode::Leaf(PaneContent::Editor);
+    assert_eq!(leaf.leaf_count(), 1);
+
+    let split = SplitNode::Split {
+        direction: SplitDirection::Horizontal,
+        first: Box::new(SplitNode::Leaf(PaneContent::Editor)),
+        second: Box::new(SplitNode::Leaf(PaneContent::Terminal("t1".into()))),
+    };
+    assert_eq!(split.leaf_count(), 2);
+}
+
+#[test]
+fn split_node_depth() {
+    let leaf = SplitNode::Leaf(PaneContent::Editor);
+    assert_eq!(leaf.depth(), 0);
+
+    let nested = SplitNode::Split {
+        direction: SplitDirection::Horizontal,
+        first: Box::new(SplitNode::Leaf(PaneContent::Editor)),
+        second: Box::new(SplitNode::Split {
+            direction: SplitDirection::Vertical,
+            first: Box::new(SplitNode::Leaf(PaneContent::Terminal("t1".into()))),
+            second: Box::new(SplitNode::Leaf(PaneContent::Terminal("t2".into()))),
+        }),
+    };
+    assert_eq!(nested.depth(), 2);
+    assert_eq!(nested.leaf_count(), 3);
+}
+
+#[test]
+fn split_node_split_leaf() {
+    let mut node = SplitNode::Leaf(PaneContent::Editor);
+    assert!(node.split_leaf(0, SplitDirection::Horizontal, PaneContent::Terminal("t1".into())));
+    assert_eq!(node.leaf_count(), 2);
+    assert_eq!(node.depth(), 1);
+
+    // Split the second leaf (index 1)
+    assert!(node.split_leaf(1, SplitDirection::Vertical, PaneContent::Shell("s1".into())));
+    assert_eq!(node.leaf_count(), 3);
+    assert_eq!(node.depth(), 2);
+}
+
+#[test]
+fn split_node_remove_leaf() {
+    let mut node = SplitNode::Split {
+        direction: SplitDirection::Horizontal,
+        first: Box::new(SplitNode::Leaf(PaneContent::Editor)),
+        second: Box::new(SplitNode::Leaf(PaneContent::Terminal("t1".into()))),
+    };
+    assert!(node.remove_leaf(0));
+    // Should collapse to just the terminal leaf
+    assert_eq!(node.leaf_count(), 1);
+    assert!(matches!(node, SplitNode::Leaf(PaneContent::Terminal(_))));
+}
+
+#[test]
+fn split_node_remove_nested_leaf() {
+    // [Editor | [Terminal | Shell]]
+    let mut node = SplitNode::Split {
+        direction: SplitDirection::Horizontal,
+        first: Box::new(SplitNode::Leaf(PaneContent::Editor)),
+        second: Box::new(SplitNode::Split {
+            direction: SplitDirection::Vertical,
+            first: Box::new(SplitNode::Leaf(PaneContent::Terminal("t1".into()))),
+            second: Box::new(SplitNode::Leaf(PaneContent::Shell("s1".into()))),
+        }),
+    };
+    // Remove Terminal (index 1) from the nested split
+    assert!(node.remove_leaf(1));
+    assert_eq!(node.leaf_count(), 2);
+    // Should now be [Editor | Shell]
+    let leaves = node.leaves();
+    assert!(matches!(leaves[0], PaneContent::Editor));
+    assert!(matches!(leaves[1], PaneContent::Shell(_)));
+}
+
+#[test]
+fn split_node_display_label() {
+    let leaf = SplitNode::Leaf(PaneContent::Terminal("my-session".into()));
+    assert_eq!(leaf.display_label(), "Terminal: my-session");
+
+    let split = SplitNode::Split {
+        direction: SplitDirection::Horizontal,
+        first: Box::new(SplitNode::Leaf(PaneContent::Editor)),
+        second: Box::new(SplitNode::Leaf(PaneContent::Terminal("t1".into()))),
+    };
+    assert!(split.display_label().starts_with("Split ["));
+}
+
+#[test]
+fn split_node_contains_and_remove_session() {
+    let mut node = SplitNode::Split {
+        direction: SplitDirection::Horizontal,
+        first: Box::new(SplitNode::Leaf(PaneContent::Terminal("t1".into()))),
+        second: Box::new(SplitNode::Leaf(PaneContent::Shell("s1".into()))),
+    };
+    assert!(node.contains_session("t1"));
+    assert!(node.contains_session("s1"));
+    assert!(!node.contains_session("t2"));
+
+    assert!(node.remove_session("t1"));
+    assert_eq!(node.leaf_count(), 1);
+    assert!(!node.contains_session("t1"));
+}
+
+#[test]
+fn nested_split_creates_three_panes() {
+    let mut app = make_app_with_two_sessions(5);
+    app.sidebar_tree.cursor = 1;
+    set_session(&mut app, 2, "test-session-3");
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    // Create first split
+    assert!(app.split_add_pane());
+    assert_eq!(app.pane_layout.as_ref().unwrap().root.leaf_count(), 2);
+
+    // Create nested split (splits the focused leaf)
+    assert!(app.split_add_pane());
+    assert_eq!(app.pane_layout.as_ref().unwrap().root.leaf_count(), 3);
+    assert!(app.pane_layout.as_ref().unwrap().root.depth() >= 2);
+}
+
+#[test]
+fn split_picker_opens_with_available_items() {
+    let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    app.open_split_picker(SplitDirection::Horizontal);
+    assert!(app.split_picker.is_some());
+    let picker = app.split_picker.as_ref().unwrap();
+    // Should have at least 2 items (current terminal + another session)
+    assert!(picker.items.len() >= 2);
+    assert_eq!(picker.direction, SplitDirection::Horizontal);
+}
+
+#[test]
+fn split_picker_toggle_direction() {
+    let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    app.open_split_picker(SplitDirection::Horizontal);
+    assert_eq!(
+        app.split_picker.as_ref().unwrap().direction,
+        SplitDirection::Horizontal
+    );
+
+    // Tab toggles direction
+    app.handle_event(&key(KeyCode::Tab));
+    assert_eq!(
+        app.split_picker.as_ref().unwrap().direction,
+        SplitDirection::Vertical
+    );
+}
+
+#[test]
+fn split_picker_esc_closes() {
+    let mut app = make_app_with_two_sessions(3);
+    app.sidebar_tree.cursor = 1;
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    app.open_split_picker(SplitDirection::Horizontal);
+    assert!(app.split_picker.is_some());
+
+    app.handle_event(&key(KeyCode::Esc));
+    assert!(app.split_picker.is_none());
+}
+
+#[test]
+fn split_picker_existing_layout_shown_as_item() {
+    let mut app = make_app_with_two_sessions(4);
+    app.sidebar_tree.cursor = 1;
+    set_session(&mut app, 2, "test-session-3");
+    app.panel_focus = PanelFocus::Right;
+    app.main_view = MainView::Terminal;
+
+    // Create a split first
+    assert!(app.split_add_pane());
+
+    // Now open picker — should include "Current Layout" item
+    app.open_split_picker(SplitDirection::Horizontal);
+    let picker = app.split_picker.as_ref().unwrap();
+    assert!(picker.items.iter().any(|i| matches!(i, darya::app::SplitPickerItem::ExistingLayout { .. })));
 }
 
 // ── Theme Picker ─────────────────────────────────────────────

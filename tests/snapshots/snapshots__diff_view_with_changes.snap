@@ -12,9 +12,9 @@ expression: output
 ┃                       ┃┃-use old_crate::Something;                                               ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
-┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┃                                                                         ┃
+┏ Notes ━━━━━━━━━━━━━━━━┓┃                                                                         ┃
+┃  select a worktree    ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃

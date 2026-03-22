@@ -173,6 +173,7 @@ struct KeybindingsToml {
     sidebar_shrink: Option<String>,
     split_pane_vertical: Option<String>,
     branch_switcher: Option<String>,
+    notes_toggle: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -195,6 +196,7 @@ pub struct KeybindingsConfig {
     pub sidebar_shrink: (KeyModifiers, KeyCode),
     pub split_pane_vertical: (KeyModifiers, KeyCode),
     pub branch_switcher: (KeyModifiers, KeyCode),
+    pub notes_toggle: (KeyModifiers, KeyCode),
 }
 
 impl Default for KeybindingsConfig {
@@ -218,6 +220,7 @@ impl Default for KeybindingsConfig {
             sidebar_shrink: (KeyModifiers::SUPER, KeyCode::Char('-')),
             split_pane_vertical: (KeyModifiers::CONTROL, KeyCode::Char('.')),
             branch_switcher: (KeyModifiers::SUPER, KeyCode::Char('b')),
+            notes_toggle: (KeyModifiers::SUPER, KeyCode::Char('n')),
         }
     }
 }
@@ -595,6 +598,7 @@ pub fn load_config() -> AppConfig {
         apply_kb!(sidebar_shrink);
         apply_kb!(split_pane_vertical);
         apply_kb!(branch_switcher);
+        apply_kb!(notes_toggle);
     }
 
     if let Some(ref s) = config.session {
@@ -661,6 +665,14 @@ pub fn resolve_shell_command(worktree_path: &std::path::Path, global_command: &s
 
 fn dirs_path() -> Option<std::path::PathBuf> {
     std::env::var_os("HOME").map(std::path::PathBuf::from)
+}
+
+/// Return the darya config directory (~/.config/darya).
+pub fn config_dir() -> std::path::PathBuf {
+    dirs_path()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".config")
+        .join("darya")
 }
 
 /// Save the planet choice and theme mode to config.toml.

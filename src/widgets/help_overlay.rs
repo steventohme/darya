@@ -27,6 +27,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let kb_shell = KeybindingsConfig::format(&kb.shell);
     let kb_sidebar_grow = KeybindingsConfig::format(&kb.sidebar_grow);
     let kb_sidebar_shrink = KeybindingsConfig::format(&kb.sidebar_shrink);
+    let kb_notes = KeybindingsConfig::format(&kb.notes_toggle);
 
     let view_bindings = format!(
         "{}: Worktrees  {}: Terminal  {}: Files  {}: Editor  {}: Search  {}: Git  {}: Blame  {}: Log  {}: Shell  {}: Palette  {}/{}: Resize sidebar",
@@ -62,8 +63,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             vec![
                 ("i, Enter", "Enter terminal mode"),
                 ("PgUp/PgDn", "Scroll output"),
-                (&kb_split, "Split: same type (horizontal)"),
-                (&kb_split_v, "Split: same type (vertical)"),
+                (&kb_split, "Split picker (horizontal)"),
+                (&kb_split_v, "Split picker (vertical)"),
                 (&kb_close_pane, "Close pane"),
                 ("", "Palette: Split Terminal/Shell/Editor"),
                 ("1-9, 0", "Jump to worktree"),
@@ -170,8 +171,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             vec![
                 ("i, Enter", "Enter terminal mode"),
                 ("PgUp/PgDn", "Scroll output"),
-                (&kb_split, "Split: same type (horizontal)"),
-                (&kb_split_v, "Split: same type (vertical)"),
+                (&kb_split, "Split picker (horizontal)"),
+                (&kb_split_v, "Split picker (vertical)"),
                 (&kb_close_pane, "Close pane"),
                 ("", "Palette: Split Terminal/Shell/Editor"),
                 ("1-9, 0", "Jump to worktree"),
@@ -180,6 +181,17 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 (&kb_proj_search, "Project search"),
                 ("q", "Quit"),
                 ("Ctrl+C", "Close session / Quit"),
+            ],
+        ),
+        ViewKind::Notes => (
+            "Navigation — Notes",
+            vec![
+                ("e", "Enter edit mode"),
+                ("Esc", "Save and exit edit mode"),
+                ("Ctrl+S", "Save note"),
+                (&kb_notes, "Cycle: Sidebar → Center → Hidden"),
+                ("Tab", "Switch panel"),
+                ("q", "Quit"),
             ],
         ),
     };

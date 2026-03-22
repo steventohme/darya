@@ -6,14 +6,40 @@ use ratatui::Frame;
 use ratatui::text::{Line, Span};
 
 use crate::app::{
-    App, DirBrowser, InputMode, PanelFocus, Prompt, SplitDirection, ViewKind, PRESET_COLORS,
+    App, DirBrowser, InputMode, NotePosition, PanelFocus, Prompt, SplitDirection, SplitNode,
+    ViewKind, PRESET_COLORS,
 };
 use crate::planet;
 use crate::session::manager::SessionManager;
 use crate::widgets;
 
+/// Split the main body area into horizontal columns: sidebar, [notes], right panel.
+/// Returns (columns, right_index) where right_index points to the right panel chunk.
+fn split_main_columns(body: Rect, sidebar_pct: u16, notes_pct: Option<u16>) -> (std::rc::Rc<[Rect]>, usize) {
+    let remaining = 100u16.saturating_sub(sidebar_pct).saturating_sub(notes_pct.unwrap_or(0));
+    let constraints: Vec<Constraint> = if let Some(np) = notes_pct {
+        vec![
+            Constraint::Percentage(sidebar_pct),
+            Constraint::Percentage(np),
+            Constraint::Percentage(remaining),
+        ]
+    } else {
+        vec![
+            Constraint::Percentage(sidebar_pct),
+            Constraint::Percentage(remaining),
+        ]
+    };
+    let right_idx = if notes_pct.is_some() { 2 } else { 1 };
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(constraints)
+        .split(body);
+    (chunks, right_idx)
+}
+
 /// Compute the right panel Rect (before any pane splitting).
-fn right_panel_rect(size: Rect, sidebar_pct: u16) -> Rect {
+/// `notes_pct` is Some(pct) when a center notes column is present.
+pub fn right_panel_rect(size: Rect, sidebar_pct: u16, notes_pct: Option<u16>) -> Rect {
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -23,13 +49,8 @@ fn right_panel_rect(size: Rect, sidebar_pct: u16) -> Rect {
         ])
         .split(size);
 
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(sidebar_pct),
-            Constraint::Percentage(100 - sidebar_pct),
-        ])
-        .split(outer[1])[1]
+    let (chunks, right_idx) = split_main_columns(outer[1], sidebar_pct, notes_pct);
+    chunks[right_idx]
 }
 
 /// Compute inner Rects for each pane by splitting the right panel.
@@ -39,8 +60,9 @@ pub fn compute_pane_rects(
     pane_count: usize,
     sidebar_pct: u16,
     direction: SplitDirection,
+    notes_pct: Option<u16>,
 ) -> Vec<Rect> {
-    let panel = right_panel_rect(size, sidebar_pct);
+    let panel = right_panel_rect(size, sidebar_pct, notes_pct);
     if pane_count <= 1 {
         return vec![panel];
     }
@@ -58,9 +80,34 @@ pub fn compute_pane_rects(
         .to_vec()
 }
 
+/// Recursively compute leaf Rects from a SplitNode tree within the given area.
+/// Returns a Vec of Rects in in-order (left-to-right / top-to-bottom) leaf order.
+pub fn compute_leaf_rects(node: &SplitNode, area: Rect) -> Vec<Rect> {
+    match node {
+        SplitNode::Leaf(_) => vec![area],
+        SplitNode::Split {
+            direction,
+            first,
+            second,
+        } => {
+            let layout_dir = match direction {
+                SplitDirection::Horizontal => Direction::Horizontal,
+                SplitDirection::Vertical => Direction::Vertical,
+            };
+            let chunks = Layout::default()
+                .direction(layout_dir)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(area);
+            let mut result = compute_leaf_rects(first, chunks[0]);
+            result.extend(compute_leaf_rects(second, chunks[1]));
+            result
+        }
+    }
+}
+
 /// Compute the inner Rect where the terminal PTY is rendered (single pane).
-pub fn compute_pty_rect(size: Rect, sidebar_pct: u16) -> Rect {
-    let panel = right_panel_rect(size, sidebar_pct);
+pub fn compute_pty_rect(size: Rect, sidebar_pct: u16, notes_pct: Option<u16>) -> Rect {
+    let panel = right_panel_rect(size, sidebar_pct, notes_pct);
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Thick);
@@ -89,6 +136,9 @@ fn render_view(
         ViewKind::GitLog => widgets::git_log::render(frame, area, app, is_focused),
         ViewKind::Shell => {
             widgets::terminal_panel::render_shell(frame, area, app, session_manager, is_focused)
+        }
+        ViewKind::Notes => {
+            widgets::notes_editor::render(frame, area, app, is_focused)
         }
     }
 }
@@ -119,78 +169,96 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     );
     frame.render_widget(header, outer[0]);
 
-    // Main layout: left panel | right panel
+    // Main layout: left panel | [optional notes column] | right panel
     let sidebar_pct = app.sidebar_width;
-    let main_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(sidebar_pct),
-            Constraint::Percentage(100 - sidebar_pct),
-        ])
-        .split(outer[1]);
+    let notes_pct = app.notes_pct();
+    let (main_chunks, right_chunk_idx) = split_main_columns(outer[1], sidebar_pct, notes_pct);
 
-    // Left panel (sidebar) — optionally split to include planet at bottom
+    // Left panel (sidebar) — optionally split to include notes preview and/or planet
     let left_focused = app.panel_focus == PanelFocus::Left;
-    if app.show_planet && app.planet_kind.is_some() && app.planet_animation.is_some() {
-        // Scale planet height with screen size, capped at 1/3 of sidebar
+    let show_sidebar_notes = app.note_position == NotePosition::Sidebar;
+    let show_planet = app.show_planet && app.planet_kind.is_some() && app.planet_animation.is_some();
+
+    // Build sidebar vertical constraints
+    let mut sidebar_constraints: Vec<Constraint> = vec![Constraint::Min(0)]; // worktree list
+    if show_sidebar_notes {
+        sidebar_constraints.push(Constraint::Length(8)); // notes preview
+    }
+    if show_planet {
         let max_planet_h: u16 = 16;
         let planet_height = max_planet_h.min(main_chunks[0].height / 3);
-        let sidebar_split = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(planet_height)])
-            .split(main_chunks[0]);
+        sidebar_constraints.push(Constraint::Length(planet_height));
+    }
 
-        render_view(
-            frame,
-            sidebar_split[0],
-            app.sidebar_view.to_view_kind(),
-            app,
-            session_manager,
-            left_focused,
-        );
+    let sidebar_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(sidebar_constraints)
+        .split(main_chunks[0]);
 
-        // Render planet animation — render smaller than the area, with padding
+    // Render worktree list (always first)
+    render_view(
+        frame,
+        sidebar_split[0],
+        app.sidebar_view.to_view_kind(),
+        app,
+        session_manager,
+        left_focused,
+    );
+
+    // Render sidebar notes preview and/or planet
+    let mut slot = 1usize;
+    if show_sidebar_notes {
+        widgets::notes_preview::render(frame, sidebar_split[slot], app, left_focused);
+        slot += 1;
+    }
+    if show_planet {
         if let Some(ref anim) = app.planet_animation {
+            let planet_area = sidebar_split[slot];
             let anim_frame = anim.frame_at(app.planet_tick / 2); // ~10fps
-            let render_h = planet_height.saturating_sub(4); // 2 for box borders + 1 padding each side
-            let render_w = (render_h * 2).min(sidebar_split[1].width);
+            let render_h = planet_area.height.saturating_sub(4);
+            let render_w = (render_h * 2).min(planet_area.width);
             let planet_lines =
                 planet::renderer::render_frame(anim_frame, render_w, render_h, app.theme.bg);
-            widgets::planet_widget::render(frame, sidebar_split[1], &planet_lines);
+            widgets::planet_widget::render(frame, planet_area, &planet_lines);
         }
-    } else {
-        render_view(
-            frame,
-            main_chunks[0],
-            app.sidebar_view.to_view_kind(),
-            app,
-            session_manager,
-            left_focused,
-        );
+    }
+
+    // Center column (notes editor) — only when note_position == CenterColumn
+    if notes_pct.is_some() {
+        let center_focused = app.panel_focus == PanelFocus::Center;
+        widgets::notes_editor::render(frame, main_chunks[1], app, center_focused);
     }
 
     // Right panel (main) — split panes or full panel
     let right_focused = app.panel_focus == PanelFocus::Right;
     // Snapshot pane info to avoid borrow conflicts with mutable render calls
-    let pane_snapshot: Option<(Vec<(crate::app::PaneContent, bool)>, SplitDirection)> =
-        app.pane_layout.as_ref().and_then(|layout| {
-            if layout.panes.len() > 1 {
-                Some((
-                    layout
-                        .panes
-                        .iter()
-                        .enumerate()
-                        .map(|(i, c)| (c.clone(), right_focused && i == layout.focused))
-                        .collect(),
-                    layout.direction,
-                ))
-            } else {
-                None
-            }
-        });
-    if let Some((panes, direction)) = pane_snapshot {
-        let pane_rects = compute_pane_rects(size, panes.len(), sidebar_pct, direction);
-        for (i, (content, pane_focused)) in panes.iter().enumerate() {
+    let pane_leaves: Vec<(crate::app::PaneContent, bool)>;
+    let pane_rects: Vec<Rect>;
+    let has_split = if let Some(ref layout) = app.pane_layout {
+        let leaf_count = layout.root.leaf_count();
+        if leaf_count > 1 {
+            let panel = right_panel_rect(size, sidebar_pct, notes_pct);
+            pane_rects = compute_leaf_rects(&layout.root, panel);
+            pane_leaves = layout
+                .root
+                .leaves()
+                .into_iter()
+                .enumerate()
+                .map(|(i, c)| (c.clone(), right_focused && i == layout.focused))
+                .collect();
+            true
+        } else {
+            pane_leaves = Vec::new();
+            pane_rects = Vec::new();
+            false
+        }
+    } else {
+        pane_leaves = Vec::new();
+        pane_rects = Vec::new();
+        false
+    };
+    if has_split {
+        for (i, (content, pane_focused)) in pane_leaves.iter().enumerate() {
             match content {
                 crate::app::PaneContent::Terminal(session_id)
                 | crate::app::PaneContent::Shell(session_id) => {
@@ -211,7 +279,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     } else {
         render_view(
             frame,
-            main_chunks[1],
+            main_chunks[right_chunk_idx],
             app.main_view.to_view_kind(),
             app,
             session_manager,
@@ -247,6 +315,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ViewKind::GitBlame => "blame",
             ViewKind::GitLog => "log",
             ViewKind::Shell => "shell",
+            ViewKind::Notes => "notes",
         };
         let left = format!(" [{}] {}", mode_str, view_str);
 
@@ -332,6 +401,11 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     // Render command palette overlay if active
     if app.command_palette.is_some() {
         widgets::command_palette::render(frame, size, app);
+    }
+
+    // Render split picker overlay if active
+    if app.split_picker.is_some() {
+        widgets::split_picker::render(frame, size, app);
     }
 
     // Render branch switcher overlay if active

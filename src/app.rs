@@ -72,7 +72,8 @@ pub const PRESET_COLORS: &[Option<Color>] = &[
     Some(Color::Rgb(0x78, 0x88, 0x98)), // cool gray
 ];
 const MAX_FILE_SIZE: u64 = 1_048_576; // 1MB
-const MAX_PANES: usize = 3;
+/// Maximum depth of nested splits (allows up to 16 leaf panes).
+const MAX_SPLIT_DEPTH: usize = 4;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PaneContent {
@@ -98,6 +99,15 @@ impl PaneContent {
             PaneContent::Editor => ViewKind::Editor,
         }
     }
+
+    /// Human-readable label for display in pickers.
+    pub fn display_label(&self) -> String {
+        match self {
+            PaneContent::Terminal(id) => format!("Terminal: {}", id),
+            PaneContent::Shell(id) => format!("Shell: {}", id),
+            PaneContent::Editor => "Editor".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,11 +116,224 @@ pub enum SplitDirection {
     Vertical,
 }
 
+/// A binary tree node representing either a single pane or a split containing two children.
+#[derive(Debug, Clone)]
+pub enum SplitNode {
+    Leaf(PaneContent),
+    Split {
+        direction: SplitDirection,
+        first: Box<SplitNode>,
+        second: Box<SplitNode>,
+    },
+}
+
+impl SplitNode {
+    /// Count the number of leaf panes in this tree.
+    pub fn leaf_count(&self) -> usize {
+        match self {
+            SplitNode::Leaf(_) => 1,
+            SplitNode::Split { first, second, .. } => first.leaf_count() + second.leaf_count(),
+        }
+    }
+
+    /// In-order traversal of all leaf pane contents.
+    pub fn leaves(&self) -> Vec<&PaneContent> {
+        match self {
+            SplitNode::Leaf(content) => vec![content],
+            SplitNode::Split { first, second, .. } => {
+                let mut result = first.leaves();
+                result.extend(second.leaves());
+                result
+            }
+        }
+    }
+
+    /// Maximum depth of the tree (Leaf = 0, Split with two leaves = 1).
+    pub fn depth(&self) -> usize {
+        match self {
+            SplitNode::Leaf(_) => 0,
+            SplitNode::Split { first, second, .. } => {
+                1 + first.depth().max(second.depth())
+            }
+        }
+    }
+
+    /// Get leaf content by flat index (in-order traversal) without allocating.
+    pub fn leaf_at(&self, index: usize) -> Option<&PaneContent> {
+        self.leaf_at_inner(index, &mut 0)
+    }
+
+    fn leaf_at_inner(&self, target: usize, counter: &mut usize) -> Option<&PaneContent> {
+        match self {
+            SplitNode::Leaf(content) => {
+                if *counter == target {
+                    Some(content)
+                } else {
+                    *counter += 1;
+                    None
+                }
+            }
+            SplitNode::Split { first, second, .. } => {
+                if let Some(result) = first.leaf_at_inner(target, counter) {
+                    return Some(result);
+                }
+                second.leaf_at_inner(target, counter)
+            }
+        }
+    }
+
+    /// Remove a leaf by flat index, collapsing its parent Split to the sibling.
+    /// Returns true if the removal was performed.
+    pub fn remove_leaf(&mut self, index: usize) -> bool {
+        self.remove_leaf_inner(index, &mut 0)
+    }
+
+    fn remove_leaf_inner(&mut self, target: usize, counter: &mut usize) -> bool {
+        match self {
+            SplitNode::Leaf(_) => {
+                // Can't remove root leaf from itself
+                false
+            }
+            SplitNode::Split { first, second, .. } => {
+                let first_count = first.leaf_count();
+                if target < *counter + first_count {
+                    // Target is in the first subtree
+                    if let SplitNode::Leaf(_) = first.as_ref() {
+                        // First child is the target leaf — replace self with second
+                        *self = *second.clone();
+                        return true;
+                    }
+                    return first.remove_leaf_inner(target, counter);
+                }
+                *counter += first_count;
+                if let SplitNode::Leaf(_) = second.as_ref() {
+                    if *counter == target {
+                        // Second child is the target leaf — replace self with first
+                        *self = *first.clone();
+                        return true;
+                    }
+                    return false;
+                }
+                second.remove_leaf_inner(target, counter)
+            }
+        }
+    }
+
+    /// Split the leaf at `index` into a Split node with the original leaf and new content.
+    /// The new content is placed as the second child.
+    /// Returns false if depth would exceed MAX_SPLIT_DEPTH or index is invalid.
+    pub fn split_leaf(&mut self, index: usize, direction: SplitDirection, new_content: PaneContent) -> bool {
+        if self.depth() >= MAX_SPLIT_DEPTH {
+            return false;
+        }
+        self.split_leaf_inner(index, direction, new_content, &mut 0)
+    }
+
+    fn split_leaf_inner(
+        &mut self,
+        target: usize,
+        direction: SplitDirection,
+        new_content: PaneContent,
+        counter: &mut usize,
+    ) -> bool {
+        match self {
+            SplitNode::Leaf(_) => {
+                if *counter == target {
+                    let old = std::mem::replace(self, SplitNode::Leaf(PaneContent::Editor));
+                    *self = SplitNode::Split {
+                        direction,
+                        first: Box::new(old),
+                        second: Box::new(SplitNode::Leaf(new_content)),
+                    };
+                    true
+                } else {
+                    false
+                }
+            }
+            SplitNode::Split { first, second, .. } => {
+                let first_count = first.leaf_count();
+                if target < *counter + first_count {
+                    return first.split_leaf_inner(target, direction, new_content, counter);
+                }
+                *counter += first_count;
+                second.split_leaf_inner(target, direction, new_content, counter)
+            }
+        }
+    }
+
+    /// Human-readable label for display in pickers.
+    pub fn display_label(&self) -> String {
+        match self {
+            SplitNode::Leaf(content) => content.display_label(),
+            SplitNode::Split { first, second, .. } => {
+                format!("Split [{} | {}]", first.display_short(), second.display_short())
+            }
+        }
+    }
+
+    /// Short label for nested display.
+    fn display_short(&self) -> String {
+        match self {
+            SplitNode::Leaf(content) => content.display_label(),
+            SplitNode::Split { .. } => {
+                let count = self.leaf_count();
+                format!("{} panes", count)
+            }
+        }
+    }
+
+    /// Check if any leaf references the given session ID.
+    pub fn contains_session(&self, session_id: &str) -> bool {
+        match self {
+            SplitNode::Leaf(content) => content.session_id() == Some(session_id),
+            SplitNode::Split { first, second, .. } => {
+                first.contains_session(session_id) || second.contains_session(session_id)
+            }
+        }
+    }
+
+    /// Remove the first leaf containing the given session ID in a single pass.
+    /// Returns true if a leaf was removed.
+    pub fn remove_session(&mut self, session_id: &str) -> bool {
+        match self {
+            SplitNode::Leaf(_) => false,
+            SplitNode::Split { first, second, .. } => {
+                // Check if first child is the target leaf
+                if let SplitNode::Leaf(ref content) = **first {
+                    if content.session_id() == Some(session_id) {
+                        *self = *second.clone();
+                        return true;
+                    }
+                }
+                // Check if second child is the target leaf
+                if let SplitNode::Leaf(ref content) = **second {
+                    if content.session_id() == Some(session_id) {
+                        *self = *first.clone();
+                        return true;
+                    }
+                }
+                // Recurse into children
+                if first.remove_session(session_id) {
+                    return true;
+                }
+                second.remove_session(session_id)
+            }
+        }
+    }
+
+    /// Collect all session IDs from all leaves.
+    pub fn all_session_ids(&self) -> Vec<&str> {
+        self.leaves()
+            .into_iter()
+            .filter_map(|c| c.session_id())
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PaneLayout {
-    pub panes: Vec<PaneContent>, // pane contents, left to right (or top to bottom), max 3
-    pub focused: usize,          // index into panes — input goes here
-    pub direction: SplitDirection, // Horizontal = side-by-side, Vertical = stacked
+    pub root: SplitNode,
+    pub focused: usize, // index into in-order leaf traversal
 }
 
 use crate::config::{KeybindingsConfig, Theme};
@@ -125,8 +348,16 @@ pub enum InputMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotePosition {
+    Hidden,
+    Sidebar,      // Read-only preview in sidebar bottom
+    CenterColumn, // Full edtui editor in a center column
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelFocus {
     Left,
+    Center, // Notes column (only when note_position == CenterColumn)
     Right,
 }
 
@@ -142,6 +373,7 @@ pub enum ViewKind {
     GitBlame,
     GitLog,
     Shell,
+    Notes,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -676,6 +908,78 @@ impl EditorViewState {
     }
 }
 
+/// Per-worktree notepad state, backed by a markdown file in ~/.config/darya/notes/.
+pub struct NoteViewState {
+    pub editor_state: EdtuiState,
+    pub event_handler: EditorEventHandler,
+    pub modified: bool,
+    pub read_only: bool,
+    pub file_path: PathBuf,
+    pub worktree_name: String,
+}
+
+impl NoteViewState {
+    /// Compute the notes file path for a given worktree path.
+    /// Stored in ~/.config/darya/notes/ with sanitized filename.
+    pub fn note_path_for_worktree(worktree_path: &Path) -> PathBuf {
+        let notes_dir = config::config_dir().join("notes");
+        let sanitized = worktree_path
+            .to_string_lossy()
+            .replace('/', "_")
+            .trim_start_matches('_')
+            .to_string();
+        notes_dir.join(format!("{}.md", sanitized))
+    }
+
+    /// Open an existing note or create an empty one for the given worktree.
+    pub fn open_or_create(worktree_path: &Path) -> Self {
+        let file_path = Self::note_path_for_worktree(worktree_path);
+        let worktree_name = worktree_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("notes")
+            .to_string();
+
+        let content = if file_path.exists() {
+            std::fs::read_to_string(&file_path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        let lines = EdtuiLines::from(content.as_str());
+        let editor_state = EdtuiState::new(lines);
+        let event_handler = EditorEventHandler::default();
+
+        Self {
+            editor_state,
+            event_handler,
+            modified: false,
+            read_only: true,
+            file_path,
+            worktree_name,
+        }
+    }
+
+    /// Save the note content to disk.
+    pub fn save(&mut self) -> Result<(), String> {
+        // Ensure notes directory exists
+        if let Some(parent) = self.file_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Cannot create notes dir: {}", e))?;
+        }
+        let content = self.editor_state.lines.to_string();
+        std::fs::write(&self.file_path, content)
+            .map_err(|e| format!("Failed to save note: {}", e))?;
+        self.modified = false;
+        Ok(())
+    }
+
+    /// Get the content as a string for preview.
+    pub fn content_string(&self) -> String {
+        self.editor_state.lines.to_string()
+    }
+}
+
 pub struct FuzzyFinderState {
     pub input: String,
     pub all_files: Vec<String>,
@@ -844,6 +1148,95 @@ impl BranchSwitcherState {
 
     pub fn selected_branch(&self) -> Option<&str> {
         self.results.get(self.selected).map(|s| s.as_str())
+    }
+}
+
+// ── Split Picker ─────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SplitPickerStep {
+    PickFirst,
+    PickSecond,
+}
+
+#[derive(Debug, Clone)]
+pub enum SplitPickerItem {
+    Terminal { session_id: String, label: String },
+    Shell { session_id: String, label: String },
+    Editor { label: String },
+    ExistingLayout { label: String, node: SplitNode },
+}
+
+impl SplitPickerItem {
+    pub fn label(&self) -> &str {
+        match self {
+            SplitPickerItem::Terminal { label, .. } => label,
+            SplitPickerItem::Shell { label, .. } => label,
+            SplitPickerItem::Editor { label, .. } => label,
+            SplitPickerItem::ExistingLayout { label, .. } => label,
+        }
+    }
+
+    /// Convert to a SplitNode (Leaf for single items, tree for existing layout).
+    pub fn to_split_node(&self) -> SplitNode {
+        match self {
+            SplitPickerItem::Terminal { session_id, .. } => {
+                SplitNode::Leaf(PaneContent::Terminal(session_id.clone()))
+            }
+            SplitPickerItem::Shell { session_id, .. } => {
+                SplitNode::Leaf(PaneContent::Shell(session_id.clone()))
+            }
+            SplitPickerItem::Editor { .. } => SplitNode::Leaf(PaneContent::Editor),
+            SplitPickerItem::ExistingLayout { node, .. } => node.clone(),
+        }
+    }
+}
+
+pub struct SplitPickerState {
+    pub items: Vec<SplitPickerItem>,
+    /// Indices into `items` that are visible (filtered after step 1).
+    pub visible: Vec<usize>,
+    pub selected: usize,
+    pub step: SplitPickerStep,
+    pub first_choice: Option<usize>,
+    pub direction: SplitDirection,
+}
+
+impl SplitPickerState {
+    pub fn move_up(&mut self) {
+        if !self.visible.is_empty() {
+            self.selected = wrapping_prev(self.selected, self.visible.len());
+        }
+    }
+
+    pub fn move_down(&mut self) {
+        if !self.visible.is_empty() {
+            self.selected = wrapping_next(self.selected, self.visible.len());
+        }
+    }
+
+    pub fn selected_item(&self) -> Option<&SplitPickerItem> {
+        self.visible
+            .get(self.selected)
+            .and_then(|&idx| self.items.get(idx))
+    }
+
+    pub fn selected_item_index(&self) -> Option<usize> {
+        self.visible.get(self.selected).copied()
+    }
+
+    pub fn toggle_direction(&mut self) {
+        self.direction = match self.direction {
+            SplitDirection::Horizontal => SplitDirection::Vertical,
+            SplitDirection::Vertical => SplitDirection::Horizontal,
+        };
+    }
+
+    pub fn direction_name(&self) -> &'static str {
+        match self.direction {
+            SplitDirection::Horizontal => "horizontal",
+            SplitDirection::Vertical => "vertical",
+        }
     }
 }
 
@@ -2015,6 +2408,8 @@ pub struct App {
     pub activity: ActivityAnimation,
     pub session_command: String,
     pub pane_layout: Option<PaneLayout>,
+    /// Split picker overlay state.
+    pub split_picker: Option<SplitPickerState>,
     /// Shell command to run (default: $SHELL)
     pub shell_command: String,
     /// Directory browser modal for section creation
@@ -2033,10 +2428,14 @@ pub struct App {
     pub sidebar_resized: bool,
     /// Active mouse text selection (click-drag to copy).
     pub text_selection: Option<TextSelection>,
-    /// Current user preference for split direction (used when creating new layouts).
+    /// User preference for split direction (used when creating new splits).
     pub split_direction: SplitDirection,
     /// Set when layout direction changed and PTY sessions need resizing.
     pub layout_changed: bool,
+    /// Per-worktree notepad state.
+    pub note: Option<NoteViewState>,
+    /// Where the notes panel is displayed.
+    pub note_position: NotePosition,
     /// Active planet kind (for theme + sidebar animation).
     pub planet_kind: Option<PlanetKind>,
     /// Whether to show the planet animation in the sidebar.
@@ -2093,6 +2492,7 @@ impl App {
             activity: ActivityAnimation::new(),
             session_command,
             pane_layout: None,
+            split_picker: None,
             shell_command,
             dir_browser: None,
             pending_section_refresh: None,
@@ -2104,6 +2504,8 @@ impl App {
             text_selection: None,
             split_direction: SplitDirection::Horizontal,
             layout_changed: false,
+            note: None,
+            note_position: NotePosition::Sidebar,
             planet_kind: None,
             show_planet: true,
             planet_animation: None,
@@ -2155,13 +2557,23 @@ impl App {
         self.active_session_id_of_kind(SessionKind::Shell)
     }
 
+    /// Notes column percentage when center column is visible, None otherwise.
+    pub fn notes_pct(&self) -> Option<u16> {
+        if self.note_position == NotePosition::CenterColumn {
+            Some(25)
+        } else {
+            None
+        }
+    }
+
     pub fn focused_view(&self) -> ViewKind {
         match self.panel_focus {
             PanelFocus::Left => self.sidebar_view.to_view_kind(),
+            PanelFocus::Center => ViewKind::Notes,
             PanelFocus::Right => {
                 // In split mode, derive from focused pane content
                 if let Some(ref layout) = self.pane_layout {
-                    if let Some(content) = layout.panes.get(layout.focused) {
+                    if let Some(content) = layout.root.leaf_at(layout.focused) {
                         return content.to_view_kind();
                     }
                 }
@@ -2202,7 +2614,17 @@ impl App {
     pub fn toggle_focus(&mut self) {
         self.panel_focus = match self.panel_focus {
             PanelFocus::Left => {
-                // Reset pane focus to first pane when coming from sidebar
+                if self.note_position == NotePosition::CenterColumn {
+                    PanelFocus::Center
+                } else {
+                    // Reset pane focus to first pane when coming from sidebar
+                    if let Some(ref mut layout) = self.pane_layout {
+                        layout.focused = 0;
+                    }
+                    PanelFocus::Right
+                }
+            }
+            PanelFocus::Center => {
                 if let Some(ref mut layout) = self.pane_layout {
                     layout.focused = 0;
                 }
@@ -2212,15 +2634,68 @@ impl App {
         };
     }
 
+    /// Cycle notes position: Sidebar → CenterColumn → Hidden → Sidebar.
+    pub fn cycle_note_position(&mut self) {
+        // Auto-save current note if modified before changing position
+        if let Some(ref mut note) = self.note {
+            if note.modified {
+                let _ = note.save();
+            }
+            // Reset to read-only when leaving center column
+            if self.note_position == NotePosition::CenterColumn {
+                note.read_only = true;
+                if self.input_mode == InputMode::Editor && self.panel_focus == PanelFocus::Center {
+                    self.input_mode = InputMode::Navigation;
+                }
+            }
+        }
+        self.note_position = match self.note_position {
+            NotePosition::Sidebar => NotePosition::CenterColumn,
+            NotePosition::CenterColumn => NotePosition::Hidden,
+            NotePosition::Hidden => NotePosition::Sidebar,
+        };
+        // If entering center column, focus it
+        if self.note_position == NotePosition::CenterColumn {
+            self.panel_focus = PanelFocus::Center;
+            self.input_mode = InputMode::Navigation;
+        }
+        // If leaving center column and focus was there, move focus to left
+        if self.note_position != NotePosition::CenterColumn
+            && self.panel_focus == PanelFocus::Center
+        {
+            self.panel_focus = PanelFocus::Left;
+            self.input_mode = InputMode::Navigation;
+        }
+        // Trigger PTY resize since layout changed
+        self.sidebar_resized = true;
+    }
+
+    /// Load (or reload) the note for the currently selected worktree.
+    pub fn load_note_for_current_worktree(&mut self) {
+        if let Some(path) = self.sidebar_tree.selected_path().cloned() {
+            // Auto-save previous note if modified
+            if let Some(ref mut note) = self.note {
+                if note.modified {
+                    let _ = note.save();
+                }
+            }
+            self.note = Some(NoteViewState::open_or_create(&path));
+        }
+    }
+
     /// If we just focused the main panel showing Terminal/Shell with an active non-exited session, enter terminal mode.
     /// For Editor panes in split mode, stays in Navigation.
     fn enter_terminal_if_focused(&mut self) {
         if self.panel_focus != PanelFocus::Right {
+            // If center panel focused, enter editor mode for notes
+            if self.panel_focus == PanelFocus::Center && self.note.is_some() {
+                self.input_mode = InputMode::Navigation;
+            }
             return;
         }
         // In split mode, check focused pane content type
         if let Some(ref layout) = self.pane_layout {
-            match layout.panes.get(layout.focused) {
+            match layout.root.leaf_at(layout.focused) {
                 Some(PaneContent::Terminal(_)) | Some(PaneContent::Shell(_)) => {
                     if let Some(id) = self.focused_session_id().cloned() {
                         self.attention_sessions.remove(&id);
@@ -2359,6 +2834,12 @@ impl App {
             return;
         }
 
+        // Split picker gets exclusive keyboard focus
+        if self.split_picker.is_some() {
+            self.handle_split_picker_key(key);
+            return;
+        }
+
         // Branch switcher gets exclusive keyboard focus
         if self.branch_switcher.is_some() {
             self.handle_branch_switcher_key(key);
@@ -2383,10 +2864,23 @@ impl App {
             return;
         }
 
+        // Notes toggle (works from any mode)
+        if KeybindingsConfig::matches(&self.keybindings.notes_toggle, key.modifiers, key.code) {
+            self.cycle_note_position();
+            return;
+        }
+
         match self.input_mode {
             InputMode::Navigation => self.handle_nav_key(key),
             InputMode::Terminal => self.handle_terminal_key(key),
-            InputMode::Editor => self.handle_editor_key(key),
+            InputMode::Editor => {
+                // If center panel is focused, handle notes editing
+                if self.panel_focus == PanelFocus::Center {
+                    self.handle_notes_editor_key(key);
+                } else {
+                    self.handle_editor_key(key);
+                }
+            }
         }
     }
 
@@ -2796,7 +3290,7 @@ impl App {
                 }
             }
             CommandId::SplitPane => {
-                self.split_add_pane();
+                self.open_split_picker(self.split_direction);
             }
             CommandId::SplitTerminal => {
                 if let Some(id) = self.find_next_session_of_kind(SessionKind::Claude) {
@@ -2875,8 +3369,7 @@ impl App {
                 self.sidebar_resized = true;
             }
             CommandId::SplitPaneVertical => {
-                self.split_direction = SplitDirection::Vertical;
-                self.split_add_pane();
+                self.open_split_picker(SplitDirection::Vertical);
             }
             CommandId::ToggleSplitDirection => {
                 self.toggle_split_direction();
@@ -2930,8 +3423,11 @@ impl App {
             SplitDirection::Horizontal => SplitDirection::Vertical,
             SplitDirection::Vertical => SplitDirection::Horizontal,
         };
+        // Toggle the root split direction if a layout exists
         if let Some(ref mut layout) = self.pane_layout {
-            layout.direction = self.split_direction;
+            if let SplitNode::Split { ref mut direction, .. } = layout.root {
+                *direction = self.split_direction;
+            }
             self.layout_changed = true;
         }
         let dir_name = match self.split_direction {
@@ -3017,6 +3513,11 @@ impl App {
                     let next = self.sidebar_view.next();
                     self.set_sidebar_view(next);
                 }
+                PanelFocus::Center => {
+                    // Shift+Tab from center goes to sidebar
+                    self.panel_focus = PanelFocus::Left;
+                    self.input_mode = InputMode::Navigation;
+                }
                 PanelFocus::Right => {
                     self.main_view = self.main_view.next();
                 }
@@ -3048,6 +3549,7 @@ impl App {
             ViewKind::GitBlame => self.handle_git_blame_key(key),
             ViewKind::GitLog => self.handle_git_log_key(key),
             ViewKind::Shell => self.handle_terminal_nav_key(key),
+            ViewKind::Notes => self.handle_notes_nav_key(key),
         }
     }
 
@@ -3167,7 +3669,7 @@ impl App {
             KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
                 if let Some(ref layout) = self.pane_layout {
-                    if layout.focused < layout.panes.len() - 1 {
+                    if layout.focused < layout.root.leaf_count() - 1 {
                         // Not last pane: cycle to next, enter appropriate mode
                         self.cycle_pane_focus_next();
                         self.enter_terminal_if_focused();
@@ -3215,9 +3717,10 @@ impl App {
         }
         if key.code == KeyCode::Tab {
             if let Some(ref mut layout) = self.pane_layout {
-                if layout.focused < layout.panes.len() - 1 {
+                let leaf_count = layout.root.leaf_count();
+                if layout.focused < leaf_count - 1 {
                     layout.focused += 1;
-                    if matches!(layout.panes.get(layout.focused), Some(PaneContent::Editor)) {
+                    if matches!(layout.root.leaf_at(layout.focused), Some(PaneContent::Editor)) {
                         self.input_mode = InputMode::Navigation;
                     }
                 } else {
@@ -3329,7 +3832,7 @@ impl App {
             KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
                 if let Some(ref layout) = self.pane_layout {
-                    if layout.focused < layout.panes.len() - 1 {
+                    if layout.focused < layout.root.leaf_count() - 1 {
                         self.cycle_pane_focus_next();
                         self.enter_terminal_if_focused();
                     } else {
@@ -3356,6 +3859,90 @@ impl App {
                     editor.editor_state.mode = EditorMode::Normal;
                 }
             }
+        }
+    }
+
+    /// Handle keys when notes center column is focused in Navigation mode.
+    fn handle_notes_nav_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('e') => {
+                // Enter edit mode
+                if let Some(ref mut note) = self.note {
+                    note.read_only = false;
+                    note.editor_state.mode = EditorMode::Insert;
+                    self.input_mode = InputMode::Editor;
+                }
+            }
+            KeyCode::Char('q') => self.running = false,
+            KeyCode::Tab => {
+                self.toggle_focus();
+                self.enter_terminal_if_focused();
+            }
+            KeyCode::Char(c @ '1'..='9') => {
+                self.jump_to_worktree((c as usize) - ('1' as usize));
+            }
+            KeyCode::Char('0') => {
+                self.jump_to_worktree(9);
+            }
+            _ => {
+                // Forward navigation keys to edtui in Normal mode
+                if let Some(ref mut note) = self.note {
+                    if is_edtui_compatible(&key) {
+                        note.event_handler
+                            .on_key_event(key, &mut note.editor_state);
+                        note.editor_state.mode = EditorMode::Normal;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Handle keys when notes center column is in Editor (edit) mode.
+    fn handle_notes_editor_key(&mut self, key: KeyEvent) {
+        let Some(ref mut note) = self.note else {
+            return;
+        };
+
+        // Shift+Tab: exit edit mode
+        if key.code == KeyCode::BackTab
+            || (key.code == KeyCode::Tab && key.modifiers.contains(KeyModifiers::SHIFT))
+        {
+            note.read_only = true;
+            note.editor_state.mode = EditorMode::Normal;
+            self.input_mode = InputMode::Navigation;
+            self.panel_focus = PanelFocus::Left;
+            return;
+        }
+
+        // Ctrl+S: save
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('s') {
+            match note.save() {
+                Ok(()) => self.status_message = Some("Note saved".to_string()),
+                Err(e) => self.status_message = Some(e),
+            }
+            return;
+        }
+
+        // Esc: save and exit edit mode
+        if key.code == KeyCode::Esc {
+            if note.modified {
+                let _ = note.save();
+            }
+            note.read_only = true;
+            note.editor_state.mode = EditorMode::Normal;
+            self.input_mode = InputMode::Navigation;
+            return;
+        }
+
+        // Track modifications in insert mode
+        if note.editor_state.mode == EditorMode::Insert {
+            note.modified = true;
+        }
+
+        // Forward to edtui
+        if is_edtui_compatible(&key) {
+            note.event_handler
+                .on_key_event(key, &mut note.editor_state);
         }
     }
 
@@ -3685,6 +4272,8 @@ impl App {
             self.git_blame = None;
             self.git_log = None;
         }
+        // Load note for the newly selected worktree
+        self.load_note_for_current_worktree();
     }
 
     /// Returns the session ID that should receive input: view-aware routing.
@@ -3692,7 +4281,7 @@ impl App {
     /// Fallback: derives from sidebar tree cursor based on main_view.
     pub fn focused_session_id(&self) -> Option<&String> {
         if let Some(ref layout) = self.pane_layout {
-            return match layout.panes.get(layout.focused) {
+            return match layout.root.leaf_at(layout.focused) {
                 Some(PaneContent::Terminal(id)) | Some(PaneContent::Shell(id)) => Some(id),
                 _ => None,
             };
@@ -3730,17 +4319,14 @@ impl App {
     pub fn focused_pane_content(&self) -> Option<&PaneContent> {
         self.pane_layout
             .as_ref()
-            .and_then(|layout| layout.panes.get(layout.focused))
+            .and_then(|layout| layout.root.leaf_at(layout.focused))
     }
 
     /// Whether a session is currently visible on screen.
     pub fn is_session_visible(&self, session_id: &str) -> bool {
         // Check pane layout for any Terminal/Shell pane with this session ID
         if let Some(ref layout) = self.pane_layout {
-            return layout
-                .panes
-                .iter()
-                .any(|pane| pane.session_id() == Some(session_id));
+            return layout.root.contains_session(session_id);
         }
         // No split: check if focused session matches
         self.focused_session_id()
@@ -3763,14 +4349,11 @@ impl App {
             .border_type(BorderType::Thick);
 
         if let Some(ref layout) = self.pane_layout {
-            if layout.panes.len() > 1 {
-                let rects = crate::ui::compute_pane_rects(
-                    terminal_size,
-                    layout.panes.len(),
-                    self.sidebar_width,
-                    layout.direction,
-                );
-                for (i, content) in layout.panes.iter().enumerate() {
+            if layout.root.leaf_count() > 1 {
+                let panel = crate::ui::right_panel_rect(terminal_size, self.sidebar_width, self.notes_pct());
+                let rects = crate::ui::compute_leaf_rects(&layout.root, panel);
+                let leaves = layout.root.leaves();
+                for (i, content) in leaves.iter().enumerate() {
                     if let Some(sid) = content.session_id() {
                         let inner = block.inner(rects[i]);
                         if col >= inner.x
@@ -3786,7 +4369,7 @@ impl App {
             }
         }
         // Single pane: use the right panel rect
-        let panel = crate::ui::compute_pty_rect(terminal_size, self.sidebar_width);
+        let panel = crate::ui::compute_pty_rect(terminal_size, self.sidebar_width, self.notes_pct());
         if col >= panel.x
             && col < panel.x + panel.width
             && row >= panel.y
@@ -3808,18 +4391,24 @@ impl App {
         self.sidebar_tree.name_for_session(session_id)
     }
 
-    /// Add a pane with the given content. Creates PaneLayout if None. Max 3.
+    /// Add a pane with the given content. Creates PaneLayout if None.
+    /// Splits the focused leaf in the tree to add the new content.
     pub fn split_add_pane_with(&mut self, content: PaneContent) -> bool {
-        if let Some(ref layout) = self.pane_layout {
-            if layout.panes.len() >= MAX_PANES {
-                self.status_message = Some(format!("Maximum {} panes", MAX_PANES));
+        if let Some(ref mut layout) = self.pane_layout {
+            // Check depth limit
+            if layout.root.depth() >= MAX_SPLIT_DEPTH {
+                self.status_message = Some("Maximum split depth reached".to_string());
                 return false;
             }
-        }
-
-        // Build initial pane from current state if no layout exists
-        let current_pane = if self.pane_layout.is_none() {
-            match self.main_view {
+            let direction = self.split_direction;
+            if !layout.root.split_leaf(layout.focused, direction, content) {
+                self.status_message = Some("Could not split pane".to_string());
+                return false;
+            }
+            true
+        } else {
+            // Build initial pane from current state
+            let current_pane = match self.main_view {
                 MainView::Terminal => self
                     .active_session_id()
                     .map(|id| PaneContent::Terminal(id.to_string())),
@@ -3828,40 +4417,29 @@ impl App {
                     .map(|id| PaneContent::Shell(id.to_string())),
                 MainView::Editor => Some(PaneContent::Editor),
                 _ => None,
-            }
-        } else {
-            None
-        };
-
-        if let Some(layout) = self.pane_layout.as_mut() {
-            layout.panes.push(content);
-        } else {
+            };
             let Some(first_pane) = current_pane else {
                 self.status_message = Some("No active view to split".to_string());
                 return false;
             };
             self.pane_layout = Some(PaneLayout {
-                panes: vec![first_pane, content],
+                root: SplitNode::Split {
+                    direction: self.split_direction,
+                    first: Box::new(SplitNode::Leaf(first_pane)),
+                    second: Box::new(SplitNode::Leaf(content)),
+                },
                 focused: 0,
-                direction: self.split_direction,
             });
+            true
         }
-        true
     }
 
     /// Add a pane of the same type as the current focused content, finding the next available session.
     /// Returns false if no sessions available.
     pub fn split_add_pane(&mut self) -> bool {
-        // Check MAX_PANES first
-        if let Some(ref layout) = self.pane_layout {
-            if layout.panes.len() >= MAX_PANES {
-                self.status_message = Some(format!("Maximum {} panes", MAX_PANES));
-                return false;
-            }
-        }
         // Determine the type to split based on focused content
         let split_type = if let Some(ref layout) = self.pane_layout {
-            match layout.panes.get(layout.focused) {
+            match layout.root.leaf_at(layout.focused) {
                 Some(PaneContent::Terminal(_)) => "terminal",
                 Some(PaneContent::Shell(_)) => "shell",
                 Some(PaneContent::Editor) => "editor",
@@ -3912,7 +4490,7 @@ impl App {
     /// Find next session of the given kind not already in pane layout.
     fn find_next_session_of_kind(&self, kind: SessionKind) -> Option<String> {
         let current_ids: Vec<&str> = if let Some(ref layout) = self.pane_layout {
-            layout.panes.iter().filter_map(|p| p.session_id()).collect()
+            layout.root.all_session_ids()
         } else {
             let id = match kind {
                 SessionKind::Claude => self.active_session_id(),
@@ -3939,18 +4517,16 @@ impl App {
         None
     }
 
-    /// Collapse pane layout to single-view if only 0-1 panes remain.
+    /// Collapse pane layout to single-view if root is a single leaf.
     fn collapse_pane_layout_if_needed(&mut self) {
         let Some(ref layout) = self.pane_layout else {
             return;
         };
-        if layout.panes.len() <= 1 {
-            if let Some(remaining) = layout.panes.first() {
-                match remaining {
-                    PaneContent::Terminal(_) => self.main_view = MainView::Terminal,
-                    PaneContent::Shell(_) => self.main_view = MainView::Shell,
-                    PaneContent::Editor => self.main_view = MainView::Editor,
-                }
+        if let SplitNode::Leaf(ref content) = layout.root {
+            match content {
+                PaneContent::Terminal(_) => self.main_view = MainView::Terminal,
+                PaneContent::Shell(_) => self.main_view = MainView::Shell,
+                PaneContent::Editor => self.main_view = MainView::Editor,
             }
             self.pane_layout = None;
         }
@@ -3961,27 +4537,30 @@ impl App {
         let Some(ref mut layout) = self.pane_layout else {
             return;
         };
-        if layout.panes.len() <= 1 {
+        let leaf_count = layout.root.leaf_count();
+        if leaf_count <= 1 {
             self.pane_layout = None;
             return;
         }
-        layout.panes.remove(layout.focused);
-        if layout.focused >= layout.panes.len() {
-            layout.focused = layout.panes.len() - 1;
+        layout.root.remove_leaf(layout.focused);
+        let new_count = layout.root.leaf_count();
+        if layout.focused >= new_count {
+            layout.focused = new_count.saturating_sub(1);
         }
         self.collapse_pane_layout_if_needed();
     }
 
     pub fn cycle_pane_focus_next(&mut self) {
         if let Some(ref mut layout) = self.pane_layout {
-            layout.focused = (layout.focused + 1) % layout.panes.len();
+            layout.focused = (layout.focused + 1) % layout.root.leaf_count();
         }
     }
 
     pub fn cycle_pane_focus_prev(&mut self) {
         if let Some(ref mut layout) = self.pane_layout {
+            let count = layout.root.leaf_count();
             layout.focused = if layout.focused == 0 {
-                layout.panes.len() - 1
+                count - 1
             } else {
                 layout.focused - 1
             };
@@ -3993,15 +4572,10 @@ impl App {
         let Some(ref mut layout) = self.pane_layout else {
             return;
         };
-        if let Some(pos) = layout
-            .panes
-            .iter()
-            .position(|p| p.session_id() == Some(session_id))
-        {
-            layout.panes.remove(pos);
-            if layout.focused >= layout.panes.len() && layout.focused > 0 {
-                layout.focused = layout.panes.len() - 1;
-            }
+        layout.root.remove_session(session_id);
+        let count = layout.root.leaf_count();
+        if layout.focused >= count && count > 0 {
+            layout.focused = count - 1;
         }
         self.collapse_pane_layout_if_needed();
     }
@@ -4100,7 +4674,7 @@ impl App {
 
         let panel_focus = Some(
             match self.panel_focus {
-                PanelFocus::Left => "left",
+                PanelFocus::Left | PanelFocus::Center => "left",
                 PanelFocus::Right => "right",
             }
             .to_string(),
@@ -4302,6 +4876,187 @@ impl App {
             }
         }
         None
+    }
+
+    /// Open the split picker overlay. Builds the list of available items.
+    pub fn open_split_picker(&mut self, direction: SplitDirection) {
+        let mut items: Vec<SplitPickerItem> = Vec::new();
+
+        // Add existing layout as one item if it exists
+        if let Some(ref layout) = self.pane_layout {
+            items.push(SplitPickerItem::ExistingLayout {
+                label: format!("Current Layout: {}", layout.root.display_label()),
+                node: layout.root.clone(),
+            });
+        }
+
+        // Collect session IDs already in a layout to mark them
+        let in_layout: Vec<&str> = if let Some(ref layout) = self.pane_layout {
+            layout.root.all_session_ids()
+        } else {
+            Vec::new()
+        };
+
+        // Add all running terminal and shell sessions
+        for section in &self.sidebar_tree.sections {
+            for item in &section.items {
+                let worktree_name = &item.display_name;
+                for slot in &item.sessions {
+                    if let Some(ref sid) = slot.session_id {
+                        if self.exited_sessions.contains(sid.as_str()) {
+                            continue;
+                        }
+                        // Skip sessions already in the layout (they're represented by ExistingLayout)
+                        if in_layout.contains(&sid.as_str()) {
+                            continue;
+                        }
+                        match slot.kind {
+                            SessionKind::Claude => {
+                                items.push(SplitPickerItem::Terminal {
+                                    session_id: sid.clone(),
+                                    label: format!("Terminal: {}", worktree_name),
+                                });
+                            }
+                            SessionKind::Shell => {
+                                items.push(SplitPickerItem::Shell {
+                                    session_id: sid.clone(),
+                                    label: format!("Shell: {}", worktree_name),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add editor if not already in layout
+        if self.pane_layout.is_none() || !self.pane_layout.as_ref().unwrap().root.leaves().iter().any(|l| matches!(l, PaneContent::Editor)) {
+            items.push(SplitPickerItem::Editor {
+                label: "Editor".to_string(),
+            });
+        }
+
+        // If no layout exists, also add the current view as an item
+        if self.pane_layout.is_none() {
+            match self.main_view {
+                MainView::Terminal => {
+                    if let Some(id) = self.active_session_id().map(|s| s.to_string()) {
+                        let name = self.worktree_name_for_session(&id)
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|| id.clone());
+                        // Only add if not already in items
+                        if !items.iter().any(|i| matches!(i, SplitPickerItem::Terminal { session_id, .. } if session_id == &id)) {
+                            items.insert(0, SplitPickerItem::Terminal {
+                                session_id: id,
+                                label: format!("Terminal: {} (current)", name),
+                            });
+                        }
+                    }
+                }
+                MainView::Shell => {
+                    if let Some(id) = self.active_shell_session_id().map(|s| s.to_string()) {
+                        let name = self.worktree_name_for_session(&id)
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|| id.clone());
+                        if !items.iter().any(|i| matches!(i, SplitPickerItem::Shell { session_id, .. } if session_id == &id)) {
+                            items.insert(0, SplitPickerItem::Shell {
+                                session_id: id,
+                                label: format!("Shell: {} (current)", name),
+                            });
+                        }
+                    }
+                }
+                MainView::Editor => {
+                    // Editor already added above
+                }
+                _ => {}
+            }
+        }
+
+        if items.len() < 2 {
+            self.status_message = Some("Not enough items to split".to_string());
+            return;
+        }
+
+        let visible: Vec<usize> = (0..items.len()).collect();
+        self.split_picker = Some(SplitPickerState {
+            items,
+            visible,
+            selected: 0,
+            step: SplitPickerStep::PickFirst,
+            first_choice: None,
+            direction,
+        });
+    }
+
+    fn handle_split_picker_key(&mut self, key: KeyEvent) {
+        // Ignore Ctrl combos except Ctrl+C (handled elsewhere)
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            return;
+        }
+        match key.code {
+            KeyCode::Esc => {
+                self.split_picker = None;
+            }
+            KeyCode::Tab => {
+                if let Some(ref mut picker) = self.split_picker {
+                    picker.toggle_direction();
+                }
+            }
+            KeyCode::Up => {
+                if let Some(ref mut picker) = self.split_picker {
+                    picker.move_up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(ref mut picker) = self.split_picker {
+                    picker.move_down();
+                }
+            }
+            KeyCode::Enter => {
+                let (step, first_idx, second_idx, direction) = {
+                    let Some(ref picker) = self.split_picker else {
+                        return;
+                    };
+                    let idx = picker.selected_item_index();
+                    (picker.step, picker.first_choice, idx, picker.direction)
+                };
+
+                match step {
+                    SplitPickerStep::PickFirst => {
+                        if let Some(idx) = second_idx {
+                            if let Some(ref mut picker) = self.split_picker {
+                                picker.first_choice = Some(idx);
+                                picker.step = SplitPickerStep::PickSecond;
+                                // Remove first choice from visible
+                                picker.visible.retain(|&i| i != idx);
+                                picker.selected = 0;
+                            }
+                        }
+                    }
+                    SplitPickerStep::PickSecond => {
+                        if let (Some(first_idx), Some(second_idx)) = (first_idx, second_idx) {
+                            // Clone items before mutating
+                            let first_node = self.split_picker.as_ref().unwrap().items[first_idx].to_split_node();
+                            let second_node = self.split_picker.as_ref().unwrap().items[second_idx].to_split_node();
+                            self.split_picker = None;
+
+                            // Clear existing layout if one of the items IS the existing layout
+                            self.pane_layout = Some(PaneLayout {
+                                root: SplitNode::Split {
+                                    direction,
+                                    first: Box::new(first_node),
+                                    second: Box::new(second_node),
+                                },
+                                focused: 0,
+                            });
+                            self.layout_changed = true;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     fn handle_branch_switcher_key(&mut self, key: KeyEvent) {

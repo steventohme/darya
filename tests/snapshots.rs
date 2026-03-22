@@ -7,7 +7,7 @@ use darya::app::{
     App, BlameLine, CommandPaletteState, DiffLine, DiffLineKind, DiffViewState, FileExplorerState,
     GitBlameState, GitFileStatus, GitLogEntry, GitLogState, GitStatusCategory, GitStatusEntry,
     GitStatusState, InputMode, MainView, PaneContent, PaneLayout, PanelFocus, Prompt, SidebarView,
-    SplitDirection,
+    SplitDirection, SplitNode,
 };
 use darya::config::{KeybindingsConfig, Theme};
 use darya::planet::sprites::PlanetAnimation;
@@ -296,12 +296,12 @@ fn snapshot_split_two_panes() {
     app.main_view = MainView::Terminal;
     app.panel_focus = PanelFocus::Right;
     app.pane_layout = Some(PaneLayout {
-        panes: vec![
-            PaneContent::Terminal("s0".to_string()),
-            PaneContent::Terminal("s1".to_string()),
-        ],
+        root: SplitNode::Split {
+            direction: SplitDirection::Horizontal,
+            first: Box::new(SplitNode::Leaf(PaneContent::Terminal("s0".to_string()))),
+            second: Box::new(SplitNode::Leaf(PaneContent::Terminal("s1".to_string()))),
+        },
         focused: 0,
-        direction: SplitDirection::Horizontal,
     });
 
     let sm = make_session_manager();
@@ -319,12 +319,12 @@ fn snapshot_split_focused_pane_highlighted() {
     app.panel_focus = PanelFocus::Right;
     // Focus is on second pane
     app.pane_layout = Some(PaneLayout {
-        panes: vec![
-            PaneContent::Terminal("s0".to_string()),
-            PaneContent::Terminal("s1".to_string()),
-        ],
+        root: SplitNode::Split {
+            direction: SplitDirection::Horizontal,
+            first: Box::new(SplitNode::Leaf(PaneContent::Terminal("s0".to_string()))),
+            second: Box::new(SplitNode::Leaf(PaneContent::Terminal("s1".to_string()))),
+        },
         focused: 1,
-        direction: SplitDirection::Horizontal,
     });
 
     let sm = make_session_manager();
@@ -341,12 +341,12 @@ fn snapshot_split_two_panes_vertical() {
     app.main_view = MainView::Terminal;
     app.panel_focus = PanelFocus::Right;
     app.pane_layout = Some(PaneLayout {
-        panes: vec![
-            PaneContent::Terminal("s0".to_string()),
-            PaneContent::Terminal("s1".to_string()),
-        ],
+        root: SplitNode::Split {
+            direction: SplitDirection::Vertical,
+            first: Box::new(SplitNode::Leaf(PaneContent::Terminal("s0".to_string()))),
+            second: Box::new(SplitNode::Leaf(PaneContent::Terminal("s1".to_string()))),
+        },
         focused: 0,
-        direction: SplitDirection::Vertical,
     });
 
     let sm = make_session_manager();
