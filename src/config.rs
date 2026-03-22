@@ -29,6 +29,13 @@ pub struct Theme {
     pub session_attention: Color,
     pub session_exited: Color,
     pub warning: Color,
+    pub git_added: Color,
+    pub git_modified: Color,
+    pub git_deleted: Color,
+    pub git_renamed: Color,
+    pub git_untracked: Color,
+    pub diff_added: Color,
+    pub diff_deleted: Color,
 }
 
 impl Theme {
@@ -50,6 +57,13 @@ impl Theme {
             session_attention: Color::Rgb(0x00, 0xDD, 0x00),
             session_exited: Color::Rgb(0xCC, 0x55, 0x55),
             warning: Color::Rgb(0xE0, 0xA0, 0x3A),
+            git_added: Color::Rgb(0x50, 0xC8, 0x50),
+            git_modified: Color::Rgb(0xD0, 0xB0, 0x40),
+            git_deleted: Color::Rgb(0xCC, 0x55, 0x55),
+            git_renamed: Color::Rgb(0x50, 0x90, 0xD0),
+            git_untracked: Color::Rgb(0x5A, 0x5A, 0x5A),
+            diff_added: Color::Rgb(0x50, 0xC8, 0x50),
+            diff_deleted: Color::Rgb(0xCC, 0x55, 0x55),
         }
     }
 
@@ -71,6 +85,13 @@ impl Theme {
             session_attention: Color::Rgb(0x00, 0x99, 0x00),
             session_exited: Color::Rgb(0xCC, 0x44, 0x44),
             warning: Color::Rgb(0xC0, 0x8A, 0x20),
+            git_added: Color::Rgb(0x2A, 0x8A, 0x2A),
+            git_modified: Color::Rgb(0x9A, 0x7A, 0x10),
+            git_deleted: Color::Rgb(0xBB, 0x33, 0x33),
+            git_renamed: Color::Rgb(0x2A, 0x6A, 0xB0),
+            git_untracked: Color::Rgb(0x7A, 0x74, 0x6E),
+            diff_added: Color::Rgb(0x2A, 0x8A, 0x2A),
+            diff_deleted: Color::Rgb(0xBB, 0x33, 0x33),
         }
     }
 }
@@ -113,6 +134,13 @@ struct ThemeToml {
     session_attention: Option<String>,
     session_exited: Option<String>,
     warning: Option<String>,
+    git_added: Option<String>,
+    git_modified: Option<String>,
+    git_deleted: Option<String>,
+    git_renamed: Option<String>,
+    git_untracked: Option<String>,
+    diff_added: Option<String>,
+    diff_deleted: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -518,6 +546,13 @@ pub fn load_config() -> AppConfig {
         apply!(session_attention);
         apply!(session_exited);
         apply!(warning);
+        apply!(git_added);
+        apply!(git_modified);
+        apply!(git_deleted);
+        apply!(git_renamed);
+        apply!(git_untracked);
+        apply!(diff_added);
+        apply!(diff_deleted);
     }
 
     if let Some(ref t) = config.terminal {

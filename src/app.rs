@@ -1998,6 +1998,8 @@ pub struct App {
     pub terminal_start_bottom: bool,
     /// Per-session scrollback offset (lines scrolled back from live view)
     pub scroll_offsets: HashMap<String, usize>,
+    /// Sessions where the user has intentionally scrolled back (suppress auto-scroll)
+    pub user_scrolled: HashSet<String>,
     /// Height of the terminal panel area, used for page-scroll sizing
     pub terminal_height: u16,
     pub file_explorer: FileExplorerState,
@@ -2076,6 +2078,7 @@ impl App {
             theme,
             terminal_start_bottom,
             scroll_offsets: HashMap::new(),
+            user_scrolled: HashSet::new(),
             terminal_height: 24,
             file_explorer: FileExplorerState::new(explorer_root),
             editor: None,
@@ -4015,8 +4018,9 @@ impl App {
 
     pub fn scroll_up(&mut self, lines: usize) {
         if let Some(id) = self.focused_session_id().cloned() {
-            let offset = self.scroll_offsets.entry(id).or_insert(0);
+            let offset = self.scroll_offsets.entry(id.clone()).or_insert(0);
             *offset = offset.saturating_add(lines).min(1000);
+            self.user_scrolled.insert(id);
         }
     }
 
@@ -4026,6 +4030,7 @@ impl App {
             *offset = offset.saturating_sub(lines);
             if *offset == 0 {
                 self.scroll_offsets.remove(&id);
+                self.user_scrolled.remove(&id);
             }
         }
     }
@@ -4033,6 +4038,7 @@ impl App {
     pub fn reset_scroll(&mut self) {
         if let Some(id) = self.focused_session_id().cloned() {
             self.scroll_offsets.remove(&id);
+            self.user_scrolled.remove(&id);
         }
     }
 

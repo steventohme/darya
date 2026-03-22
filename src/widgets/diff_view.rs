@@ -47,8 +47,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                 DiffLineKind::Header => Style::default()
                     .fg(app.theme.border_active)
                     .add_modifier(Modifier::BOLD),
-                DiffLineKind::Addition => Style::default().fg(ratatui::style::Color::Green),
-                DiffLineKind::Deletion => Style::default().fg(ratatui::style::Color::Red),
+                DiffLineKind::Addition => Style::default().fg(app.theme.diff_added),
+                DiffLineKind::Deletion => Style::default().fg(app.theme.diff_deleted),
                 DiffLineKind::Context => Style::default().fg(app.theme.fg_dim),
             };
             Line::from(Span::styled(dl.content.clone(), style))

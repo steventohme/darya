@@ -96,13 +96,24 @@ impl PlanetKind {
             status_bar_bg: accent,
             prompt_border: accent,
             prompt_delete_border: Color::Rgb(0xCC, 0x55, 0x55),
-            session_attention: Color::Rgb(0x00, 0xDD, 0x00),
+            session_attention: Color::Rgb(
+                ar.saturating_add(0x40).min(0xFF),
+                ag.saturating_add(0x40).min(0xFF),
+                ab.saturating_add(0x40).min(0xFF),
+            ),
             session_exited: Color::Rgb(0xCC, 0x55, 0x55),
             warning: Color::Rgb(
                 ar.saturating_add(0x20).min(0xE0),
                 ag.saturating_add(0x20).min(0xE0),
                 ab.min(0x60),
             ),
+            git_added: Color::Rgb(0x50, 0xC8, 0x50),
+            git_modified: Color::Rgb(0xD0, 0xB0, 0x40),
+            git_deleted: Color::Rgb(0xCC, 0x55, 0x55),
+            git_renamed: Color::Rgb(0x50, 0x90, 0xD0),
+            git_untracked: Color::Rgb(0x5A, 0x5A, 0x5A),
+            diff_added: Color::Rgb(0x50, 0xC8, 0x50),
+            diff_deleted: Color::Rgb(0xCC, 0x55, 0x55),
         }
     }
 
@@ -134,13 +145,24 @@ impl PlanetKind {
             status_bar_bg: dark_accent,
             prompt_border: dark_accent,
             prompt_delete_border: Color::Rgb(0xCC, 0x44, 0x44),
-            session_attention: Color::Rgb(0x00, 0x99, 0x00),
+            session_attention: Color::Rgb(
+                ar.saturating_sub(0x20).max(0x30),
+                ag.saturating_sub(0x20).max(0x30),
+                ab.saturating_sub(0x20).max(0x30),
+            ),
             session_exited: Color::Rgb(0xCC, 0x44, 0x44),
             warning: Color::Rgb(
                 ar.saturating_sub(0x20).max(0x80),
                 ag.saturating_sub(0x20).max(0x60),
                 ab.min(0x40),
             ),
+            git_added: Color::Rgb(0x2A, 0x8A, 0x2A),
+            git_modified: Color::Rgb(0x9A, 0x7A, 0x10),
+            git_deleted: Color::Rgb(0xBB, 0x33, 0x33),
+            git_renamed: Color::Rgb(0x2A, 0x6A, 0xB0),
+            git_untracked: Color::Rgb(0x7A, 0x74, 0x6E),
+            diff_added: Color::Rgb(0x2A, 0x8A, 0x2A),
+            diff_deleted: Color::Rgb(0xBB, 0x33, 0x33),
         }
     }
 }

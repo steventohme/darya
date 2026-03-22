@@ -1,5 +1,5 @@
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, List, ListItem, ListState};
 use ratatui::Frame;
@@ -49,7 +49,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default();
                 if app.file_explorer.dirty_dirs.contains(&dir_rel) {
-                    Span::styled(" ●", Style::default().fg(Color::DarkGray))
+                    Span::styled(" ●", Style::default().fg(app.theme.git_untracked))
                 } else {
                     Span::raw("")
                 }
@@ -61,19 +61,19 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     .unwrap_or_default();
                 match app.file_explorer.git_indicators.get(&rel) {
                     Some(GitFileStatus::Added) => {
-                        Span::styled(" A", Style::default().fg(Color::Green))
+                        Span::styled(" A", Style::default().fg(app.theme.git_added))
                     }
                     Some(GitFileStatus::Modified) => {
-                        Span::styled(" M", Style::default().fg(Color::Yellow))
+                        Span::styled(" M", Style::default().fg(app.theme.git_modified))
                     }
                     Some(GitFileStatus::Deleted) => {
-                        Span::styled(" D", Style::default().fg(Color::Red))
+                        Span::styled(" D", Style::default().fg(app.theme.git_deleted))
                     }
                     Some(GitFileStatus::Renamed) => {
-                        Span::styled(" R", Style::default().fg(Color::Blue))
+                        Span::styled(" R", Style::default().fg(app.theme.git_renamed))
                     }
                     Some(GitFileStatus::Untracked) => {
-                        Span::styled(" ?", Style::default().fg(Color::DarkGray))
+                        Span::styled(" ?", Style::default().fg(app.theme.git_untracked))
                     }
                     None => Span::raw(""),
                 }

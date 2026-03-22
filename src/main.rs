@@ -857,6 +857,7 @@ fn process_event(
                                 app.activity.mark_input(&session_id);
                                 // Reset scroll to live view on user input
                                 app.scroll_offsets.remove(&session_id);
+                                app.user_scrolled.remove(&session_id);
                             }
                         }
                     }
@@ -865,9 +866,9 @@ fn process_event(
         }
     }
 
-    // Reset scroll when new output arrives for a visible session
+    // Auto-scroll to bottom on new output, unless the user has scrolled back
     if let AppEvent::PtyOutput { ref session_id } = event {
-        if app.is_session_visible(session_id) {
+        if app.is_session_visible(session_id) && !app.user_scrolled.contains(session_id) {
             app.scroll_offsets.remove(session_id);
         }
         // Capture window title (OSC 0/2) as session status

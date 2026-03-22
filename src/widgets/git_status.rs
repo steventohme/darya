@@ -43,11 +43,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     };
 
                     let status_color = match entry.status {
-                        GitFileStatus::Added => ratatui::style::Color::Green,
-                        GitFileStatus::Modified => ratatui::style::Color::Yellow,
-                        GitFileStatus::Deleted => ratatui::style::Color::Red,
-                        GitFileStatus::Renamed => ratatui::style::Color::Blue,
-                        GitFileStatus::Untracked => app.theme.fg_dim,
+                        GitFileStatus::Added => app.theme.git_added,
+                        GitFileStatus::Modified => app.theme.git_modified,
+                        GitFileStatus::Deleted => app.theme.git_deleted,
+                        GitFileStatus::Renamed => app.theme.git_renamed,
+                        GitFileStatus::Untracked => app.theme.git_untracked,
                     };
 
                     let prefix = match entry.category {

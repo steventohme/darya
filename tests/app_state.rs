@@ -413,6 +413,53 @@ fn reset_scroll_clears_offset() {
     assert_eq!(app.active_scroll_offset(), 0);
 }
 
+// ── User-scrolled flag (interruptible auto-scroll) ──────────
+
+#[test]
+fn scroll_up_sets_user_scrolled_flag() {
+    let mut app = make_app_with_session(1);
+    app.sidebar_tree.cursor = 1;
+    let sid = app.focused_session_id().unwrap().clone();
+    assert!(!app.user_scrolled.contains(&sid));
+    app.scroll_up(10);
+    assert!(app.user_scrolled.contains(&sid));
+}
+
+#[test]
+fn scroll_down_to_zero_clears_user_scrolled_flag() {
+    let mut app = make_app_with_session(1);
+    app.sidebar_tree.cursor = 1;
+    let sid = app.focused_session_id().unwrap().clone();
+    app.scroll_up(10);
+    assert!(app.user_scrolled.contains(&sid));
+    app.scroll_down(10);
+    assert!(!app.user_scrolled.contains(&sid));
+    assert_eq!(app.active_scroll_offset(), 0);
+}
+
+#[test]
+fn scroll_down_partial_keeps_user_scrolled_flag() {
+    let mut app = make_app_with_session(1);
+    app.sidebar_tree.cursor = 1;
+    let sid = app.focused_session_id().unwrap().clone();
+    app.scroll_up(20);
+    app.scroll_down(5);
+    // Still scrolled back — flag should remain
+    assert!(app.user_scrolled.contains(&sid));
+    assert_eq!(app.active_scroll_offset(), 15);
+}
+
+#[test]
+fn reset_scroll_clears_user_scrolled_flag() {
+    let mut app = make_app_with_session(1);
+    app.sidebar_tree.cursor = 1;
+    let sid = app.focused_session_id().unwrap().clone();
+    app.scroll_up(50);
+    assert!(app.user_scrolled.contains(&sid));
+    app.reset_scroll();
+    assert!(!app.user_scrolled.contains(&sid));
+}
+
 // ── Tab auto-enters terminal ────────────────────────────────
 
 #[test]

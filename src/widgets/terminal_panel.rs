@@ -1,6 +1,8 @@
 use ratatui::layout::{Alignment, Rect};
 use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
+use ratatui::widgets::{
+    Block, BorderType, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+};
 use ratatui::Frame;
 use tui_term::widget::PseudoTerminal;
 
@@ -125,17 +127,29 @@ pub fn render_session(
                 }
             }
 
-            // Show scroll indicator when scrolled back
+            // Show scroll indicator and scrollbar when scrolled back
             if offset > 0 && inner.height > 0 {
+                let max_scroll: usize = 1000;
                 let indicator_area = Rect::new(inner.x, inner.y, inner.width, 1);
-                let indicator = Paragraph::new(" \u{2191} scrollback (scroll or PgDn to return) ")
-                    .alignment(Alignment::Right)
-                    .style(
-                        Style::default()
-                            .fg(app.theme.fg_dim)
-                            .bg(app.theme.highlight_bg),
-                    );
+                let indicator = Paragraph::new(format!(
+                    " \u{2191} line {offset}/{max_scroll} (scroll \u{2193} to return) "
+                ))
+                .alignment(Alignment::Right)
+                .style(
+                    Style::default()
+                        .fg(app.theme.fg_dim)
+                        .bg(app.theme.highlight_bg),
+                );
                 frame.render_widget(indicator, indicator_area);
+
+                // Vertical scrollbar on the right edge
+                let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                    .thumb_style(Style::default().fg(app.theme.fg_dim))
+                    .track_style(Style::default().fg(app.theme.highlight_bg));
+                // Position is inverted: offset=1000 means top, offset=0 means bottom
+                let position = max_scroll.saturating_sub(offset);
+                let mut scrollbar_state = ScrollbarState::new(max_scroll).position(position);
+                frame.render_stateful_widget(scrollbar, inner, &mut scrollbar_state);
             }
 
             // Show overlay bar if session has exited
