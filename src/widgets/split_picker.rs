@@ -12,12 +12,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     // Centered overlay: ~50% width, ~50% height
-    let width = (area.width / 2)
-        .max(40)
-        .min(area.width.saturating_sub(4));
-    let height = (area.height / 2)
-        .max(10)
-        .min(area.height.saturating_sub(4));
+    let width = (area.width / 2).max(40).min(area.width.saturating_sub(4));
+    let height = (area.height / 2).max(10).min(area.height.saturating_sub(4));
     let x = (area.width.saturating_sub(width)) / 2;
     let y = (area.height.saturating_sub(height)) / 2;
     let popup_area = Rect::new(x, y, width, height);
@@ -46,11 +42,26 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     // Footer hint (1 line at bottom)
     let footer_area = Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1);
     let footer = Paragraph::new(Line::from(vec![
-        Span::styled("Tab", Style::default().fg(app.theme.border_active).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Tab",
+            Style::default()
+                .fg(app.theme.border_active)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" toggle direction  ", Style::default().fg(app.theme.fg_dim)),
-        Span::styled("Enter", Style::default().fg(app.theme.border_active).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Enter",
+            Style::default()
+                .fg(app.theme.border_active)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" select  ", Style::default().fg(app.theme.fg_dim)),
-        Span::styled("Esc", Style::default().fg(app.theme.border_active).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Esc",
+            Style::default()
+                .fg(app.theme.border_active)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" cancel", Style::default().fg(app.theme.fg_dim)),
     ]))
     .style(Style::default().bg(app.theme.bg));

@@ -20,8 +20,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        let hint = Paragraph::new("  No worktree selected")
-            .style(Style::default().fg(app.theme.fg_dim));
+        let hint =
+            Paragraph::new("  No worktree selected").style(Style::default().fg(app.theme.fg_dim));
         frame.render_widget(hint, inner);
         return;
     };

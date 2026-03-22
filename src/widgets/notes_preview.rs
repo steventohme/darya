@@ -87,26 +87,19 @@ fn render_preview(frame: &mut Frame, area: Rect, app: &App, border_style: Style)
     }
 
     let Some(ref note) = app.note else {
-        let hint = Paragraph::new("  select a worktree")
-            .style(Style::default().fg(app.theme.fg_dim));
+        let hint =
+            Paragraph::new("  select a worktree").style(Style::default().fg(app.theme.fg_dim));
         frame.render_widget(hint, inner);
         return;
     };
 
     let content = note.content_string();
     if content.trim().is_empty() {
-        let keybinding =
-            crate::config::KeybindingsConfig::format(&app.keybindings.notes_toggle);
+        let keybinding = crate::config::KeybindingsConfig::format(&app.keybindings.notes_toggle);
         let hint_line = Line::from(vec![
             Span::styled("  ", Style::default().fg(app.theme.fg_dim)),
-            Span::styled(
-                keybinding,
-                Style::default().fg(app.theme.border_active),
-            ),
-            Span::styled(
-                " to edit",
-                Style::default().fg(app.theme.fg_dim),
-            ),
+            Span::styled(keybinding, Style::default().fg(app.theme.border_active)),
+            Span::styled(" to edit", Style::default().fg(app.theme.fg_dim)),
         ]);
         let hint = Paragraph::new(hint_line);
         frame.render_widget(hint, inner);
@@ -118,7 +111,12 @@ fn render_preview(frame: &mut Frame, area: Rect, app: &App, border_style: Style)
     let lines: Vec<Line> = content
         .lines()
         .take(max_lines)
-        .map(|l| Line::from(Span::styled(l.to_string(), Style::default().fg(app.theme.fg_dim))))
+        .map(|l| {
+            Line::from(Span::styled(
+                l.to_string(),
+                Style::default().fg(app.theme.fg_dim),
+            ))
+        })
         .collect();
 
     let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });

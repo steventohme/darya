@@ -466,7 +466,10 @@ fn process_event(
     app: &mut App,
     session_manager: &mut SessionManager,
     wt_manager: &WorktreeManager,
-    pending_notify: &mut std::collections::HashMap<String, (std::time::Instant, Option<String>, Option<String>)>,
+    pending_notify: &mut std::collections::HashMap<
+        String,
+        (std::time::Instant, Option<String>, Option<String>),
+    >,
     pending_attention: &mut std::collections::HashMap<String, std::time::Instant>,
 ) {
     // Track whether a main-loop operation consumed this key event.
@@ -611,8 +614,7 @@ fn process_event(
             match darya::worktree::manager::switch_branch(&worktree_path, &branch_name) {
                 Ok(()) => {
                     app.branch_switcher = None;
-                    app.status_message =
-                        Some(format!("Switched to branch '{}'", branch_name));
+                    app.status_message = Some(format!("Switched to branch '{}'", branch_name));
                     // Refresh worktree list to show updated branch names
                     if let Ok(worktrees) = wt_manager.list() {
                         app.refresh_worktrees(worktrees);
@@ -1023,12 +1025,11 @@ fn process_event(
             }
             // Also queue attention indicator for SessionDone
             if matches!(event, AppEvent::SessionDone { .. }) {
-                let viewing =
-                    app.focused_session_id().map(|s| s.as_str()) == Some(session_id.as_str())
-                        && app.input_mode == InputMode::Terminal;
+                let viewing = app.focused_session_id().map(|s| s.as_str())
+                    == Some(session_id.as_str())
+                    && app.input_mode == InputMode::Terminal;
                 if !viewing {
-                    pending_attention
-                        .insert(session_id.clone(), std::time::Instant::now());
+                    pending_attention.insert(session_id.clone(), std::time::Instant::now());
                 }
             }
         }

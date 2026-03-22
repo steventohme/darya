@@ -777,6 +777,7 @@ fn compute_pane_rects_with_notes_column() {
     let sidebar_pct = 25;
     // With notes column, right panel should be narrower
     let rects_no_notes = compute_pane_rects(size, 1, sidebar_pct, SplitDirection::Horizontal, None);
-    let rects_with_notes = compute_pane_rects(size, 1, sidebar_pct, SplitDirection::Horizontal, Some(25));
+    let rects_with_notes =
+        compute_pane_rects(size, 1, sidebar_pct, SplitDirection::Horizontal, Some(25));
     assert!(rects_with_notes[0].width < rects_no_notes[0].width);
 }

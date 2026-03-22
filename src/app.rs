@@ -152,9 +152,7 @@ impl SplitNode {
     pub fn depth(&self) -> usize {
         match self {
             SplitNode::Leaf(_) => 0,
-            SplitNode::Split { first, second, .. } => {
-                1 + first.depth().max(second.depth())
-            }
+            SplitNode::Split { first, second, .. } => 1 + first.depth().max(second.depth()),
         }
     }
 
@@ -222,7 +220,12 @@ impl SplitNode {
     /// Split the leaf at `index` into a Split node with the original leaf and new content.
     /// The new content is placed as the second child.
     /// Returns false if depth would exceed MAX_SPLIT_DEPTH or index is invalid.
-    pub fn split_leaf(&mut self, index: usize, direction: SplitDirection, new_content: PaneContent) -> bool {
+    pub fn split_leaf(
+        &mut self,
+        index: usize,
+        direction: SplitDirection,
+        new_content: PaneContent,
+    ) -> bool {
         if self.depth() >= MAX_SPLIT_DEPTH {
             return false;
         }
@@ -266,7 +269,11 @@ impl SplitNode {
         match self {
             SplitNode::Leaf(content) => content.display_label(),
             SplitNode::Split { first, second, .. } => {
-                format!("Split [{} | {}]", first.display_short(), second.display_short())
+                format!(
+                    "Split [{} | {}]",
+                    first.display_short(),
+                    second.display_short()
+                )
             }
         }
     }
@@ -1089,11 +1096,9 @@ pub struct BranchSwitcherState {
 
 impl BranchSwitcherState {
     pub fn new(worktree_path: PathBuf) -> crate::error::Result<Self> {
-        let all_branches =
-            crate::worktree::manager::list_branches(&worktree_path)?;
+        let all_branches = crate::worktree::manager::list_branches(&worktree_path)?;
         let current_branch =
-            crate::worktree::manager::current_branch(&worktree_path)
-                .unwrap_or_default();
+            crate::worktree::manager::current_branch(&worktree_path).unwrap_or_default();
         let results = all_branches.clone();
         Ok(Self {
             input: String::new(),
@@ -1116,8 +1121,7 @@ impl BranchSwitcherState {
         }
 
         let mut matcher = Matcher::new(Config::DEFAULT);
-        let pattern =
-            Pattern::parse(&self.input, CaseMatching::Smart, Normalization::Smart);
+        let pattern = Pattern::parse(&self.input, CaseMatching::Smart, Normalization::Smart);
 
         let mut scored: Vec<(u32, &str)> = self
             .all_branches
@@ -3409,7 +3413,10 @@ impl App {
         };
         // Toggle the root split direction if a layout exists
         if let Some(ref mut layout) = self.pane_layout {
-            if let SplitNode::Split { ref mut direction, .. } = layout.root {
+            if let SplitNode::Split {
+                ref mut direction, ..
+            } = layout.root
+            {
                 *direction = self.split_direction;
             }
             self.layout_changed = true;
@@ -3703,7 +3710,10 @@ impl App {
                 let leaf_count = layout.root.leaf_count();
                 if layout.focused < leaf_count - 1 {
                     layout.focused += 1;
-                    if matches!(layout.root.leaf_at(layout.focused), Some(PaneContent::Editor)) {
+                    if matches!(
+                        layout.root.leaf_at(layout.focused),
+                        Some(PaneContent::Editor)
+                    ) {
                         self.input_mode = InputMode::Navigation;
                     }
                 } else {
@@ -3871,8 +3881,7 @@ impl App {
                 // Forward navigation keys to edtui in Normal mode
                 if let Some(ref mut note) = self.note {
                     if is_edtui_compatible(&key) {
-                        note.event_handler
-                            .on_key_event(key, &mut note.editor_state);
+                        note.event_handler.on_key_event(key, &mut note.editor_state);
                         note.editor_state.mode = EditorMode::Normal;
                     }
                 }
@@ -3924,8 +3933,7 @@ impl App {
 
         // Forward to edtui
         if is_edtui_compatible(&key) {
-            note.event_handler
-                .on_key_event(key, &mut note.editor_state);
+            note.event_handler.on_key_event(key, &mut note.editor_state);
         }
     }
 
@@ -4333,7 +4341,11 @@ impl App {
 
         if let Some(ref layout) = self.pane_layout {
             if layout.root.leaf_count() > 1 {
-                let panel = crate::ui::right_panel_rect(terminal_size, self.sidebar_width, self.notes_pct());
+                let panel = crate::ui::right_panel_rect(
+                    terminal_size,
+                    self.sidebar_width,
+                    self.notes_pct(),
+                );
                 let rects = crate::ui::compute_leaf_rects(&layout.root, panel);
                 let leaves = layout.root.leaves();
                 for (i, content) in leaves.iter().enumerate() {
@@ -4352,7 +4364,8 @@ impl App {
             }
         }
         // Single pane: use the right panel rect
-        let panel = crate::ui::compute_pty_rect(terminal_size, self.sidebar_width, self.notes_pct());
+        let panel =
+            crate::ui::compute_pty_rect(terminal_size, self.sidebar_width, self.notes_pct());
         if col >= panel.x
             && col < panel.x + panel.width
             && row >= panel.y
@@ -4913,7 +4926,16 @@ impl App {
         }
 
         // Add editor if not already in layout
-        if self.pane_layout.is_none() || !self.pane_layout.as_ref().unwrap().root.leaves().iter().any(|l| matches!(l, PaneContent::Editor)) {
+        if self.pane_layout.is_none()
+            || !self
+                .pane_layout
+                .as_ref()
+                .unwrap()
+                .root
+                .leaves()
+                .iter()
+                .any(|l| matches!(l, PaneContent::Editor))
+        {
             items.push(SplitPickerItem::Editor {
                 label: "Editor".to_string(),
             });
@@ -4924,7 +4946,8 @@ impl App {
             match self.main_view {
                 MainView::Terminal => {
                     if let Some(id) = self.active_session_id().map(|s| s.to_string()) {
-                        let name = self.worktree_name_for_session(&id)
+                        let name = self
+                            .worktree_name_for_session(&id)
                             .map(|n| n.to_string())
                             .unwrap_or_else(|| id.clone());
                         // Only add if not already in items
@@ -4938,7 +4961,8 @@ impl App {
                 }
                 MainView::Shell => {
                     if let Some(id) = self.active_shell_session_id().map(|s| s.to_string()) {
-                        let name = self.worktree_name_for_session(&id)
+                        let name = self
+                            .worktree_name_for_session(&id)
                             .map(|n| n.to_string())
                             .unwrap_or_else(|| id.clone());
                         if !items.iter().any(|i| matches!(i, SplitPickerItem::Shell { session_id, .. } if session_id == &id)) {
@@ -5020,8 +5044,10 @@ impl App {
                     SplitPickerStep::PickSecond => {
                         if let (Some(first_idx), Some(second_idx)) = (first_idx, second_idx) {
                             // Clone items before mutating
-                            let first_node = self.split_picker.as_ref().unwrap().items[first_idx].to_split_node();
-                            let second_node = self.split_picker.as_ref().unwrap().items[second_idx].to_split_node();
+                            let first_node = self.split_picker.as_ref().unwrap().items[first_idx]
+                                .to_split_node();
+                            let second_node = self.split_picker.as_ref().unwrap().items[second_idx]
+                                .to_split_node();
                             self.split_picker = None;
 
                             // Clear existing layout if one of the items IS the existing layout

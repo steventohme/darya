@@ -15,8 +15,14 @@ use crate::widgets;
 
 /// Split the main body area into horizontal columns: sidebar, [notes], right panel.
 /// Returns (columns, right_index) where right_index points to the right panel chunk.
-fn split_main_columns(body: Rect, sidebar_pct: u16, notes_pct: Option<u16>) -> (std::rc::Rc<[Rect]>, usize) {
-    let remaining = 100u16.saturating_sub(sidebar_pct).saturating_sub(notes_pct.unwrap_or(0));
+fn split_main_columns(
+    body: Rect,
+    sidebar_pct: u16,
+    notes_pct: Option<u16>,
+) -> (std::rc::Rc<[Rect]>, usize) {
+    let remaining = 100u16
+        .saturating_sub(sidebar_pct)
+        .saturating_sub(notes_pct.unwrap_or(0));
     let constraints: Vec<Constraint> = if let Some(np) = notes_pct {
         vec![
             Constraint::Percentage(sidebar_pct),
@@ -137,9 +143,7 @@ fn render_view(
         ViewKind::Shell => {
             widgets::terminal_panel::render_shell(frame, area, app, session_manager, is_focused)
         }
-        ViewKind::Notes => {
-            widgets::notes_editor::render(frame, area, app, is_focused)
-        }
+        ViewKind::Notes => widgets::notes_editor::render(frame, area, app, is_focused),
     }
 }
 
@@ -177,10 +181,16 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     // Left panel (sidebar) — optionally split to include notes preview and/or planet
     let left_focused = app.panel_focus == PanelFocus::Left;
     let show_sidebar_notes = app.note_position == NotePosition::Sidebar;
-    let show_planet = app.show_planet && app.planet_kind.is_some() && app.planet_animation.is_some();
+    let show_planet =
+        app.show_planet && app.planet_kind.is_some() && app.planet_animation.is_some();
 
     // Build sidebar vertical constraints
-    let mut sidebar_constraints: Vec<Constraint> = vec![Constraint::Percentage(if show_sidebar_notes { 55 } else { 100 })]; // worktree list
+    let mut sidebar_constraints: Vec<Constraint> =
+        vec![Constraint::Percentage(if show_sidebar_notes {
+            55
+        } else {
+            100
+        })]; // worktree list
     if show_sidebar_notes {
         sidebar_constraints.push(Constraint::Percentage(45)); // notes panel
     }

@@ -2338,10 +2338,7 @@ fn split_terminal_with_shell() {
     let layout = app.pane_layout.as_ref().unwrap();
     let leaves = layout.root.leaves();
     assert_eq!(leaves.len(), 2);
-    assert_eq!(
-        *leaves[0],
-        PaneContent::Terminal("terminal-1".to_string())
-    );
+    assert_eq!(*leaves[0], PaneContent::Terminal("terminal-1".to_string()));
     assert_eq!(*leaves[1], PaneContent::Shell("shell-1".to_string()));
 }
 
@@ -2501,10 +2498,7 @@ fn split_terminal_command_from_palette() {
     let layout = app.pane_layout.as_ref().unwrap();
     let leaves = layout.root.leaves();
     assert_eq!(leaves.len(), 2);
-    assert_eq!(
-        *leaves[1],
-        PaneContent::Terminal("terminal-2".to_string())
-    );
+    assert_eq!(*leaves[1], PaneContent::Terminal("terminal-2".to_string()));
 }
 
 #[test]
@@ -3247,7 +3241,11 @@ fn split_node_depth() {
 #[test]
 fn split_node_split_leaf() {
     let mut node = SplitNode::Leaf(PaneContent::Editor);
-    assert!(node.split_leaf(0, SplitDirection::Horizontal, PaneContent::Terminal("t1".into())));
+    assert!(node.split_leaf(
+        0,
+        SplitDirection::Horizontal,
+        PaneContent::Terminal("t1".into())
+    ));
     assert_eq!(node.leaf_count(), 2);
     assert_eq!(node.depth(), 1);
 
@@ -3402,7 +3400,10 @@ fn split_picker_existing_layout_shown_as_item() {
     // Now open picker — should include "Current Layout" item
     app.open_split_picker(SplitDirection::Horizontal);
     let picker = app.split_picker.as_ref().unwrap();
-    assert!(picker.items.iter().any(|i| matches!(i, darya::app::SplitPickerItem::ExistingLayout { .. })));
+    assert!(picker
+        .items
+        .iter()
+        .any(|i| matches!(i, darya::app::SplitPickerItem::ExistingLayout { .. })));
 }
 
 // ── Theme Picker ─────────────────────────────────────────────
@@ -3524,7 +3525,10 @@ fn branch_switcher_opens_and_closes_with_esc() {
 
 #[test]
 fn branch_switcher_fuzzy_filter() {
-    let mut bs = make_branch_switcher(vec!["main", "develop", "feature-auth", "feature-ui"], "main");
+    let mut bs = make_branch_switcher(
+        vec!["main", "develop", "feature-auth", "feature-ui"],
+        "main",
+    );
     bs.input = "feat".to_string();
     bs.update_matches();
     assert_eq!(bs.results.len(), 2);
