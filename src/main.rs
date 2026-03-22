@@ -258,8 +258,10 @@ async fn run_loop(
     use std::collections::HashMap;
     use std::time::Instant;
 
-    // Debounce native notifications: only fire if no PtyOutput for that session within timeout
-    let mut pending_native: HashMap<String, (Instant, String)> = HashMap::new();
+    // Debounce notifications: only fire if no PtyOutput for that session within timeout.
+    // Stores (queued_at, iterm2_msg, native_msg) per session.
+    let mut pending_notify: HashMap<String, (Instant, Option<String>, Option<String>)> =
+        HashMap::new();
     // Debounce attention indicator: only mark attention if no PtyOutput follows within timeout.
     // This prevents every tool call completion from turning the sidebar green.
     let mut pending_attention: HashMap<String, Instant> = HashMap::new();
@@ -287,7 +289,7 @@ async fn run_loop(
             app,
             session_manager,
             wt_manager,
-            &mut pending_native,
+            &mut pending_notify,
             &mut pending_attention,
         );
 
@@ -299,7 +301,7 @@ async fn run_loop(
                 app,
                 session_manager,
                 wt_manager,
-                &mut pending_native,
+                &mut pending_notify,
                 &mut pending_attention,
             );
             if !app.running {
@@ -309,10 +311,16 @@ async fn run_loop(
 
         // Post-event housekeeping (once per batch, not per event)
 
-        // Flush debounced native notifications that have aged past the threshold
-        pending_native.retain(|_sid, (queued_at, msg)| {
+        // Flush debounced notifications that have aged past the threshold
+        pending_notify.retain(|_sid, (queued_at, iterm_msg, native_msg)| {
             if queued_at.elapsed().as_secs_f64() >= DEBOUNCE_SECS {
-                send_native_notification(msg.clone());
+                if let Some(msg) = iterm_msg {
+                    let _ = write!(terminal.backend_mut(), "\x1b]9;{}\x07\x07", msg);
+                    let _ = terminal.backend_mut().flush();
+                }
+                if let Some(msg) = native_msg {
+                    send_native_notification(msg.clone());
+                }
                 false // remove from map
             } else {
                 true // keep waiting
@@ -456,7 +464,7 @@ fn process_event(
     app: &mut App,
     session_manager: &mut SessionManager,
     wt_manager: &WorktreeManager,
-    pending_native: &mut std::collections::HashMap<String, (std::time::Instant, String)>,
+    pending_notify: &mut std::collections::HashMap<String, (std::time::Instant, Option<String>, Option<String>)>,
     pending_attention: &mut std::collections::HashMap<String, std::time::Instant>,
 ) {
     // Track whether a main-loop operation consumed this key event.
@@ -1013,38 +1021,46 @@ fn process_event(
         }
     }
 
-    // Send notifications
+    // Notifications: debounce iTerm2/native alerts so they only fire when a session
+    // is truly idle (no PtyOutput for DEBOUNCE_SECS). SessionExited is immediate.
     let (iterm_msg, native_msg) = app.notification_for_event(event);
-    if let Some(msg) = iterm_msg {
-        let _ = write!(terminal.backend_mut(), "\x1b]9;{}\x07\x07", msg);
-        let _ = terminal.backend_mut().flush();
-    }
-    // Native notifications: only SessionExited fires (immediately)
-    if let Some(msg) = native_msg {
-        send_native_notification(msg);
-    }
-
-    // Debounced attention indicator: queue on SessionDone, cancel on PtyOutput,
-    // set attention_sessions after timeout. This prevents every tool call completion
-    // from turning the sidebar green — only truly idle sessions get marked.
     match event {
-        AppEvent::SessionDone { ref session_id } => {
-            // Only queue if not currently viewing this session
-            let viewing = app.focused_session_id().map(|s| s.as_str()) == Some(session_id)
-                && app.input_mode == InputMode::Terminal;
-            if !viewing {
-                pending_attention.insert(session_id.clone(), std::time::Instant::now());
+        AppEvent::SessionBell { ref session_id } | AppEvent::SessionDone { ref session_id } => {
+            // Queue notifications — they'll fire after debounce if no PtyOutput cancels them
+            if iterm_msg.is_some() || native_msg.is_some() {
+                pending_notify.insert(
+                    session_id.clone(),
+                    (std::time::Instant::now(), iterm_msg, native_msg),
+                );
+            }
+            // Also queue attention indicator for SessionDone
+            if matches!(event, AppEvent::SessionDone { .. }) {
+                let viewing =
+                    app.focused_session_id().map(|s| s.as_str()) == Some(session_id.as_str())
+                        && app.input_mode == InputMode::Terminal;
+                if !viewing {
+                    pending_attention
+                        .insert(session_id.clone(), std::time::Instant::now());
+                }
             }
         }
         AppEvent::SessionExited { ref session_id } => {
-            // Session exited — immediate attention, no debounce needed
+            // Session exited — send immediately, no more output coming
+            if let Some(msg) = iterm_msg {
+                let _ = write!(terminal.backend_mut(), "\x1b]9;{}\x07\x07", msg);
+                let _ = terminal.backend_mut().flush();
+            }
+            if let Some(msg) = native_msg {
+                send_native_notification(msg);
+            }
+            pending_notify.remove(session_id);
             pending_attention.remove(session_id);
             app.attention_sessions.insert(session_id.clone());
         }
         AppEvent::PtyOutput { ref session_id } => {
-            // New output cancels pending attention — session is still working
+            // New output cancels pending notifications — session is still working
             pending_attention.remove(session_id);
-            pending_native.remove(session_id);
+            pending_notify.remove(session_id);
         }
         _ => {}
     }
