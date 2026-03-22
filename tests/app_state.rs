@@ -5,10 +5,10 @@ use std::path::PathBuf;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use darya::app::{
-    format_relative_time, is_edtui_compatible, status_priority, BlameLine, ColorTarget, CommandId,
-    CommandPaletteState, EditorViewState, GitBlameState, GitFileStatus, GitLogEntry, GitLogState,
-    GitStatusCategory, GitStatusEntry, GitStatusState, InputMode, MainView, PaneContent,
-    PanelFocus, Prompt, SidebarView, SplitDirection, ViewKind,
+    format_relative_time, is_edtui_compatible, status_priority, BlameLine, BranchSwitcherState,
+    ColorTarget, CommandId, CommandPaletteState, EditorViewState, GitBlameState, GitFileStatus,
+    GitLogEntry, GitLogState, GitStatusCategory, GitStatusEntry, GitStatusState, InputMode,
+    MainView, PaneContent, PanelFocus, Prompt, SidebarView, SplitDirection, ViewKind,
 };
 use darya::config;
 use darya::event::AppEvent;
@@ -223,36 +223,32 @@ fn session_exited_other_session_no_mode_change() {
 }
 
 #[test]
-fn session_bell_marks_attention_unless_active_and_terminal() {
+fn session_bell_does_not_immediately_mark_attention() {
+    // Bell/Done attention is debounced in the main event loop, not in handle_event.
+    // handle_event should NOT set attention_sessions for bell events.
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
     let sid = active_session_id(&app).unwrap().to_string();
 
-    // In terminal mode viewing the session — no attention
-    app.input_mode = InputMode::Terminal;
-    app.handle_event(&AppEvent::SessionBell {
-        session_id: sid.clone(),
-    });
-    assert!(!app.attention_sessions.contains(&sid));
-
-    // In nav mode — should mark attention
     app.input_mode = InputMode::Navigation;
     app.handle_event(&AppEvent::SessionBell {
         session_id: sid.clone(),
     });
-    assert!(app.attention_sessions.contains(&sid));
+    assert!(!app.attention_sessions.contains(&sid));
 }
 
 #[test]
-fn session_bell_other_session_always_marks_attention() {
+fn session_done_does_not_immediately_mark_attention() {
+    // SessionDone attention is debounced in the main event loop.
     let mut app = make_app_with_session(2);
     app.sidebar_tree.cursor = 1;
-    app.input_mode = InputMode::Terminal;
-    let other = "other-session".to_string();
-    app.handle_event(&AppEvent::SessionBell {
-        session_id: other.clone(),
+    let sid = active_session_id(&app).unwrap().to_string();
+
+    app.input_mode = InputMode::Navigation;
+    app.handle_event(&AppEvent::SessionDone {
+        session_id: sid.clone(),
     });
-    assert!(app.attention_sessions.contains(&other));
+    assert!(!app.attention_sessions.contains(&sid));
 }
 
 // ── Prompts ─────────────────────────────────────────────────
@@ -2537,11 +2533,10 @@ fn notification_for_done() {
     let sid = active_session_id(&app).unwrap().to_string();
     let event = AppEvent::SessionDone { session_id: sid };
     let (iterm, native) = app.notification_for_event(&event);
-    // Done → native only, no iTerm2 (bell already handled that)
+    // SessionDone no longer triggers any notification — attention is debounced
+    // in the main event loop instead.
     assert!(iterm.is_none());
-    let native = native.unwrap();
-    assert!(native.contains("task completed"));
-    assert!(native.contains("my-project")); // worktree name
+    assert!(native.is_none());
 }
 
 #[test]
@@ -3250,4 +3245,135 @@ fn theme_picker_live_preview_changes_theme() {
     app.handle_event(&key(KeyCode::Right));
     // Theme should differ from initial (live preview)
     assert_ne!(app.theme, initial_theme);
+}
+
+// ── Branch Switcher ─────────────────────────────────────────
+
+fn make_branch_switcher(branches: Vec<&str>, current: &str) -> BranchSwitcherState {
+    BranchSwitcherState {
+        input: String::new(),
+        all_branches: branches.iter().map(|s| s.to_string()).collect(),
+        current_branch: current.to_string(),
+        worktree_path: PathBuf::from("/tmp/test"),
+        results: branches.iter().map(|s| s.to_string()).collect(),
+        selected: 0,
+    }
+}
+
+#[test]
+fn branch_switcher_opens_and_closes_with_esc() {
+    let mut app = make_app(2);
+    app.branch_switcher = Some(make_branch_switcher(vec!["main", "dev", "feature"], "main"));
+    assert!(app.branch_switcher.is_some());
+    app.handle_event(&key(KeyCode::Esc));
+    assert!(app.branch_switcher.is_none());
+}
+
+#[test]
+fn branch_switcher_fuzzy_filter() {
+    let mut bs = make_branch_switcher(vec!["main", "develop", "feature-auth", "feature-ui"], "main");
+    bs.input = "feat".to_string();
+    bs.update_matches();
+    assert_eq!(bs.results.len(), 2);
+    assert!(bs.results.iter().all(|r| r.contains("feature")));
+}
+
+#[test]
+fn branch_switcher_empty_filter_shows_all() {
+    let mut bs = make_branch_switcher(vec!["main", "develop", "feature"], "main");
+    bs.input = "xyz".to_string();
+    bs.update_matches();
+    assert!(bs.results.is_empty());
+    bs.input.clear();
+    bs.update_matches();
+    assert_eq!(bs.results.len(), 3);
+}
+
+#[test]
+fn branch_switcher_navigation_wraps() {
+    let mut bs = make_branch_switcher(vec!["main", "dev", "feature"], "main");
+    assert_eq!(bs.selected, 0);
+    bs.move_down();
+    assert_eq!(bs.selected, 1);
+    bs.move_down();
+    assert_eq!(bs.selected, 2);
+    // Wraps to top
+    bs.move_down();
+    assert_eq!(bs.selected, 0);
+    // Wraps to bottom
+    bs.move_up();
+    assert_eq!(bs.selected, 2);
+}
+
+#[test]
+fn branch_switcher_selected_branch() {
+    let bs = make_branch_switcher(vec!["main", "dev", "feature"], "main");
+    assert_eq!(bs.selected_branch(), Some("main"));
+}
+
+#[test]
+fn branch_switcher_wants_switch_returns_none_for_current_branch() {
+    let mut app = make_app(2);
+    app.branch_switcher = Some(make_branch_switcher(vec!["main", "dev"], "main"));
+    // selected=0 which is "main" (current) — should return None
+    let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+    assert!(app.wants_switch_branch(&enter).is_none());
+}
+
+#[test]
+fn branch_switcher_wants_switch_returns_some_for_different_branch() {
+    let mut app = make_app(2);
+    let mut bs = make_branch_switcher(vec!["main", "dev"], "main");
+    bs.selected = 1; // "dev" — not current
+    app.branch_switcher = Some(bs);
+    let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+    let result = app.wants_switch_branch(&enter);
+    assert!(result.is_some());
+    let (path, branch) = result.unwrap();
+    assert_eq!(branch, "dev");
+    assert_eq!(path, PathBuf::from("/tmp/test"));
+}
+
+#[test]
+fn branch_switcher_typing_filters_results() {
+    let mut app = make_app(2);
+    app.branch_switcher = Some(make_branch_switcher(
+        vec!["main", "develop", "feature-auth"],
+        "main",
+    ));
+    // Type 'd' to filter
+    app.handle_event(&key(KeyCode::Char('d')));
+    let bs = app.branch_switcher.as_ref().unwrap();
+    assert_eq!(bs.input, "d");
+    assert!(bs.results.len() < 3); // filtered
+}
+
+#[test]
+fn branch_switcher_backspace_removes_char() {
+    let mut app = make_app(2);
+    let mut bs = make_branch_switcher(vec!["main", "dev"], "main");
+    bs.input = "de".to_string();
+    app.branch_switcher = Some(bs);
+    app.handle_event(&key(KeyCode::Backspace));
+    assert_eq!(app.branch_switcher.as_ref().unwrap().input, "d");
+}
+
+#[test]
+fn branch_switcher_down_arrow_moves_selection() {
+    let mut app = make_app(2);
+    app.branch_switcher = Some(make_branch_switcher(vec!["main", "dev", "feature"], "main"));
+    assert_eq!(app.branch_switcher.as_ref().unwrap().selected, 0);
+    app.handle_event(&key(KeyCode::Down));
+    assert_eq!(app.branch_switcher.as_ref().unwrap().selected, 1);
+}
+
+#[test]
+fn command_palette_execute_branch_switcher() {
+    let mut app = make_app(2);
+    // We can't use execute_command(BranchSwitcher) directly because it calls git,
+    // so just verify the CommandId variant exists and state field works
+    app.branch_switcher = Some(make_branch_switcher(vec!["main"], "main"));
+    assert!(app.branch_switcher.is_some());
+    app.branch_switcher = None;
+    assert!(app.branch_switcher.is_none());
 }

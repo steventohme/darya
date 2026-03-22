@@ -773,6 +773,80 @@ fn walk_project_files(root: &Path) -> Vec<String> {
     files
 }
 
+// ── Branch Switcher ─────────────────────────────────────────
+
+pub struct BranchSwitcherState {
+    pub input: String,
+    pub all_branches: Vec<String>,
+    pub current_branch: String,
+    pub worktree_path: PathBuf,
+    pub results: Vec<String>,
+    pub selected: usize,
+}
+
+impl BranchSwitcherState {
+    pub fn new(worktree_path: PathBuf) -> crate::error::Result<Self> {
+        let all_branches =
+            crate::worktree::manager::list_branches(&worktree_path)?;
+        let current_branch =
+            crate::worktree::manager::current_branch(&worktree_path)
+                .unwrap_or_default();
+        let results = all_branches.clone();
+        Ok(Self {
+            input: String::new(),
+            all_branches,
+            current_branch,
+            worktree_path,
+            results,
+            selected: 0,
+        })
+    }
+
+    pub fn update_matches(&mut self) {
+        use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
+        use nucleo_matcher::{Config, Matcher};
+
+        if self.input.is_empty() {
+            self.results = self.all_branches.clone();
+            self.selected = 0;
+            return;
+        }
+
+        let mut matcher = Matcher::new(Config::DEFAULT);
+        let pattern =
+            Pattern::parse(&self.input, CaseMatching::Smart, Normalization::Smart);
+
+        let mut scored: Vec<(u32, &str)> = self
+            .all_branches
+            .iter()
+            .filter_map(|b| {
+                let mut buf = Vec::new();
+                let haystack = nucleo_matcher::Utf32Str::new(b, &mut buf);
+                pattern
+                    .score(haystack, &mut matcher)
+                    .map(|s| (s, b.as_str()))
+            })
+            .collect();
+
+        scored.sort_by(|a, b| b.0.cmp(&a.0));
+
+        self.results = scored.into_iter().map(|(_, b)| b.to_string()).collect();
+        self.selected = 0;
+    }
+
+    pub fn move_up(&mut self) {
+        self.selected = wrapping_prev(self.selected, self.results.len());
+    }
+
+    pub fn move_down(&mut self) {
+        self.selected = wrapping_next(self.selected, self.results.len());
+    }
+
+    pub fn selected_branch(&self) -> Option<&str> {
+        self.results.get(self.selected).map(|s| s.as_str())
+    }
+}
+
 // ── Command Palette ──────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -808,6 +882,7 @@ pub enum CommandId {
     ToggleSplitDirection,
     ThemePicker,
     TogglePlanet,
+    BranchSwitcher,
 }
 
 #[derive(Debug, Clone)]
@@ -827,6 +902,44 @@ pub struct CommandPaletteState {
 impl CommandPaletteState {
     pub fn new(keybindings: &KeybindingsConfig) -> Self {
         let all_commands = vec![
+            // ── Search ──
+            PaletteCommand {
+                id: CommandId::FuzzyFinder,
+                name: "Find File".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.fuzzy_finder)),
+            },
+            PaletteCommand {
+                id: CommandId::ProjectSearch,
+                name: "Search Project".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.project_search)),
+            },
+            // ── Git ──
+            PaletteCommand {
+                id: CommandId::BranchSwitcher,
+                name: "Git: Switch Branch".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.branch_switcher)),
+            },
+            PaletteCommand {
+                id: CommandId::ViewGitStatus,
+                name: "View: Git Status".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.git_status)),
+            },
+            PaletteCommand {
+                id: CommandId::RefreshGitStatus,
+                name: "Refresh Git Status".to_string(),
+                keybinding: None,
+            },
+            PaletteCommand {
+                id: CommandId::ViewGitBlame,
+                name: "View: Git Blame".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.git_blame)),
+            },
+            PaletteCommand {
+                id: CommandId::ViewGitLog,
+                name: "View: Git Log".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.git_log)),
+            },
+            // ── Views ──
             PaletteCommand {
                 id: CommandId::ViewWorktrees,
                 name: "View: Worktrees".to_string(),
@@ -853,25 +966,11 @@ impl CommandPaletteState {
                 keybinding: Some(KeybindingsConfig::format(&keybindings.search)),
             },
             PaletteCommand {
-                id: CommandId::ViewGitStatus,
-                name: "View: Git Status".to_string(),
-                keybinding: Some(KeybindingsConfig::format(&keybindings.git_status)),
-            },
-            PaletteCommand {
-                id: CommandId::ViewGitBlame,
-                name: "View: Git Blame".to_string(),
-                keybinding: Some(KeybindingsConfig::format(&keybindings.git_blame)),
-            },
-            PaletteCommand {
-                id: CommandId::ViewGitLog,
-                name: "View: Git Log".to_string(),
-                keybinding: Some(KeybindingsConfig::format(&keybindings.git_log)),
-            },
-            PaletteCommand {
                 id: CommandId::ViewShell,
                 name: "View: Shell".to_string(),
                 keybinding: Some(KeybindingsConfig::format(&keybindings.shell)),
             },
+            // ── Sessions ──
             PaletteCommand {
                 id: CommandId::StartSession,
                 name: "Session: Start".to_string(),
@@ -887,25 +986,16 @@ impl CommandPaletteState {
                 name: "Session: Close".to_string(),
                 keybinding: None,
             },
-            PaletteCommand {
-                id: CommandId::FuzzyFinder,
-                name: "Find File".to_string(),
-                keybinding: Some(KeybindingsConfig::format(&keybindings.fuzzy_finder)),
-            },
-            PaletteCommand {
-                id: CommandId::ProjectSearch,
-                name: "Search Project".to_string(),
-                keybinding: Some(KeybindingsConfig::format(&keybindings.project_search)),
-            },
-            PaletteCommand {
-                id: CommandId::RefreshGitStatus,
-                name: "Refresh Git Status".to_string(),
-                keybinding: None,
-            },
+            // ── Split ──
             PaletteCommand {
                 id: CommandId::SplitPane,
                 name: "Split: Same Type".to_string(),
                 keybinding: Some(KeybindingsConfig::format(&keybindings.split_pane)),
+            },
+            PaletteCommand {
+                id: CommandId::SplitPaneVertical,
+                name: "Split: Vertical Same Type".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.split_pane_vertical)),
             },
             PaletteCommand {
                 id: CommandId::SplitTerminal,
@@ -928,15 +1018,11 @@ impl CommandPaletteState {
                 keybinding: Some(KeybindingsConfig::format(&keybindings.close_pane)),
             },
             PaletteCommand {
-                id: CommandId::ToggleHelp,
-                name: "Toggle Help".to_string(),
-                keybinding: Some("?".to_string()),
+                id: CommandId::ToggleSplitDirection,
+                name: "Toggle Split Direction".to_string(),
+                keybinding: None,
             },
-            PaletteCommand {
-                id: CommandId::Quit,
-                name: "Quit".to_string(),
-                keybinding: Some("q".to_string()),
-            },
+            // ── Sidebar ──
             PaletteCommand {
                 id: CommandId::AddSection,
                 name: "Sidebar: Add Section".to_string(),
@@ -962,16 +1048,7 @@ impl CommandPaletteState {
                 name: "Sidebar: Shrink".to_string(),
                 keybinding: Some(KeybindingsConfig::format(&keybindings.sidebar_shrink)),
             },
-            PaletteCommand {
-                id: CommandId::SplitPaneVertical,
-                name: "Split: Vertical Same Type".to_string(),
-                keybinding: Some(KeybindingsConfig::format(&keybindings.split_pane_vertical)),
-            },
-            PaletteCommand {
-                id: CommandId::ToggleSplitDirection,
-                name: "Toggle Split Direction".to_string(),
-                keybinding: None,
-            },
+            // ── Theme ──
             PaletteCommand {
                 id: CommandId::ThemePicker,
                 name: "Theme: Choose Planet".to_string(),
@@ -981,6 +1058,17 @@ impl CommandPaletteState {
                 id: CommandId::TogglePlanet,
                 name: "Theme: Toggle Planet Display".to_string(),
                 keybinding: None,
+            },
+            // ── App ──
+            PaletteCommand {
+                id: CommandId::ToggleHelp,
+                name: "Toggle Help".to_string(),
+                keybinding: Some("?".to_string()),
+            },
+            PaletteCommand {
+                id: CommandId::Quit,
+                name: "Quit".to_string(),
+                keybinding: Some("q".to_string()),
             },
         ];
         let results = all_commands.clone();
@@ -1917,6 +2005,7 @@ pub struct App {
     pub search: Option<SearchViewState>,
     pub fuzzy_finder: Option<FuzzyFinderState>,
     pub command_palette: Option<CommandPaletteState>,
+    pub branch_switcher: Option<BranchSwitcherState>,
     pub git_status: Option<GitStatusState>,
     pub diff_view: Option<DiffViewState>,
     pub git_blame: Option<GitBlameState>,
@@ -1993,6 +2082,7 @@ impl App {
             search: None,
             fuzzy_finder: None,
             command_palette: None,
+            branch_switcher: None,
             git_status: None,
             diff_view: None,
             git_blame: None,
@@ -2160,13 +2250,11 @@ impl App {
             AppEvent::PtyOutput { session_id } => {
                 self.activity.mark_active(session_id);
             }
-            AppEvent::SessionBell { session_id } | AppEvent::SessionDone { session_id } => {
-                // Only mark as needing attention if it's not the currently viewed session in terminal mode
-                if !(self.focused_session_id().map(|s| s.as_str()) == Some(session_id)
-                    && self.input_mode == InputMode::Terminal)
-                {
-                    self.attention_sessions.insert(session_id.clone());
-                }
+            AppEvent::SessionBell { .. } | AppEvent::SessionDone { .. } => {
+                // Attention is handled via debounce in the main event loop.
+                // We don't set attention_sessions immediately here because
+                // SessionBell/SessionDone fire on every tool call completion,
+                // not just when the session is truly idle/waiting for input.
             }
             AppEvent::SessionExited { session_id } => {
                 self.exited_sessions.insert(session_id.clone());
@@ -2245,11 +2333,16 @@ impl App {
             return;
         }
 
-        // Fuzzy finder, project search, command palette, and shell keybindings are handled specially
+        // Fuzzy finder, project search, command palette, branch switcher keybindings are handled specially
         if KeybindingsConfig::matches(&self.keybindings.fuzzy_finder, key.modifiers, key.code)
             || KeybindingsConfig::matches(&self.keybindings.project_search, key.modifiers, key.code)
             || KeybindingsConfig::matches(
                 &self.keybindings.command_palette,
+                key.modifiers,
+                key.code,
+            )
+            || KeybindingsConfig::matches(
+                &self.keybindings.branch_switcher,
                 key.modifiers,
                 key.code,
             )
@@ -2260,6 +2353,12 @@ impl App {
         // Fuzzy finder gets exclusive keyboard focus
         if self.fuzzy_finder.is_some() {
             self.handle_fuzzy_finder_key(key);
+            return;
+        }
+
+        // Branch switcher gets exclusive keyboard focus
+        if self.branch_switcher.is_some() {
+            self.handle_branch_switcher_key(key);
             return;
         }
 
@@ -2789,6 +2888,18 @@ impl App {
                 } else {
                     "Planet display hidden".to_string()
                 });
+            }
+            CommandId::BranchSwitcher => {
+                if let Some(path) = self.sidebar_tree.selected_path().cloned() {
+                    match BranchSwitcherState::new(path) {
+                        Ok(state) => {
+                            self.branch_switcher = Some(state);
+                        }
+                        Err(e) => {
+                            self.status_message = Some(format!("Error: {}", e));
+                        }
+                    }
+                }
             }
         }
     }
@@ -4038,6 +4149,10 @@ impl App {
     pub fn needs_session_close(&self, key: &KeyEvent) -> bool {
         if key.code != KeyCode::Backspace
             || self.prompt.is_some()
+            || self.branch_switcher.is_some()
+            || self.fuzzy_finder.is_some()
+            || self.command_palette.is_some()
+            || self.dir_browser.is_some()
             || self.show_help
             || self.input_mode != InputMode::Navigation
         {
@@ -4051,6 +4166,10 @@ impl App {
     pub fn needs_session_restart(&self, key: &KeyEvent) -> bool {
         if key.code != KeyCode::Char('r')
             || self.prompt.is_some()
+            || self.branch_switcher.is_some()
+            || self.fuzzy_finder.is_some()
+            || self.command_palette.is_some()
+            || self.dir_browser.is_some()
             || self.show_help
             || self.input_mode != InputMode::Navigation
         {
@@ -4065,6 +4184,10 @@ impl App {
     pub fn needs_session_force_restart(&self, key: &KeyEvent) -> bool {
         if key.code != KeyCode::Char('R')
             || self.prompt.is_some()
+            || self.branch_switcher.is_some()
+            || self.fuzzy_finder.is_some()
+            || self.command_palette.is_some()
+            || self.dir_browser.is_some()
             || self.show_help
             || self.input_mode != InputMode::Navigation
         {
@@ -4076,6 +4199,10 @@ impl App {
     /// Check if Enter should spawn/switch a session.
     pub fn needs_session_spawn(&self, key: &KeyEvent) -> bool {
         self.prompt.is_none()
+            && self.branch_switcher.is_none()
+            && self.fuzzy_finder.is_none()
+            && self.command_palette.is_none()
+            && self.dir_browser.is_none()
             && !self.show_help
             && key.code == KeyCode::Enter
             && self.input_mode == InputMode::Navigation
@@ -4156,6 +4283,55 @@ impl App {
         false
     }
 
+    /// Check if user confirmed a branch switch. Returns (worktree_path, branch_name).
+    pub fn wants_switch_branch(&self, key: &KeyEvent) -> Option<(PathBuf, String)> {
+        if key.code != KeyCode::Enter {
+            return None;
+        }
+        if let Some(ref bs) = self.branch_switcher {
+            if let Some(branch) = bs.selected_branch() {
+                if branch != bs.current_branch {
+                    return Some((bs.worktree_path.clone(), branch.to_string()));
+                }
+            }
+        }
+        None
+    }
+
+    fn handle_branch_switcher_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.branch_switcher = None;
+            }
+            KeyCode::Enter => {
+                // Signal handled in main loop via wants_switch_branch()
+            }
+            KeyCode::Up => {
+                if let Some(ref mut bs) = self.branch_switcher {
+                    bs.move_up();
+                }
+            }
+            KeyCode::Down => {
+                if let Some(ref mut bs) = self.branch_switcher {
+                    bs.move_down();
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(ref mut bs) = self.branch_switcher {
+                    bs.input.pop();
+                    bs.update_matches();
+                }
+            }
+            KeyCode::Char(c) => {
+                if let Some(ref mut bs) = self.branch_switcher {
+                    bs.input.push(c);
+                    bs.update_matches();
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Returns a notification message if the event warrants an OS alert, None otherwise.
     /// Returns (iterm2_msg, native_msg) — iTerm2 is suppressed when viewing the session.
     /// Native msg format: "subtitle\nmessage" where subtitle is the section name.
@@ -4175,14 +4351,11 @@ impl App {
                     (Some(format!("{} needs attention", name)), None)
                 }
             }
-            AppEvent::SessionDone { session_id } => {
-                // Task done = native notification only (bell already triggered iTerm2 bounce)
-                let (section, name) =
-                    match self.sidebar_tree.section_and_name_for_session(session_id) {
-                        Some(pair) => pair,
-                        None => return (None, None),
-                    };
-                (None, Some(format!("{}\n{} task completed", section, name)))
+            AppEvent::SessionDone { .. } => {
+                // Don't send native notifications on SessionDone — these fire on
+                // every tool call completion, not just when truly idle.
+                // Attention is debounced in the main event loop instead.
+                (None, None)
             }
             AppEvent::SessionExited { session_id } => {
                 let (section, name) =

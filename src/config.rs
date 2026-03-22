@@ -144,6 +144,7 @@ struct KeybindingsToml {
     sidebar_grow: Option<String>,
     sidebar_shrink: Option<String>,
     split_pane_vertical: Option<String>,
+    branch_switcher: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -165,6 +166,7 @@ pub struct KeybindingsConfig {
     pub sidebar_grow: (KeyModifiers, KeyCode),
     pub sidebar_shrink: (KeyModifiers, KeyCode),
     pub split_pane_vertical: (KeyModifiers, KeyCode),
+    pub branch_switcher: (KeyModifiers, KeyCode),
 }
 
 impl Default for KeybindingsConfig {
@@ -187,6 +189,7 @@ impl Default for KeybindingsConfig {
             sidebar_grow: (KeyModifiers::SUPER, KeyCode::Char('=')),
             sidebar_shrink: (KeyModifiers::SUPER, KeyCode::Char('-')),
             split_pane_vertical: (KeyModifiers::CONTROL, KeyCode::Char('.')),
+            branch_switcher: (KeyModifiers::SUPER, KeyCode::Char('b')),
         }
     }
 }
@@ -556,6 +559,7 @@ pub fn load_config() -> AppConfig {
         apply_kb!(sidebar_grow);
         apply_kb!(sidebar_shrink);
         apply_kb!(split_pane_vertical);
+        apply_kb!(branch_switcher);
     }
 
     if let Some(ref s) = config.session {

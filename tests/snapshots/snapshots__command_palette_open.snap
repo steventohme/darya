@@ -8,24 +8,24 @@ expression: output
 ┃    1 ▶ ○ my-project [m┃┃                                                                         ┃
 ┃    2 ▶ ○ my-projec┏ Command Palette ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
 ┃    3 ▶ ○ my-projec┃> █                                                       ┃                   ┃
+┃                   ┃Find File                                            Cmd+P┃                   ┃
+┃                   ┃Search Project                                       Cmd+F┃                   ┃
+┃                   ┃Git: Switch Branch                                   Cmd+B┃                   ┃
+┃                   ┃View: Git Status                                     Cmd+6┃                   ┃
+┃                   ┃Refresh Git Status                                        ┃                   ┃
+┃                   ┃View: Git Blame                                      Cmd+7┃                   ┃
+┃                   ┃View: Git Log                                        Cmd+8┃                   ┃
 ┃                   ┃View: Worktrees                                      Cmd+1┃                   ┃
 ┃                   ┃View: Terminal                                       Cmd+2┃                   ┃
 ┃                   ┃View: Files                                          Cmd+3┃                   ┃
 ┃                   ┃View: Editor                                         Cmd+4┃                   ┃
 ┃                   ┃View: Search                                         Cmd+5┃                   ┃
-┃                   ┃View: Git Status                                     Cmd+6┃                   ┃
-┃                   ┃View: Git Blame                                      Cmd+7┃                   ┃
-┃                   ┃View: Git Log                                        Cmd+8┃                   ┃
 ┃                   ┃View: Shell                                          Cmd+9┃                   ┃
 ┃                   ┃Session: Start                                            ┃                   ┃
 ┃                   ┃Session: Restart                                          ┃                   ┃
 ┃                   ┃Session: Close                                            ┃                   ┃
-┃                   ┃Find File                                            Cmd+P┃                   ┃
-┃                   ┃Search Project                                       Cmd+F┃                   ┃
-┃                   ┃Refresh Git Status                                        ┃                   ┃
 ┃                   ┃Split: Same Type                                     Cmd+\┃                   ┃
-┃                   ┃Split: Terminal                                           ┃                   ┃
-┃                   ┃Split: Shell                                              ┃                   ┃
+┃                   ┃Split: Vertical Same Type                           Ctrl+.┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
 ┃                       ┃┃                                                                         ┃
 ┃                       ┃┃                                                                         ┃

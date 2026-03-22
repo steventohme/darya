@@ -333,6 +333,11 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     if app.command_palette.is_some() {
         widgets::command_palette::render(frame, size, app);
     }
+
+    // Render branch switcher overlay if active
+    if app.branch_switcher.is_some() {
+        widgets::branch_switcher::render(frame, size, app);
+    }
 }
 
 fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::config::Theme) {

@@ -108,6 +108,55 @@ pub fn list_worktrees_for_root(root: &Path) -> Result<Vec<Worktree>> {
     Ok(parse_porcelain(&stdout, &root.to_path_buf()))
 }
 
+/// List local branch names for a given worktree/repo directory.
+pub fn list_branches(worktree_path: &Path) -> Result<Vec<String>> {
+    let output = Command::new("git")
+        .args(["branch", "--list", "--format=%(refname:short)"])
+        .current_dir(worktree_path)
+        .output()
+        .map_err(|e| DaryaError::Git(format!("failed to run git branch: {}", e)))?;
+    if !output.status.success() {
+        return Err(DaryaError::Git(format!(
+            "git branch failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect())
+}
+
+/// Get the current branch name for a worktree directory.
+pub fn current_branch(worktree_path: &Path) -> Result<String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(worktree_path)
+        .output()
+        .map_err(|e| DaryaError::Git(format!("failed to get current branch: {}", e)))?;
+    if !output.status.success() {
+        return Err(DaryaError::Git("not on a branch".to_string()));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// Switch to a branch in a worktree directory.
+pub fn switch_branch(worktree_path: &Path, branch: &str) -> Result<()> {
+    let output = Command::new("git")
+        .args(["switch", branch])
+        .current_dir(worktree_path)
+        .output()
+        .map_err(|e| DaryaError::Git(format!("failed to run git switch: {}", e)))?;
+    if !output.status.success() {
+        return Err(DaryaError::Git(
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn parse_porcelain(output: &str, repo_root: &PathBuf) -> Vec<Worktree> {
     let mut worktrees = Vec::new();
     let mut current_path: Option<PathBuf> = None;

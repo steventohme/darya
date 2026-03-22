@@ -258,8 +258,11 @@ async fn run_loop(
     use std::collections::HashMap;
     use std::time::Instant;
 
-    // Debounce native notifications: only fire if no PtyOutput for that session within 3s
+    // Debounce native notifications: only fire if no PtyOutput for that session within timeout
     let mut pending_native: HashMap<String, (Instant, String)> = HashMap::new();
+    // Debounce attention indicator: only mark attention if no PtyOutput follows within timeout.
+    // This prevents every tool call completion from turning the sidebar green.
+    let mut pending_attention: HashMap<String, Instant> = HashMap::new();
     const DEBOUNCE_SECS: f64 = 3.0;
 
     while app.running {
@@ -285,6 +288,7 @@ async fn run_loop(
             session_manager,
             wt_manager,
             &mut pending_native,
+            &mut pending_attention,
         );
 
         // Drain remaining queued events without blocking
@@ -296,6 +300,7 @@ async fn run_loop(
                 session_manager,
                 wt_manager,
                 &mut pending_native,
+                &mut pending_attention,
             );
             if !app.running {
                 break;
@@ -311,6 +316,17 @@ async fn run_loop(
                 false // remove from map
             } else {
                 true // keep waiting
+            }
+        });
+
+        // Flush debounced attention indicators — mark sessions that have been
+        // idle (no PtyOutput) for the debounce period
+        pending_attention.retain(|sid, queued_at| {
+            if queued_at.elapsed().as_secs_f64() >= DEBOUNCE_SECS {
+                app.attention_sessions.insert(sid.clone());
+                false
+            } else {
+                true
             }
         });
 
@@ -441,7 +457,13 @@ fn process_event(
     session_manager: &mut SessionManager,
     wt_manager: &WorktreeManager,
     pending_native: &mut std::collections::HashMap<String, (std::time::Instant, String)>,
+    pending_attention: &mut std::collections::HashMap<String, std::time::Instant>,
 ) {
+    // Track whether a main-loop operation consumed this key event.
+    // When true, we skip app.handle_event() to prevent the key from leaking
+    // into navigation handlers (e.g. Enter toggling section collapse after branch switch).
+    let mut key_consumed = false;
+
     if let AppEvent::Key(_) = event {
         // Clear text selection on any keypress
         app.text_selection = None;
@@ -508,12 +530,24 @@ fn process_event(
         {
             app.prompt = None;
             app.fuzzy_finder = None;
+            app.branch_switcher = None;
             app.command_palette = Some(app::CommandPaletteState::new(&app.keybindings));
             app.input_mode = InputMode::Navigation;
         }
 
-        // Track whether a session operation consumed this key (prevents Enter leaking to PTY)
-        let mut key_consumed = false;
+        // Branch switcher keybinding
+        if KeybindingsConfig::matches(&app.keybindings.branch_switcher, key.modifiers, key.code)
+            && app.branch_switcher.is_none()
+        {
+            app.prompt = None;
+            app.fuzzy_finder = None;
+            app.command_palette = None;
+            app.execute_command(app::CommandId::BranchSwitcher);
+            app.input_mode = InputMode::Navigation;
+        }
+
+        // Mark key as consumed by main-loop handlers below
+        // (prevents Enter leaking to PTY and to app.handle_event)
 
         // Handle worktree creation
         if let Some(branch_name) = app.wants_create_worktree(key) {
@@ -561,6 +595,25 @@ fn process_event(
                     }
                 }
             }
+        }
+        // Handle branch switch
+        if let Some((worktree_path, branch_name)) = app.wants_switch_branch(key) {
+            match darya::worktree::manager::switch_branch(&worktree_path, &branch_name) {
+                Ok(()) => {
+                    app.branch_switcher = None;
+                    app.status_message =
+                        Some(format!("Switched to branch '{}'", branch_name));
+                    // Refresh worktree list to show updated branch names
+                    if let Ok(worktrees) = wt_manager.list() {
+                        app.refresh_worktrees(worktrees);
+                    }
+                }
+                Err(e) => {
+                    app.branch_switcher = None;
+                    app.status_message = Some(format!("Error: {}", e));
+                }
+            }
+            key_consumed = true;
         }
         // Handle unified session spawning on Enter
         else if app.needs_session_spawn(key) {
@@ -966,25 +1019,39 @@ fn process_event(
         let _ = write!(terminal.backend_mut(), "\x1b]9;{}\x07\x07", msg);
         let _ = terminal.backend_mut().flush();
     }
-    // Native notifications: debounce SessionDone, fire SessionExited immediately
+    // Native notifications: only SessionExited fires (immediately)
     if let Some(msg) = native_msg {
-        match event {
-            AppEvent::SessionDone { ref session_id } => {
-                // Queue for debounce — only fires if no PtyOutput follows within DEBOUNCE_SECS
-                pending_native.insert(session_id.clone(), (std::time::Instant::now(), msg));
-            }
-            _ => {
-                // SessionExited etc — fire immediately
-                send_native_notification(msg);
-            }
-        }
-    }
-    // Cancel pending notification if new output arrives for that session
-    if let AppEvent::PtyOutput { ref session_id } = event {
-        pending_native.remove(session_id);
+        send_native_notification(msg);
     }
 
-    app.handle_event(event);
+    // Debounced attention indicator: queue on SessionDone, cancel on PtyOutput,
+    // set attention_sessions after timeout. This prevents every tool call completion
+    // from turning the sidebar green — only truly idle sessions get marked.
+    match event {
+        AppEvent::SessionDone { ref session_id } => {
+            // Only queue if not currently viewing this session
+            let viewing = app.focused_session_id().map(|s| s.as_str()) == Some(session_id)
+                && app.input_mode == InputMode::Terminal;
+            if !viewing {
+                pending_attention.insert(session_id.clone(), std::time::Instant::now());
+            }
+        }
+        AppEvent::SessionExited { ref session_id } => {
+            // Session exited — immediate attention, no debounce needed
+            pending_attention.remove(session_id);
+            app.attention_sessions.insert(session_id.clone());
+        }
+        AppEvent::PtyOutput { ref session_id } => {
+            // New output cancels pending attention — session is still working
+            pending_attention.remove(session_id);
+            pending_native.remove(session_id);
+        }
+        _ => {}
+    }
+
+    if !key_consumed {
+        app.handle_event(event);
+    }
 }
 
 /// Restore sessions from a saved layout config.

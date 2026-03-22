@@ -1,3 +1,4 @@
+pub mod branch_switcher;
 pub mod command_palette;
 pub mod diff_view;
 pub mod editor;

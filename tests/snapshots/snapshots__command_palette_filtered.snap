@@ -8,12 +8,12 @@ expression: output
 ┃    1 ▶ ○ my-project [m┃┃                                                                         ┃
 ┃    2 ▶ ○ my-projec┏ Command Palette ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
 ┃    3 ▶ ○ my-projec┃> git█                                                    ┃                   ┃
+┃                   ┃Git: Switch Branch                                   Cmd+B┃                   ┃
 ┃                   ┃View: Git Status                                     Cmd+6┃                   ┃
+┃                   ┃Refresh Git Status                                        ┃                   ┃
 ┃                   ┃View: Git Blame                                      Cmd+7┃                   ┃
 ┃                   ┃View: Git Log                                        Cmd+8┃                   ┃
-┃                   ┃Refresh Git Status                                        ┃                   ┃
 ┃                   ┃Toggle Split Direction                                    ┃                   ┃
-┃                   ┃                                                          ┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
