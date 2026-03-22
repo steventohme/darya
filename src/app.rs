@@ -2184,6 +2184,8 @@ pub struct ActivityAnimation {
     frame: HashMap<String, usize>,
     /// Alternates each tick so frames advance every other tick (100ms)
     tick_parity: bool,
+    /// Sessions that just transitioned from active→idle (drained by caller)
+    just_finished: Vec<String>,
 }
 
 /// How long after last confirmed activity before animation stops (ms)
@@ -2231,9 +2233,19 @@ impl ActivityAnimation {
     pub fn tick(&mut self) {
         let now = Instant::now();
 
+        // Snapshot which sessions are currently active before expiring
+        let prev_active: HashSet<String> = self.last_active.keys().cloned().collect();
+
         // Expire old activity
         self.last_active
             .retain(|_, t| now.duration_since(*t).as_millis() < ACTIVITY_TIMEOUT_MS);
+
+        // Detect sessions that just transitioned from active → idle
+        for sid in &prev_active {
+            if !self.last_active.contains_key(sid) {
+                self.just_finished.push(sid.clone());
+            }
+        }
 
         // Advance frames for existing active sessions, remove expired
         let active_ids: HashSet<&String> = self.last_active.keys().collect();
@@ -2264,6 +2276,11 @@ impl ActivityAnimation {
         // Clean up stale input timestamps
         self.last_input
             .retain(|_, t| now.duration_since(*t).as_millis() < INPUT_SUPPRESSION_MS * 2);
+    }
+
+    /// Drain sessions that just transitioned from working → idle.
+    pub fn drain_finished(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.just_finished)
     }
 
     /// Whether this session has an active animation.

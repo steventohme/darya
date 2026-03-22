@@ -342,6 +342,24 @@ async fn run_loop(
             }
         });
 
+        // Detect sessions whose working animation just stopped (active → idle).
+        // This is the primary completion signal — queue attention + notification.
+        for sid in app.activity.drain_finished() {
+            let viewing = app.focused_session_id().map(|s| s.as_str()) == Some(sid.as_str())
+                && app.input_mode == InputMode::Terminal;
+            if !viewing {
+                pending_attention.insert(sid.clone(), std::time::Instant::now());
+            }
+            // Also queue a notification
+            let done_event = AppEvent::SessionDone {
+                session_id: sid.clone(),
+            };
+            let (iterm_msg, native_msg) = app.notification_for_event(&done_event);
+            if iterm_msg.is_some() || native_msg.is_some() {
+                pending_notify.insert(sid, (std::time::Instant::now(), iterm_msg, native_msg));
+            }
+        }
+
         // Handle pending section refresh (after dir browser creates a section)
         if let Some((section_idx, root_path)) = app.pending_section_refresh.take() {
             if let Ok(wts) = darya::worktree::manager::list_worktrees_for_root(&root_path) {
