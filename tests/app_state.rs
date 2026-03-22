@@ -15,7 +15,7 @@ use darya::event::AppEvent;
 use darya::planet::types::PlanetKind;
 
 use helpers::{
-    active_session_id, active_shell_session_id, cmd_key, item_path, key, make_app,
+    active_session_id, active_shell_session_id, cmd_key, ctrl_key, item_path, key, make_app,
     make_app_with_session, make_app_with_two_sessions, selected_item_index, set_session,
     set_shell_session,
 };
@@ -327,10 +327,10 @@ fn d_on_main_worktree_shows_error() {
 // ── Edge cases ──────────────────────────────────────────────
 
 #[test]
-fn q_quits_from_nav() {
+fn ctrl_q_quits_from_nav() {
     let mut app = make_app(3);
     assert!(app.running);
-    app.handle_event(&key(KeyCode::Char('q')));
+    app.handle_event(&ctrl_key('q'));
     assert!(!app.running);
 }
 
@@ -756,7 +756,7 @@ fn number_keys_jump_worktree_from_git_status() {
 fn q_quits_from_git_status() {
     let mut app = make_app_with_git_status(3);
     assert!(app.running);
-    app.handle_event(&key(KeyCode::Char('q')));
+    app.handle_event(&ctrl_key('q'));
     assert!(!app.running);
 }
 
@@ -766,7 +766,7 @@ fn q_quits_from_diff_view() {
     app.handle_event(&key(KeyCode::Enter)); // open diff
     app.panel_focus = PanelFocus::Right;
     assert!(app.running);
-    app.handle_event(&key(KeyCode::Char('q')));
+    app.handle_event(&ctrl_key('q'));
     assert!(!app.running);
 }
 
@@ -1640,7 +1640,7 @@ fn git_blame_tab_toggles_focus() {
 fn git_blame_q_quits() {
     let mut app = make_app_with_blame(2);
     assert!(app.running);
-    app.handle_event(&key(KeyCode::Char('q')));
+    app.handle_event(&ctrl_key('q'));
     assert!(!app.running);
 }
 
@@ -1762,7 +1762,7 @@ fn git_log_tab_toggles_focus() {
 fn git_log_q_quits() {
     let mut app = make_app_with_git_log(2);
     assert!(app.running);
-    app.handle_event(&key(KeyCode::Char('q')));
+    app.handle_event(&ctrl_key('q'));
     assert!(!app.running);
 }
 

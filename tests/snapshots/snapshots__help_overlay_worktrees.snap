@@ -26,7 +26,7 @@ expression: output
 ┃                   ┃ Tab         Switch panel                                 ┃                   ┃
 ┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
 ┃                   ┃ Cmd+F       Project search                               ┃                   ┃
-┃                   ┃ q           Quit                                         ┃                   ┃
+┃                   ┃ Ctrl+Q      Quit                                         ┃                   ┃
 ┃                   ┃ Ctrl+C      Close session / Quit                         ┃                   ┃
 ┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
 ┃                       ┃┃                                                                         ┃

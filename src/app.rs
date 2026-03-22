@@ -1464,7 +1464,7 @@ impl CommandPaletteState {
             PaletteCommand {
                 id: CommandId::Quit,
                 name: "Quit".to_string(),
-                keybinding: Some("q".to_string()),
+                keybinding: Some("Ctrl+Q".to_string()),
             },
         ];
         let results = all_commands.clone();
@@ -2797,6 +2797,12 @@ impl App {
             return;
         }
 
+        // Ctrl+Q quits from any mode
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('q') {
+            self.running = false;
+            return;
+        }
+
         // Fuzzy finder, project search, command palette, branch switcher keybindings are handled specially
         if KeybindingsConfig::matches(&self.keybindings.fuzzy_finder, key.modifiers, key.code)
             || KeybindingsConfig::matches(&self.keybindings.project_search, key.modifiers, key.code)
@@ -3545,7 +3551,6 @@ impl App {
 
     fn handle_worktrees_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('q') => self.running = false,
             KeyCode::Char('j') | KeyCode::Down => {
                 self.sidebar_tree.move_down();
                 self.switch_to_selected_session();
@@ -3656,7 +3661,6 @@ impl App {
 
     fn handle_terminal_nav_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
                 if let Some(ref layout) = self.pane_layout {
                     if layout.focused < layout.root.leaf_count() - 1 {
@@ -3730,7 +3734,6 @@ impl App {
 
     fn handle_file_explorer_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('q') => self.running = false,
             KeyCode::Char('j') | KeyCode::Down => self.file_explorer.move_down(),
             KeyCode::Char('k') | KeyCode::Up => self.file_explorer.move_up(),
             KeyCode::Enter | KeyCode::Char('l') => {
@@ -3769,8 +3772,7 @@ impl App {
             // No file open — only Tab and q work
             match key.code {
                 KeyCode::Tab => self.toggle_focus(),
-                KeyCode::Char('q') => self.running = false,
-                _ => {}
+                    _ => {}
             }
             return;
         };
@@ -3822,7 +3824,6 @@ impl App {
             KeyCode::Char('b') => {
                 self.open_git_blame();
             }
-            KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
                 if let Some(ref layout) = self.pane_layout {
                     if layout.focused < layout.root.leaf_count() - 1 {
@@ -3866,7 +3867,6 @@ impl App {
                     self.input_mode = InputMode::Editor;
                 }
             }
-            KeyCode::Char('q') => self.running = false,
             KeyCode::Tab => {
                 self.toggle_focus();
                 self.enter_terminal_if_focused();
@@ -3939,7 +3939,6 @@ impl App {
 
     fn handle_search_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('q') => self.running = false,
             KeyCode::Char('j') | KeyCode::Down => {
                 if let Some(ref mut search) = self.search {
                     search.move_down();
@@ -3986,7 +3985,6 @@ impl App {
 
     fn handle_git_status_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('q') => self.running = false,
             KeyCode::Char('j') | KeyCode::Down => {
                 if let Some(ref mut gs) = self.git_status {
                     gs.move_down();
@@ -4024,7 +4022,6 @@ impl App {
 
     fn handle_diff_view_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('q') => self.running = false,
             KeyCode::Char('j') | KeyCode::Down => {
                 if let Some(ref mut dv) = self.diff_view {
                     dv.scroll_down(1);
@@ -4065,7 +4062,6 @@ impl App {
 
     fn handle_git_blame_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('q') => self.running = false,
             KeyCode::Char('j') | KeyCode::Down => {
                 if let Some(ref mut gb) = self.git_blame {
                     gb.scroll_down(1);
@@ -4106,7 +4102,6 @@ impl App {
 
     fn handle_git_log_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('q') => self.running = false,
             KeyCode::Char('j') | KeyCode::Down => {
                 if let Some(ref mut gl) = self.git_log {
                     gl.move_down();
