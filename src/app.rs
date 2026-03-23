@@ -472,8 +472,8 @@ pub enum Prompt {
     ConfirmDelete { worktree_name: String },
     /// Project search input
     SearchInput { input: String },
-    /// Add a named shell session slot
-    AddShellSlot { input: String },
+    /// Add a named session slot (Claude or Shell, toggled with Tab)
+    AddSessionSlot { input: String, kind: SessionKind },
     /// Confirming section deletion
     ConfirmDeleteSection {
         section_name: String,
@@ -1270,7 +1270,7 @@ pub enum CommandId {
     ToggleHelp,
     Quit,
     AddSection,
-    AddShellSlot,
+    AddSessionSlot,
     AssignColor,
     SidebarGrow,
     SidebarShrink,
@@ -1425,8 +1425,8 @@ impl CommandPaletteState {
                 keybinding: Some("Shift+N".to_string()),
             },
             PaletteCommand {
-                id: CommandId::AddShellSlot,
-                name: "Sidebar: Add Shell Slot".to_string(),
+                id: CommandId::AddSessionSlot,
+                name: "Sidebar: Add Session Slot".to_string(),
                 keybinding: Some("Shift+S".to_string()),
             },
             PaletteCommand {
@@ -2371,6 +2371,16 @@ impl ActivityAnimation {
     }
 }
 
+/// Check if a key is the focus-switch key (F18 / Caps Lock via Karabiner).
+pub fn is_focus_key(code: KeyCode) -> bool {
+    matches!(code, KeyCode::F(18))
+}
+
+/// Check if a key is the reverse focus-switch key (Shift+F18 / Shift+CapsLock).
+pub fn is_reverse_focus_key(key: &KeyEvent) -> bool {
+    is_focus_key(key.code) && key.modifiers.contains(KeyModifiers::SHIFT)
+}
+
 /// Returns `false` for key codes that edtui's `From<crossterm::event::KeyCode>`
 /// doesn't handle (it calls `unimplemented!()` for these, causing a panic).
 /// Also rejects Tab+SHIFT, which Kitty keyboard enhancement sends instead of BackTab.
@@ -3056,14 +3066,19 @@ impl App {
                 }
                 _ => {}
             },
-            Prompt::AddShellSlot { input } => match key.code {
+            Prompt::AddSessionSlot { input, kind } => match key.code {
                 KeyCode::Enter => {
                     if !input.is_empty() {
                         let label = input.clone();
-                        self.sidebar_tree
-                            .add_session_slot(SessionKind::Shell, label.clone());
+                        let k = *kind;
+                        self.sidebar_tree.add_session_slot(k, label.clone());
+                        let kind_name = match k {
+                            SessionKind::Claude => "claude",
+                            SessionKind::Shell => "shell",
+                        };
                         self.prompt = None;
-                        self.status_message = Some(format!("Added shell slot '{}'", label));
+                        self.status_message =
+                            Some(format!("Added {} slot '{}'", kind_name, label));
                     }
                 }
                 KeyCode::Esc => {
@@ -3464,9 +3479,10 @@ impl App {
                     .unwrap_or_else(|_| PathBuf::from("/"));
                 self.dir_browser = Some(DirBrowser::new(home));
             }
-            CommandId::AddShellSlot => {
-                self.prompt = Some(Prompt::AddShellSlot {
+            CommandId::AddSessionSlot => {
+                self.prompt = Some(Prompt::AddSessionSlot {
                     input: String::new(),
+                    kind: SessionKind::Claude,
                 });
             }
             CommandId::AssignColor => {
@@ -3631,8 +3647,7 @@ impl App {
             return;
         }
         // Shift+Tab: cycle sub-views within the current panel
-        if key.code == KeyCode::BackTab
-            || (key.code == KeyCode::Tab && key.modifiers.contains(KeyModifiers::SHIFT))
+        if is_reverse_focus_key(&key)
         {
             match self.panel_focus {
                 PanelFocus::Left => {
@@ -3737,10 +3752,18 @@ impl App {
                     }
                 }
             }
+            KeyCode::Char('A') => {
+                // Add named Claude slot to current item
+                self.prompt = Some(Prompt::AddSessionSlot {
+                    input: String::new(),
+                    kind: SessionKind::Claude,
+                });
+            }
             KeyCode::Char('S') => {
                 // Add named shell slot to current item
-                self.prompt = Some(Prompt::AddShellSlot {
+                self.prompt = Some(Prompt::AddSessionSlot {
                     input: String::new(),
+                    kind: SessionKind::Shell,
                 });
             }
             KeyCode::Char('N') => {
@@ -3780,7 +3803,7 @@ impl App {
                 }
                 // For non-section nodes, Backspace is handled by needs_session_close in main loop
             }
-            KeyCode::Tab => {
+            KeyCode::F(18) => {
                 self.toggle_focus();
                 self.enter_terminal_if_focused();
             }
@@ -3790,7 +3813,7 @@ impl App {
 
     fn handle_terminal_nav_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Tab => {
+            KeyCode::F(18) => {
                 if let Some(ref layout) = self.pane_layout {
                     if layout.focused < layout.root.leaf_count() - 1 {
                         // Not last pane: cycle to next, enter appropriate mode
@@ -3831,14 +3854,13 @@ impl App {
 
     fn handle_terminal_key(&mut self, key: KeyEvent) {
         // Shift+Tab: exit terminal mode and cycle main views
-        if key.code == KeyCode::BackTab
-            || (key.code == KeyCode::Tab && key.modifiers.contains(KeyModifiers::SHIFT))
+        if is_reverse_focus_key(&key)
         {
             self.input_mode = InputMode::Navigation;
             self.main_view = self.main_view.next();
             return;
         }
-        if key.code == KeyCode::Tab {
+        if is_focus_key(key.code) {
             if let Some(ref mut layout) = self.pane_layout {
                 let leaf_count = layout.root.leaf_count();
                 if layout.focused < leaf_count - 1 {
@@ -3882,7 +3904,7 @@ impl App {
             }
             KeyCode::Char('h') => self.file_explorer.collapse_or_parent(),
             KeyCode::Backspace => self.file_explorer.go_up_root(),
-            KeyCode::Tab => {
+            KeyCode::F(18) => {
                 self.toggle_focus();
                 self.enter_terminal_if_focused();
             }
@@ -3900,16 +3922,15 @@ impl App {
         let Some(ref mut editor) = self.editor else {
             // No file open — only Tab and q work
             match key.code {
-                KeyCode::Tab => self.toggle_focus(),
+                KeyCode::F(18) => self.toggle_focus(),
                     _ => {}
             }
             return;
         };
 
         if self.input_mode == InputMode::Editor {
-            // Shift+Tab: exit editor mode and cycle main views
-            if key.code == KeyCode::BackTab
-                || (key.code == KeyCode::Tab && key.modifiers.contains(KeyModifiers::SHIFT))
+            // Shift+CapsLock: exit editor mode and cycle main views
+            if is_reverse_focus_key(&key)
             {
                 editor.read_only = true;
                 editor.editor_state.mode = EditorMode::Normal;
@@ -3959,7 +3980,7 @@ impl App {
             KeyCode::Char('b') => {
                 self.open_git_blame();
             }
-            KeyCode::Tab => {
+            KeyCode::F(18) => {
                 if let Some(ref layout) = self.pane_layout {
                     if layout.focused < layout.root.leaf_count() - 1 {
                         self.cycle_pane_focus_next();
@@ -4002,7 +4023,7 @@ impl App {
                     self.input_mode = InputMode::Editor;
                 }
             }
-            KeyCode::Tab => {
+            KeyCode::F(18) => {
                 self.toggle_focus();
                 self.enter_terminal_if_focused();
             }
@@ -4031,8 +4052,7 @@ impl App {
         };
 
         // Shift+Tab: exit edit mode
-        if key.code == KeyCode::BackTab
-            || (key.code == KeyCode::Tab && key.modifiers.contains(KeyModifiers::SHIFT))
+        if is_reverse_focus_key(&key)
         {
             note.read_only = true;
             note.editor_state.mode = EditorMode::Normal;
@@ -4111,7 +4131,7 @@ impl App {
                     }
                 }
             }
-            KeyCode::Tab => {
+            KeyCode::F(18) => {
                 self.toggle_focus();
                 self.enter_terminal_if_focused();
             }
@@ -4148,7 +4168,7 @@ impl App {
                     }
                 }
             }
-            KeyCode::Tab => {
+            KeyCode::F(18) => {
                 self.toggle_focus();
                 self.enter_terminal_if_focused();
             }
@@ -4189,7 +4209,7 @@ impl App {
             KeyCode::Esc => {
                 self.main_view = MainView::Terminal;
             }
-            KeyCode::Tab => {
+            KeyCode::F(18) => {
                 self.toggle_focus();
             }
             KeyCode::Char(c @ '1'..='9') => {
@@ -4229,7 +4249,7 @@ impl App {
             KeyCode::Esc => {
                 self.main_view = MainView::Editor;
             }
-            KeyCode::Tab => {
+            KeyCode::F(18) => {
                 self.toggle_focus();
             }
             KeyCode::Char(c @ '1'..='9') => {
@@ -4279,7 +4299,7 @@ impl App {
             KeyCode::Esc => {
                 self.main_view = MainView::Terminal;
             }
-            KeyCode::Tab => {
+            KeyCode::F(18) => {
                 self.toggle_focus();
             }
             KeyCode::Char(c @ '1'..='9') => {

@@ -506,9 +506,14 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
             );
             frame.render_widget(text, inner);
         }
-        Prompt::AddShellSlot { input } => {
+        Prompt::AddSessionSlot { input, kind } => {
+            let kind_label = match kind {
+                crate::sidebar::types::SessionKind::Claude => "Claude",
+                crate::sidebar::types::SessionKind::Shell => "Shell",
+            };
+            let title = format!(" New {} slot (label) ", kind_label);
             let block = Block::default()
-                .title(" New shell slot (label) ")
+                .title(title)
                 .borders(Borders::ALL)
                 .border_type(BorderType::Thick)
                 .border_style(Style::default().fg(theme.prompt_border))
@@ -664,6 +669,15 @@ fn render_setup_guide(frame: &mut Frame, area: Rect, theme: &crate::config::Them
         Line::from(""),
         Line::from(vec![Span::styled(
             "  Or edit ~/.config/darya/config.toml to rebind keys",
+            dim,
+        )]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  Tip: Remap Caps Lock \u{2192} F18 via Karabiner-Elements",
+            dim,
+        )]),
+        Line::from(vec![Span::styled(
+            "  to use Caps Lock as the panel-switch key",
             dim,
         )]),
         Line::from(""),

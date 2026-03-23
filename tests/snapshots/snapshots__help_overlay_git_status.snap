@@ -18,7 +18,7 @@ expression: output
 ┃                   ┃ j/k, ↑/↓    Navigate files                               ┃                   ┃
 ┃                   ┃ Enter, d    View diff                                    ┃                   ┃
 ┗━━━━━━━━━━━━━━━━━━━┃ 1-9, 0      Jump to worktree                             ┃                   ┃
-┏ Notes ━━━━━━━━━━━━┃ Tab         Switch panel                                 ┃                   ┃
+┏ Notes ━━━━━━━━━━━━┃ CapsLock    Switch panel                                 ┃                   ┃
 ┃  select a worktree┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
 ┃                   ┃ Cmd+F       Project search                               ┃                   ┃
 ┃                   ┃ Ctrl+Q      Quit                                         ┃                   ┃

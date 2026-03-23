@@ -19,7 +19,7 @@ expression: output
 ┃                   ┃ Enter       View commit diff                             ┃                   ┃
 ┗━━━━━━━━━━━━━━━━━━━┃ Esc         Back to terminal                             ┃                   ┃
 ┏ Notes ━━━━━━━━━━━━┃ 1-9, 0      Jump to worktree                             ┃                   ┃
-┃  select a worktree┃ Tab         Switch panel                                 ┃                   ┃
+┃  select a worktree┃ CapsLock    Switch panel                                 ┃                   ┃
 ┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
 ┃                   ┃ Cmd+F       Project search                               ┃                   ┃
 ┃                   ┃ Ctrl+Q      Quit                                         ┃                   ┃

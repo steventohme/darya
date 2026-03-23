@@ -4,10 +4,9 @@ expression: output
 ---
  darya
 ┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃│ ▼ my-project         ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
-┃    1 ▶ ○ my-projec┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
-┃    2 ▶ ○ my-projec┃ Navigation — Worktrees                                   ┃                   ┃
-┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
+┃│ ▼ my-project     ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓sion               ┃
+┃    1 ▶ ○ my-projec┃ Navigation — Worktrees                                   ┃                   ┃
+┃    2 ▶ ○ my-projec┃ ─────────────────────────────────────                    ┃                   ┃
 ┃                   ┃ Cmd+1: Worktrees  Cmd+2: Terminal  Cmd+3: Files  Cmd+4: E┃                   ┃
 ┃                   ┃                                                          ┃                   ┃
 ┃                   ┃ j/k, ↑/↓    Navigate tree                                ┃                   ┃
@@ -17,13 +16,14 @@ expression: output
 ┃                   ┃ h/←         Collapse / parent                            ┃                   ┃
 ┃                   ┃ a           Add worktree                                 ┃                   ┃
 ┃                   ┃ d           Delete worktree                              ┃                   ┃
-┗━━━━━━━━━━━━━━━━━━━┃ r           Restart exited session                       ┃                   ┃
-┏ Notes ━━━━━━━━━━━━┃ Shift+R     Force-restart session                        ┃                   ┃
+┃                   ┃ r           Restart exited session                       ┃                   ┃
+┗━━━━━━━━━━━━━━━━━━━┃ Shift+R     Force-restart session                        ┃                   ┃
+┏ Notes ━━━━━━━━━━━━┃ Shift+A     Add Claude slot                              ┃                   ┃
 ┃  select a worktree┃ Shift+S     Add shell slot                               ┃                   ┃
 ┃                   ┃ c           Assign color                                 ┃                   ┃
 ┃                   ┃ Shift+N     Create section                               ┃                   ┃
 ┃                   ┃ Backspace   Close/delete session/section                 ┃                   ┃
-┃                   ┃ Tab         Switch panel                                 ┃                   ┃
+┃                   ┃ CapsLock    Switch panel                                 ┃                   ┃
 ┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
 ┃                   ┃ Cmd+F       Project search                               ┃                   ┃
 ┃                   ┃ Ctrl+Q      Quit                                         ┃                   ┃

@@ -20,7 +20,7 @@ expression: output
 ┗━━━━━━━━━━━━━━━━━━━┃ Cmd+W       Close pane                                   ┃                   ┃
 ┏ Notes ━━━━━━━━━━━━┃             Palette: Split Terminal/Shell/Editor         ┃                   ┃
 ┃  select a worktree┃ 1-9, 0      Jump to worktree                             ┃                   ┃
-┃                   ┃ Tab         Cycle panes / switch panel                   ┃                   ┃
+┃                   ┃ CapsLock    Cycle panes / switch panel                   ┃                   ┃
 ┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
 ┃                   ┃ Cmd+F       Project search                               ┃                   ┃
 ┃                   ┃ Ctrl+Q      Quit                                         ┃                   ┃

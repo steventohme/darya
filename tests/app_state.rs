@@ -99,7 +99,7 @@ fn terminal_mode_tab_returns_to_nav() {
     app.sidebar_tree.cursor = 1;
     app.input_mode = InputMode::Terminal;
     app.panel_focus = PanelFocus::Right;
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.input_mode, InputMode::Navigation);
     assert_eq!(app.panel_focus, PanelFocus::Left);
 }
@@ -191,7 +191,7 @@ fn cmd_5_sets_sidebar_search() {
 fn tab_toggles_focus() {
     let mut app = make_app(3);
     assert_eq!(app.panel_focus, PanelFocus::Left);
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.panel_focus, PanelFocus::Right);
     // Tab auto-enters terminal if there's an active non-exited session
 }
@@ -470,7 +470,7 @@ fn tab_from_worktrees_with_active_session_enters_terminal_mode() {
     app.sidebar_view = SidebarView::Worktrees;
     app.main_view = MainView::Terminal;
     app.input_mode = InputMode::Navigation;
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.panel_focus, PanelFocus::Right);
     assert_eq!(app.input_mode, InputMode::Terminal);
 }
@@ -480,7 +480,7 @@ fn tab_from_worktrees_without_session_stays_nav() {
     let mut app = make_app(2);
     app.panel_focus = PanelFocus::Left;
     app.main_view = MainView::Terminal;
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.panel_focus, PanelFocus::Right);
     assert_eq!(app.input_mode, InputMode::Navigation);
 }
@@ -739,7 +739,7 @@ fn esc_in_diff_view_returns_to_terminal() {
 fn tab_toggles_focus_from_git_status() {
     let mut app = make_app_with_git_status(3);
     assert_eq!(app.panel_focus, PanelFocus::Left);
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.panel_focus, PanelFocus::Right);
 }
 
@@ -989,8 +989,9 @@ fn backtab_in_editor_insert_mode_no_crash() {
         ed.read_only = false;
         ed.editor_state.mode = edtui::EditorMode::Insert;
     }
-    // BackTab exits editor mode and cycles main view
-    app.handle_event(&key(KeyCode::BackTab));
+    // Shift+F18 (Shift+CapsLock) exits editor mode and cycles main view
+    let shift_f18 = AppEvent::Key(KeyEvent::new(KeyCode::F(18), KeyModifiers::SHIFT));
+    app.handle_event(&shift_f18);
     assert_eq!(app.input_mode, InputMode::Navigation);
 }
 
@@ -1048,9 +1049,9 @@ fn tab_shift_in_editor_insert_mode_no_crash() {
         ed.read_only = false;
         ed.editor_state.mode = edtui::EditorMode::Insert;
     }
-    // Tab+SHIFT (Kitty BackTab) exits editor mode and cycles main view
-    let tab_shift = AppEvent::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::SHIFT));
-    app.handle_event(&tab_shift);
+    // Shift+F18 (Shift+CapsLock) exits editor mode and cycles main view
+    let shift_f18 = AppEvent::Key(KeyEvent::new(KeyCode::F(18), KeyModifiers::SHIFT));
+    app.handle_event(&shift_f18);
     assert_eq!(app.input_mode, InputMode::Navigation);
 }
 
@@ -1470,17 +1471,17 @@ fn tab_cycles_panes_then_sidebar_in_terminal_nav() {
     // Start at pane 0
     assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
     // Tab → pane 1, enters terminal mode (session alive)
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
     assert_eq!(app.input_mode, InputMode::Terminal);
 
     // Tab from last pane in terminal mode → exits to nav, goes to left panel
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.panel_focus, PanelFocus::Left);
     assert_eq!(app.input_mode, InputMode::Navigation);
 
     // Tab from sidebar → back to right panel, pane focus resets to 0, enters terminal
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.panel_focus, PanelFocus::Right);
     assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
     assert_eq!(app.input_mode, InputMode::Terminal);
@@ -1497,12 +1498,12 @@ fn tab_cycles_panes_in_terminal_mode() {
 
     // Tab in terminal mode with panes: cycle to next pane, stay in terminal mode
     assert_eq!(app.pane_layout.as_ref().unwrap().focused, 0);
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
     assert_eq!(app.input_mode, InputMode::Terminal);
 
     // Tab on last pane in terminal mode → exit to nav, left panel
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.panel_focus, PanelFocus::Left);
     assert_eq!(app.input_mode, InputMode::Navigation);
 }
@@ -1516,7 +1517,7 @@ fn tab_no_panes_behaves_as_before() {
     app.panel_focus = PanelFocus::Right;
     assert!(app.pane_layout.is_none());
 
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.input_mode, InputMode::Navigation);
     assert_eq!(app.panel_focus, PanelFocus::Left);
 }
@@ -1632,7 +1633,7 @@ fn git_blame_esc_returns_to_editor() {
 fn git_blame_tab_toggles_focus() {
     let mut app = make_app_with_blame(2);
     assert_eq!(app.panel_focus, PanelFocus::Right);
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.panel_focus, PanelFocus::Left);
 }
 
@@ -1754,7 +1755,7 @@ fn git_log_esc_returns_to_terminal() {
 fn git_log_tab_toggles_focus() {
     let mut app = make_app_with_git_log(2);
     assert_eq!(app.panel_focus, PanelFocus::Right);
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.panel_focus, PanelFocus::Left);
 }
 
@@ -2262,7 +2263,7 @@ fn enter_terminal_if_focused_works_for_shell() {
     app.input_mode = InputMode::Navigation;
     app.panel_focus = PanelFocus::Left;
     // Tab to right panel — should auto-enter terminal mode
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.panel_focus, PanelFocus::Right);
     assert_eq!(app.input_mode, InputMode::Terminal);
 }
@@ -2431,14 +2432,14 @@ fn tab_cycles_mixed_panes() {
     assert_eq!(app.focused_view(), ViewKind::Terminal);
 
     // Tab → pane 1 (editor), enters terminal mode (but it's an editor, so stays Nav)
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
     // Editor pane — enter_terminal_if_focused should NOT enter terminal mode
     assert_eq!(app.input_mode, InputMode::Navigation);
     assert_eq!(app.focused_view(), ViewKind::Editor);
 
     // Tab from last pane → left panel
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.panel_focus, PanelFocus::Left);
 }
 
@@ -2454,7 +2455,7 @@ fn tab_in_terminal_mode_to_editor_pane_switches_mode() {
     app.split_add_pane_with(PaneContent::Editor);
 
     // Tab from terminal mode on pane 0 → pane 1 (editor)
-    app.handle_event(&key(KeyCode::Tab));
+    app.handle_event(&key(KeyCode::F(18)));
     assert_eq!(app.pane_layout.as_ref().unwrap().focused, 1);
     // Should switch to Navigation since editor pane doesn't support Terminal mode
     assert_eq!(app.input_mode, InputMode::Navigation);

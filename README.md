@@ -79,6 +79,16 @@ darya
 
 On first launch, a setup guide will help configure iTerm2 keybindings.
 
+## Recommended: Remap Caps Lock
+
+Darya uses **Caps Lock** as the primary panel-switch key. Since terminals can't capture Caps Lock directly, you need to remap it to F18 at the OS level:
+
+1. Install [Karabiner-Elements](https://karabiner-elements.pqrs.org/)
+2. Open Karabiner → **Simple Modifications**
+3. Add a rule: **caps_lock → f18**
+
+This gives you a fast, ergonomic key for switching between the sidebar and terminal without reaching for modifier combos.
+
 ## Keyboard Shortcuts
 
 All `Cmd+` shortcuts require iTerm2 to not intercept them. See the setup guide or rebind in config.
@@ -103,8 +113,8 @@ All `Cmd+` shortcuts require iTerm2 to not intercept them. See the setup guide o
 |-----|--------|
 | `j` / `k` | Move down / up |
 | `h` / `l` | Collapse / expand (sidebar) |
-| `Tab` | Cycle between panels and panes |
-| `Shift+Tab` | Cycle sub-views within panel |
+| `CapsLock` | Cycle between panels and panes |
+| `Shift+CapsLock` | Cycle sub-views within panel |
 | `1`–`9`, `0` | Jump to worktree by number |
 | `Enter` | Start session, open file, or toggle collapse |
 | `?` | Toggle help overlay |
@@ -127,7 +137,7 @@ All `Cmd+` shortcuts require iTerm2 to not intercept them. See the setup guide o
 | `Cmd+\` | Split pane (horizontal) |
 | `Cmd+Shift+\` | Split pane (vertical) |
 | `Cmd+W` | Close pane |
-| `Tab` | Cycle between panes |
+| `CapsLock` | Cycle between panes |
 
 ### Search & Commands
 
