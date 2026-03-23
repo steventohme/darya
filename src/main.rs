@@ -39,6 +39,26 @@ fn find_git_root() -> color_eyre::Result<PathBuf> {
     Ok(PathBuf::from(path))
 }
 
+/// Find the git common directory (the shared .git dir across all worktrees).
+/// For linked worktrees, this is the main repo's .git directory.
+fn find_git_common_dir() -> Option<PathBuf> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "--git-common-dir"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let path = PathBuf::from(path);
+    // Resolve relative paths (git may return relative like ".git")
+    if path.is_relative() {
+        std::env::current_dir().ok().map(|cwd| cwd.join(path))
+    } else {
+        Some(path)
+    }
+}
+
 /// Calculate the terminal area available for the PTY (excluding borders and sidebar).
 fn pty_size(terminal: &Terminal<CrosstermBackend<io::Stdout>>, app: &App) -> (u16, u16) {
     let size = terminal.size().unwrap_or_default();
@@ -210,7 +230,13 @@ async fn main() -> color_eyre::Result<()> {
         .selected_worktree_path()
         .cloned()
         .unwrap_or_else(|| PathBuf::from("."));
-    let mut file_watcher = FileWatcher::new(initial_watch_path, watcher_tx).ok();
+    let mut file_watcher = FileWatcher::new(initial_watch_path, watcher_tx.clone()).ok();
+
+    // Watch the git common directory for branch changes across all worktrees.
+    // Linked worktrees store their HEAD in <common-dir>/worktrees/<name>/HEAD,
+    // so watching the worktree directory alone misses branch switches.
+    let _git_dir_watcher = find_git_common_dir()
+        .and_then(|git_dir| FileWatcher::new(git_dir, watcher_tx).ok());
 
     // Register signal handlers for graceful shutdown (e.g. cargo-watch sends SIGTERM)
     let mut signals = Signals::new([SIGTERM, SIGINT, SIGHUP])?;
@@ -1072,8 +1098,24 @@ fn process_event(
         _ => {}
     }
 
+    // Detect branch changes via .git/HEAD modification and refresh sidebar
+    let needs_branch_refresh = match event {
+        AppEvent::FileChanged { paths } => paths.iter().any(|p| {
+            p.ends_with("HEAD")
+                && p.components().any(|c| c.as_os_str() == ".git")
+        }),
+        AppEvent::FilesCreatedOrDeleted => false,
+        _ => false,
+    };
+
     if !key_consumed {
         app.handle_event(event);
+    }
+
+    if needs_branch_refresh {
+        if let Ok(worktrees) = wt_manager.list() {
+            app.refresh_worktrees(worktrees);
+        }
     }
 }
 
