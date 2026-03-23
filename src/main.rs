@@ -39,26 +39,6 @@ fn find_git_root() -> color_eyre::Result<PathBuf> {
     Ok(PathBuf::from(path))
 }
 
-/// Find the git common directory (the shared .git dir across all worktrees).
-/// For linked worktrees, this is the main repo's .git directory.
-fn find_git_common_dir() -> Option<PathBuf> {
-    let output = std::process::Command::new("git")
-        .args(["rev-parse", "--git-common-dir"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let path = PathBuf::from(path);
-    // Resolve relative paths (git may return relative like ".git")
-    if path.is_relative() {
-        std::env::current_dir().ok().map(|cwd| cwd.join(path))
-    } else {
-        Some(path)
-    }
-}
-
 /// Calculate the terminal area available for the PTY (excluding borders and sidebar).
 fn pty_size(terminal: &Terminal<CrosstermBackend<io::Stdout>>, app: &App) -> (u16, u16) {
     let size = terminal.size().unwrap_or_default();
@@ -230,13 +210,7 @@ async fn main() -> color_eyre::Result<()> {
         .selected_worktree_path()
         .cloned()
         .unwrap_or_else(|| PathBuf::from("."));
-    let mut file_watcher = FileWatcher::new(initial_watch_path, watcher_tx.clone()).ok();
-
-    // Watch the git common directory for branch changes across all worktrees.
-    // Linked worktrees store their HEAD in <common-dir>/worktrees/<name>/HEAD,
-    // so watching the worktree directory alone misses branch switches.
-    let _git_dir_watcher = find_git_common_dir()
-        .and_then(|git_dir| FileWatcher::new(git_dir, watcher_tx).ok());
+    let mut file_watcher = FileWatcher::new(initial_watch_path, watcher_tx).ok();
 
     // Register signal handlers for graceful shutdown (e.g. cargo-watch sends SIGTERM)
     let mut signals = Signals::new([SIGTERM, SIGINT, SIGHUP])?;
@@ -296,6 +270,11 @@ async fn run_loop(
     // This prevents every tool call completion from turning the sidebar green.
     let mut pending_attention: HashMap<String, Instant> = HashMap::new();
     const DEBOUNCE_SECS: f64 = 3.0;
+
+    // Periodic branch polling: git uses atomic renames for HEAD, which file
+    // watchers on macOS can miss. Poll every 2 seconds as a reliable fallback.
+    let mut last_branch_poll = Instant::now();
+    const BRANCH_POLL_INTERVAL_SECS: f64 = 2.0;
 
     while app.running {
         terminal.draw(|frame| ui::draw(frame, app, session_manager))?;
@@ -455,6 +434,22 @@ async fn run_loop(
         if !app.pending_removed_sessions.is_empty() {
             for sid in app.pending_removed_sessions.drain(..) {
                 session_manager.remove(&sid);
+            }
+        }
+
+        // Periodic branch refresh: poll worktree branches every few seconds.
+        // File watchers can miss git's atomic HEAD writes on macOS, so we poll as fallback.
+        // Refreshes ALL sections — each may have a different repo root.
+        if last_branch_poll.elapsed().as_secs_f64() >= BRANCH_POLL_INTERVAL_SECS {
+            last_branch_poll = Instant::now();
+            for si in 0..app.sidebar_tree.sections.len() {
+                let root = app.sidebar_tree.sections[si]
+                    .root_path
+                    .clone()
+                    .unwrap_or_else(|| wt_manager.repo_root.clone());
+                if let Ok(wts) = darya::worktree::manager::list_worktrees_for_root(&root) {
+                    app.sidebar_tree.refresh_section_worktrees(si, &wts);
+                }
             }
         }
 
@@ -1107,24 +1102,8 @@ fn process_event(
         _ => {}
     }
 
-    // Detect branch changes via .git/HEAD modification and refresh sidebar
-    let needs_branch_refresh = match event {
-        AppEvent::FileChanged { paths } => paths.iter().any(|p| {
-            p.ends_with("HEAD")
-                && p.components().any(|c| c.as_os_str() == ".git")
-        }),
-        AppEvent::FilesCreatedOrDeleted => false,
-        _ => false,
-    };
-
     if !key_consumed {
         app.handle_event(event);
-    }
-
-    if needs_branch_refresh {
-        if let Ok(worktrees) = wt_manager.list() {
-            app.refresh_worktrees(worktrees);
-        }
     }
 }
 
