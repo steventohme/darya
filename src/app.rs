@@ -4750,6 +4750,36 @@ impl App {
         self.cursor_session_id().is_some()
     }
 
+    /// Check if cursor is on a removable shell slot (Backspace removes idle shell slots).
+    pub fn needs_shell_slot_remove(&self, key: &KeyEvent) -> bool {
+        if key.code != KeyCode::Backspace
+            || self.prompt.is_some()
+            || self.branch_switcher.is_some()
+            || self.fuzzy_finder.is_some()
+            || self.command_palette.is_some()
+            || self.dir_browser.is_some()
+            || self.show_help
+            || self.input_mode != InputMode::Navigation
+        {
+            return false;
+        }
+        // Must be on a shell session slot with no active session
+        if let Some(slot) = self.sidebar_tree.selected_session() {
+            return slot.kind == SessionKind::Shell && slot.session_id.is_none();
+        }
+        false
+    }
+
+    /// Remove the currently selected shell slot from the sidebar.
+    /// Returns the session_id if one was active (caller should clean it up).
+    pub fn remove_selected_shell_slot(&mut self) -> Option<String> {
+        use crate::sidebar::tree::TreeNode;
+        if let Some(&TreeNode::Session(si, ii, slot)) = self.sidebar_tree.selected_node() {
+            return self.sidebar_tree.remove_session_slot(si, ii, slot);
+        }
+        None
+    }
+
     /// Check if cursor is on an exited session (for restart on 'r').
     pub fn needs_session_restart(&self, key: &KeyEvent) -> bool {
         if key.code != KeyCode::Char('r')

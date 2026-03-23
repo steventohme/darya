@@ -833,6 +833,15 @@ fn process_event(
                 app.status_message = Some("Session closed".to_string());
             }
         }
+        // Handle shell slot removal on Backspace (idle shell with no session)
+        else if app.needs_shell_slot_remove(key) {
+            key_consumed = true;
+            if let Some(session_id) = app.remove_selected_shell_slot() {
+                session_manager.remove(&session_id);
+                app.cleanup_session(&session_id);
+            }
+            app.status_message = Some("Shell slot removed".to_string());
+        }
 
         // Split pane (Navigation mode only) — opens split picker
         if app.input_mode == InputMode::Navigation

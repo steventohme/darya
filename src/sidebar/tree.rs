@@ -314,6 +314,27 @@ impl SidebarTree {
         false
     }
 
+    /// Remove a session slot at the given position. Returns the session_id if one was active.
+    /// Refuses to remove the last remaining slot on an item.
+    pub fn remove_session_slot(
+        &mut self,
+        section_idx: usize,
+        item_idx: usize,
+        slot_idx: usize,
+    ) -> Option<String> {
+        let item = self
+            .sections
+            .get_mut(section_idx)?
+            .items
+            .get_mut(item_idx)?;
+        if item.sessions.len() <= 1 || slot_idx >= item.sessions.len() {
+            return None;
+        }
+        let removed = item.sessions.remove(slot_idx);
+        self.rebuild_visible();
+        removed.session_id
+    }
+
     /// Set the session ID on a specific session slot.
     pub fn set_session_id(
         &mut self,
