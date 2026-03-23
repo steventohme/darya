@@ -235,9 +235,12 @@ async fn main() -> color_eyre::Result<()> {
         }
     }
 
-    // Save sections config and layout before exit
+    // Save sections config, layout, and theme before exit
     config::save_sections(&app.sidebar_tree.to_sections_config());
     config::save_layout(&app.to_layout_config());
+    if let Some(planet) = app.planet_kind {
+        config::save_planet_choice(planet, app.theme.mode);
+    }
 
     // Restore terminal and Claude theme (normal exit path)
     restore_terminal();
