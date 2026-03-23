@@ -2373,6 +2373,92 @@ pub fn is_edtui_compatible(key: &KeyEvent) -> bool {
     )
 }
 
+/// Handle macOS-style editing shortcuts in Insert mode.
+/// Returns `true` if the key was handled, `false` otherwise.
+fn handle_macos_editing_keys(key: KeyEvent, state: &mut EdtuiState) -> bool {
+    use edtui::actions::{
+        DeleteChar, DeleteCharForward, DeleteToFirstCharOfLine, MoveToEndOfLine,
+        MoveToStartOfLine, MoveWordBackward, MoveWordForward,
+    };
+
+    match key.code {
+        // Option+Backspace: delete word backward
+        KeyCode::Backspace if key.modifiers.contains(KeyModifiers::ALT) => {
+            let before = state.cursor;
+            state.execute(MoveWordBackward(1));
+            let after = state.cursor;
+            if before.row == after.row {
+                let chars = before.col.saturating_sub(after.col);
+                for _ in 0..chars {
+                    state.execute(DeleteCharForward(1));
+                }
+            } else {
+                // Crossed a line boundary — use DeleteChar to rejoin
+                state.cursor = before;
+                let count = if before.col > 0 {
+                    before.col + 1 // delete to start of line + newline
+                } else {
+                    1 // just delete the newline
+                };
+                state.execute(DeleteChar(count));
+            }
+        }
+        // Option+Delete: delete word forward
+        KeyCode::Delete if key.modifiers.contains(KeyModifiers::ALT) => {
+            let before = state.cursor;
+            state.execute(MoveWordForward(1));
+            let after = state.cursor;
+            state.cursor = before;
+            if before.row == after.row {
+                let chars = after.col.saturating_sub(before.col);
+                for _ in 0..chars {
+                    state.execute(DeleteCharForward(1));
+                }
+            } else {
+                // Delete to end of current line + chars on next line
+                let cur_len = state
+                    .lines
+                    .len_col(before.row)
+                    .unwrap_or(0);
+                let chars = cur_len.saturating_sub(before.col) + 1 + after.col;
+                for _ in 0..chars {
+                    state.execute(DeleteCharForward(1));
+                }
+            }
+        }
+        // Cmd+Backspace: delete to start of line
+        KeyCode::Backspace if key.modifiers.contains(KeyModifiers::SUPER) => {
+            state.execute(DeleteToFirstCharOfLine);
+        }
+        // Option+Left: move word backward
+        KeyCode::Left if key.modifiers.contains(KeyModifiers::ALT) => {
+            state.execute(MoveWordBackward(1));
+        }
+        // Option+Right: move word forward
+        KeyCode::Right if key.modifiers.contains(KeyModifiers::ALT) => {
+            state.execute(MoveWordForward(1));
+        }
+        // Cmd+Left: move to start of line
+        KeyCode::Left if key.modifiers.contains(KeyModifiers::SUPER) => {
+            state.execute(MoveToStartOfLine());
+        }
+        // Cmd+Right: move to end of line
+        KeyCode::Right if key.modifiers.contains(KeyModifiers::SUPER) => {
+            state.execute(MoveToEndOfLine());
+        }
+        // Ctrl+A: move to start of line (Emacs-style)
+        KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            state.execute(MoveToStartOfLine());
+        }
+        // Ctrl+E: move to end of line (Emacs-style)
+        KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            state.execute(MoveToEndOfLine());
+        }
+        _ => return false,
+    }
+    true
+}
+
 /// Mouse text selection state for click-drag copy.
 #[derive(Debug, Clone)]
 pub struct TextSelection {
@@ -3823,6 +3909,12 @@ impl App {
             if editor.editor_state.mode == EditorMode::Insert {
                 editor.modified = true;
             }
+            // macOS editing shortcuts (Insert mode only)
+            if editor.editor_state.mode == EditorMode::Insert
+                && handle_macos_editing_keys(key, &mut editor.editor_state)
+            {
+                return;
+            }
             if is_edtui_compatible(&key) {
                 editor
                     .event_handler
@@ -3946,6 +4038,13 @@ impl App {
         // Track modifications in insert mode
         if note.editor_state.mode == EditorMode::Insert {
             note.modified = true;
+        }
+
+        // macOS editing shortcuts (Insert mode only)
+        if note.editor_state.mode == EditorMode::Insert
+            && handle_macos_editing_keys(key, &mut note.editor_state)
+        {
+            return;
         }
 
         // Forward to edtui
