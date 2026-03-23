@@ -2178,6 +2178,10 @@ pub struct ActivityAnimation {
     had_output: HashSet<String>,
     /// Last time output was confirmed without recent user input
     last_active: HashMap<String, Instant>,
+    /// First time continuous output started (for debounce — must sustain before "working")
+    first_active: HashMap<String, Instant>,
+    /// Sessions that have been active long enough to count as "working"
+    confirmed_working: HashSet<String>,
     /// Last time user input was sent to each session's PTY
     last_input: HashMap<String, Instant>,
     /// Current animation frame per session (0..17 = 18-frame scanner cycle)
@@ -2190,6 +2194,11 @@ pub struct ActivityAnimation {
 
 /// How long after last confirmed activity before animation stops (ms)
 const ACTIVITY_TIMEOUT_MS: u128 = 500;
+
+/// How long output must sustain before a session counts as "working" (ms).
+/// Brief bursts (e.g. a single status line) are ignored so they don't
+/// trigger false "needs attention" transitions when they stop.
+const WORKING_THRESHOLD_MS: u128 = 1000;
 
 /// How long after user input to suppress animation (ms) — filters out echoes
 const INPUT_SUPPRESSION_MS: u128 = 300;
@@ -2233,16 +2242,30 @@ impl ActivityAnimation {
     pub fn tick(&mut self) {
         let now = Instant::now();
 
-        // Snapshot which sessions are currently active before expiring
-        let prev_active: HashSet<String> = self.last_active.keys().cloned().collect();
+        // Snapshot which sessions were confirmed working before expiring
+        let prev_working: HashSet<String> = self.confirmed_working.clone();
 
         // Expire old activity
         self.last_active
             .retain(|_, t| now.duration_since(*t).as_millis() < ACTIVITY_TIMEOUT_MS);
 
-        // Detect sessions that just transitioned from active → idle
-        for sid in &prev_active {
-            if !self.last_active.contains_key(sid) {
+        // Clean up first_active and confirmed_working for sessions that went idle
+        self.first_active
+            .retain(|id, _| self.last_active.contains_key(id));
+        self.confirmed_working
+            .retain(|id| self.last_active.contains_key(id));
+
+        // Promote sessions that have been active long enough to "confirmed working"
+        for (id, started) in &self.first_active {
+            if now.duration_since(*started).as_millis() >= WORKING_THRESHOLD_MS {
+                self.confirmed_working.insert(id.clone());
+            }
+        }
+
+        // Detect sessions that just transitioned from confirmed working → idle.
+        // Only confirmed-working sessions trigger "finished" (attention/notification).
+        for sid in &prev_working {
+            if !self.confirmed_working.contains(sid) {
                 self.just_finished.push(sid.clone());
             }
         }
@@ -2269,6 +2292,7 @@ impl ActivityAnimation {
 
             if !suppressed {
                 self.last_active.insert(id.clone(), now);
+                self.first_active.entry(id.clone()).or_insert(now);
                 self.frame.entry(id).or_insert(0);
             }
         }
@@ -2340,6 +2364,8 @@ impl ActivityAnimation {
     pub fn remove_session(&mut self, session_id: &str) {
         self.had_output.remove(session_id);
         self.last_active.remove(session_id);
+        self.first_active.remove(session_id);
+        self.confirmed_working.remove(session_id);
         self.last_input.remove(session_id);
         self.frame.remove(session_id);
     }
