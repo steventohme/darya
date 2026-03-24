@@ -19,7 +19,7 @@ use darya::app::{self, App, InputMode};
 use darya::config::{self, KeybindingsConfig, CLAUDE_COMMAND};
 use darya::event::{self, create_event_handler, AppEvent};
 use darya::session::manager::SessionManager;
-use darya::sidebar::types::SessionKind;
+use darya::sidebar::types::{SessionKind, SessionSlot};
 use darya::ui;
 use darya::watcher::FileWatcher;
 use darya::worktree::manager::WorktreeManager;
@@ -163,7 +163,7 @@ async fn main() -> color_eyre::Result<()> {
             .unwrap_or(0);
         let planet = darya::planet::types::PlanetKind::all()[selected];
         app.planet_animation = Some(darya::planet::sprites::PlanetAnimation::load(planet));
-        app.planet_tick = 0;
+        app.planet_start = std::time::Instant::now();
         app.prompt = Some(darya::app::Prompt::ThemePicker {
             selected,
             previous_theme: app.theme.clone(),
@@ -1124,8 +1124,11 @@ fn restore_sessions(
             _ => continue,
         };
 
-        // Find matching sidebar item by path, then matching slot by kind + label
+        // Find matching sidebar item by path, then matching slot by kind + label.
+        // If no matching slot exists but the item does, create the slot so that
+        // additional sessions spawned via Shift+A are restored on resume.
         let mut found = None;
+        let mut item_location = None; // (si, ii) of the matching item
         for (si, section) in app.sidebar_tree.sections.iter().enumerate() {
             for (ii, item) in section.items.iter().enumerate() {
                 if item.path == saved_path {
@@ -1138,6 +1141,9 @@ fn restore_sessions(
                             break;
                         }
                     }
+                    if found.is_none() {
+                        item_location = Some((si, ii));
+                    }
                 }
                 if found.is_some() {
                     break;
@@ -1145,6 +1151,27 @@ fn restore_sessions(
             }
             if found.is_some() {
                 break;
+            }
+        }
+
+        // If slot wasn't found but the item exists, create the missing slot
+        if found.is_none() {
+            if let Some((si, ii)) = item_location {
+                if let Some(item) = app
+                    .sidebar_tree
+                    .sections
+                    .get_mut(si)
+                    .and_then(|s| s.items.get_mut(ii))
+                {
+                    let slot_idx = item.sessions.len();
+                    item.sessions.push(SessionSlot {
+                        kind: saved_kind,
+                        label: saved.slot_label.clone(),
+                        session_id: None,
+                        color: None,
+                    });
+                    found = Some((si, ii, slot_idx));
+                }
             }
         }
 
@@ -1166,6 +1193,9 @@ fn restore_sessions(
             app.sidebar_tree.set_session_id(si, ii, slot_idx, id);
         }
     }
+
+    // Rebuild visible nodes in case new slots were created during restore
+    app.sidebar_tree.rebuild_visible();
 
     // Restore UI state
     if let Some(ref sv) = layout.sidebar_view {

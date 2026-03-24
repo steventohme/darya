@@ -53,7 +53,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App, selected: usize) {
 
     // Render planet animation — cap size to keep it compact
     if let Some(ref anim) = app.planet_animation {
-        let anim_frame = anim.frame_at(app.planet_tick / 2); // ~10fps at 50ms tick
+        let elapsed_ms = app.planet_start.elapsed().as_millis() as usize;
+        let anim_frame = anim.frame_at(elapsed_ms / 100); // ~10fps
         let max_h = planet_area_height.min(20);
         let planet_width = (max_h * 2).min(inner.width); // ~square aspect ratio
         let lines = renderer::render_frame(anim_frame, planet_width, max_h, theme.bg);

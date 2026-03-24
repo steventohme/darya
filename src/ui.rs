@@ -224,7 +224,8 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     if show_planet {
         if let Some(ref anim) = app.planet_animation {
             let planet_area = sidebar_split[slot];
-            let anim_frame = anim.frame_at(app.planet_tick / 2); // ~10fps
+            let elapsed_ms = app.planet_start.elapsed().as_millis() as usize;
+            let anim_frame = anim.frame_at(elapsed_ms / 100); // ~10fps
             let render_h = planet_area.height.saturating_sub(4);
             let render_w = (render_h * 2).min(planet_area.width);
             let planet_lines =

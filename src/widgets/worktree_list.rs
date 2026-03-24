@@ -144,6 +144,44 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         String::new()
                     };
 
+                    // Truncate display_name and branch to always leave room for animation
+                    // Layout: "  {h} {arrow} {ind} " (8) + name + " [{branch}]" (3+branch) + shell + anim_reserve
+                    let content_width = (area.width as usize).saturating_sub(4); // borders + highlight
+                    let anim_reserve = 7; // 5 anim + 1 right margin + 1 padding
+                    let prefix_fixed = 8; // "  H ▶ ● "
+                    let bracket_overhead = 3; // " [" + "]"
+                    let shell_len = shell_indicator.len();
+                    let max_name_branch = content_width
+                        .saturating_sub(prefix_fixed + bracket_overhead + shell_len + anim_reserve);
+
+                    let (display_name, branch_display) = {
+                        let total = item.display_name.len() + branch_str.len();
+                        if total <= max_name_branch {
+                            (item.display_name.clone(), branch_str.to_string())
+                        } else {
+                            // Prioritize display_name, truncate branch first
+                            let min_branch = 3; // e.g. "ma…"
+                            let name_budget = max_name_branch.saturating_sub(min_branch);
+                            let name_len = item.display_name.len().min(name_budget);
+                            let branch_budget = max_name_branch.saturating_sub(name_len);
+
+                            let dn = if name_len < item.display_name.len() && name_len > 1 {
+                                format!("{}…", &item.display_name[..name_len.saturating_sub(1)])
+                            } else {
+                                item.display_name[..name_len].to_string()
+                            };
+                            let br = if branch_budget < branch_str.len() && branch_budget > 1 {
+                                format!(
+                                    "{}…",
+                                    &branch_str[..branch_budget.saturating_sub(1)]
+                                )
+                            } else {
+                                branch_str[..branch_budget.min(branch_str.len())].to_string()
+                            };
+                            (dn, br)
+                        }
+                    };
+
                     let indicator_color = if is_exited {
                         app.theme.session_exited
                     } else if needs_attention {
@@ -165,11 +203,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                     .add_modifier(Modifier::BOLD),
                             ),
                             Span::styled(
-                                item.display_name.clone(),
+                                display_name.clone(),
                                 Style::default().fg(item_name_color),
                             ),
                             Span::styled(
-                                format!(" [{}]", branch_str),
+                                format!(" [{}]", branch_display),
                                 Style::default().fg(app.theme.fg_dim),
                             ),
                             Span::styled(
@@ -178,7 +216,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                     .fg(exited_color)
                                     .add_modifier(Modifier::DIM),
                             ),
-                            Span::styled(shell_indicator, Style::default().fg(app.theme.fg_dim)),
+                            Span::styled(shell_indicator.clone(), Style::default().fg(app.theme.fg_dim)),
                         ]
                     } else if needs_attention {
                         let attn = app.theme.session_attention;
@@ -189,11 +227,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                 Style::default().fg(attn).add_modifier(Modifier::BOLD),
                             ),
                             Span::styled(
-                                item.display_name.clone(),
+                                display_name.clone(),
                                 Style::default().fg(attn_name).add_modifier(Modifier::BOLD),
                             ),
-                            Span::styled(format!(" [{}]", branch_str), Style::default().fg(attn)),
-                            Span::styled(shell_indicator, Style::default().fg(app.theme.fg_dim)),
+                            Span::styled(format!(" [{}]", branch_display), Style::default().fg(attn)),
+                            Span::styled(shell_indicator.clone(), Style::default().fg(app.theme.fg_dim)),
                         ]
                     } else {
                         let mut v = vec![
@@ -202,18 +240,18 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                 Style::default().fg(indicator_color),
                             ),
                             Span::styled(
-                                item.display_name.clone(),
+                                display_name.clone(),
                                 Style::default().fg(item_name_color),
                             ),
                             Span::styled(
-                                format!(" [{}]", branch_str),
+                                format!(" [{}]", branch_display),
                                 Style::default().fg(app.theme.fg_dim),
                             ),
-                            Span::styled(shell_indicator, Style::default().fg(app.theme.fg_dim)),
+                            Span::styled(shell_indicator.clone(), Style::default().fg(app.theme.fg_dim)),
                         ];
                         if let Some(ref status) = claude_status {
-                            let prefix_len = 8 + item.display_name.len() + 3 + branch_str.len();
-                            let max_len = (area.width as usize).saturating_sub(prefix_len + 5);
+                            let prefix_len = 8 + display_name.len() + 3 + branch_display.len() + shell_indicator.len();
+                            let max_len = (area.width as usize).saturating_sub(prefix_len + anim_reserve + 4);
                             if max_len > 3 {
                                 let truncated = if status.len() > max_len {
                                     format!(" {}…", &status[..max_len.saturating_sub(1)])
@@ -234,11 +272,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     // Right-align bouncing animation
                     if is_animating {
                         let content_width = (area.width as usize).saturating_sub(4);
-                        let text_width = 8
-                            + item.display_name.len()
-                            + 3
-                            + branch_str.len()
-                            + if is_exited { 9 } else { 0 };
+                        let text_width: usize = spans.iter().map(|s| s.width()).sum();
                         let anim_width = 5;
                         let right_margin = 1;
                         let padding =

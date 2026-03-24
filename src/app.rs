@@ -2584,8 +2584,8 @@ pub struct App {
     pub show_planet: bool,
     /// Loaded planet animation frames.
     pub planet_animation: Option<PlanetAnimation>,
-    /// Animation tick counter for the sidebar planet.
-    pub planet_tick: usize,
+    /// Start time for the sidebar planet animation (time-based, not tick-based).
+    pub planet_start: Instant,
 }
 
 impl App {
@@ -2651,7 +2651,7 @@ impl App {
             planet_kind: None,
             show_planet: true,
             planet_animation: None,
-            planet_tick: 0,
+            planet_start: Instant::now(),
         }
     }
 
@@ -2917,9 +2917,6 @@ impl App {
             }
             AppEvent::Tick => {
                 self.activity.tick();
-                if self.planet_animation.is_some() {
-                    self.planet_tick = self.planet_tick.wrapping_add(1);
-                }
             }
             AppEvent::Paste(_) => {
                 // Handled in main.rs process_event() before reaching here
@@ -3548,7 +3545,7 @@ impl App {
         // Load the initially selected planet's animation for preview
         let planet = PlanetKind::all()[selected];
         self.planet_animation = Some(PlanetAnimation::load(planet));
-        self.planet_tick = 0;
+        self.planet_start = Instant::now();
         self.prompt = Some(Prompt::ThemePicker {
             selected,
             previous_theme: self.theme.clone(),
