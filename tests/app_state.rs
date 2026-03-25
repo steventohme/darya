@@ -989,10 +989,11 @@ fn backtab_in_editor_insert_mode_no_crash() {
         ed.read_only = false;
         ed.editor_state.mode = edtui::EditorMode::Insert;
     }
-    // Shift+F18 (Shift+CapsLock) exits editor mode and cycles main view
+    // Shift+F18 (Shift+CapsLock) exits editor mode and cycles to Shell (Terminal mode)
     let shift_f18 = AppEvent::Key(KeyEvent::new(KeyCode::F(18), KeyModifiers::SHIFT));
     app.handle_event(&shift_f18);
-    assert_eq!(app.input_mode, InputMode::Navigation);
+    assert_eq!(app.main_view, MainView::Shell);
+    assert_eq!(app.input_mode, InputMode::Terminal);
 }
 
 #[test]
@@ -1049,10 +1050,11 @@ fn tab_shift_in_editor_insert_mode_no_crash() {
         ed.read_only = false;
         ed.editor_state.mode = edtui::EditorMode::Insert;
     }
-    // Shift+F18 (Shift+CapsLock) exits editor mode and cycles main view
+    // Shift+F18 (Shift+CapsLock) exits editor mode and cycles to Shell (Terminal mode)
     let shift_f18 = AppEvent::Key(KeyEvent::new(KeyCode::F(18), KeyModifiers::SHIFT));
     app.handle_event(&shift_f18);
-    assert_eq!(app.input_mode, InputMode::Navigation);
+    assert_eq!(app.main_view, MainView::Shell);
+    assert_eq!(app.input_mode, InputMode::Terminal);
 }
 
 #[test]

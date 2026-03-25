@@ -3850,11 +3850,15 @@ impl App {
     }
 
     fn handle_terminal_key(&mut self, key: KeyEvent) {
-        // Shift+Tab: exit terminal mode and cycle main views
+        // Shift+CapsLock: cycle to next main view and focus it
         if is_reverse_focus_key(&key)
         {
-            self.input_mode = InputMode::Navigation;
             self.main_view = self.main_view.next();
+            // Stay in terminal mode for PTY views, switch to navigation for others
+            self.input_mode = match self.main_view {
+                MainView::Terminal | MainView::Shell => InputMode::Terminal,
+                _ => InputMode::Navigation,
+            };
             return;
         }
         if is_focus_key(key.code) {
@@ -3931,8 +3935,11 @@ impl App {
             {
                 editor.read_only = true;
                 editor.editor_state.mode = EditorMode::Normal;
-                self.input_mode = InputMode::Navigation;
                 self.main_view = self.main_view.next();
+                self.input_mode = match self.main_view {
+                    MainView::Terminal | MainView::Shell => InputMode::Terminal,
+                    _ => InputMode::Navigation,
+                };
                 return;
             }
             // Edit mode: Ctrl+S saves, Esc exits to read-only, rest forwarded to edtui
@@ -4431,29 +4438,34 @@ impl App {
                 _ => None,
             };
         }
-        // If cursor is on a specific session slot, use it directly (handles multiple slots of same kind)
-        use crate::sidebar::tree::TreeNode;
-        if let Some(TreeNode::Session(si, ii, slot_idx)) =
-            self.sidebar_tree.visible.get(self.sidebar_tree.cursor)
-        {
-            return self
-                .sidebar_tree
-                .sections
-                .get(*si)?
-                .items
-                .get(*ii)?
-                .sessions
-                .get(*slot_idx)?
-                .session_id
-                .as_ref();
-        }
-        // Cursor on Item or Section: fall back to kind-based lookup
-        let item = self.sidebar_tree.selected_item()?;
+        // Determine the session kind that matches the current main view
         let target_kind = if self.main_view == MainView::Shell {
             SessionKind::Shell
         } else {
             SessionKind::Claude
         };
+        // If cursor is on a specific session slot of the matching kind, use it
+        // directly (handles multiple slots of same kind, e.g. two Claude sessions).
+        // If the cursor slot doesn't match the view kind, fall through to the
+        // kind-based lookup so Shift+CapsLock view cycling routes input correctly.
+        use crate::sidebar::tree::TreeNode;
+        if let Some(TreeNode::Session(si, ii, slot_idx)) =
+            self.sidebar_tree.visible.get(self.sidebar_tree.cursor)
+        {
+            if let Some(slot) = self
+                .sidebar_tree
+                .sections
+                .get(*si)
+                .and_then(|s| s.items.get(*ii))
+                .and_then(|item| item.sessions.get(*slot_idx))
+            {
+                if slot.kind == target_kind {
+                    return slot.session_id.as_ref();
+                }
+            }
+        }
+        // Cursor on Item/Section or cursor slot doesn't match view: kind-based lookup
+        let item = self.sidebar_tree.selected_item()?;
         item.sessions
             .iter()
             .find(|s| s.kind == target_kind)
@@ -4892,8 +4904,8 @@ impl App {
         self.cursor_session_id().is_some()
     }
 
-    /// Check if cursor is on a removable shell slot (Backspace removes idle shell slots).
-    pub fn needs_shell_slot_remove(&self, key: &KeyEvent) -> bool {
+    /// Check if cursor is on a removable idle slot (Backspace removes idle slots with no session).
+    pub fn needs_idle_slot_remove(&self, key: &KeyEvent) -> bool {
         if key.code != KeyCode::Backspace
             || self.prompt.is_some()
             || self.branch_switcher.is_some()
@@ -4905,16 +4917,16 @@ impl App {
         {
             return false;
         }
-        // Must be on a shell session slot with no active session
+        // Must be on a session slot with no active session
         if let Some(slot) = self.sidebar_tree.selected_session() {
-            return slot.kind == SessionKind::Shell && slot.session_id.is_none();
+            return slot.session_id.is_none();
         }
         false
     }
 
-    /// Remove the currently selected shell slot from the sidebar.
+    /// Remove the currently selected idle slot from the sidebar.
     /// Returns the session_id if one was active (caller should clean it up).
-    pub fn remove_selected_shell_slot(&mut self) -> Option<String> {
+    pub fn remove_selected_idle_slot(&mut self) -> Option<String> {
         use crate::sidebar::tree::TreeNode;
         if let Some(&TreeNode::Session(si, ii, slot)) = self.sidebar_tree.selected_node() {
             return self.sidebar_tree.remove_session_slot(si, ii, slot);

@@ -831,14 +831,14 @@ fn process_event(
                 app.status_message = Some("Session closed".to_string());
             }
         }
-        // Handle shell slot removal on Backspace (idle shell with no session)
-        else if app.needs_shell_slot_remove(key) {
+        // Handle idle slot removal on Backspace (idle slot with no session)
+        else if app.needs_idle_slot_remove(key) {
             key_consumed = true;
-            if let Some(session_id) = app.remove_selected_shell_slot() {
+            if let Some(session_id) = app.remove_selected_idle_slot() {
                 session_manager.remove(&session_id);
                 app.cleanup_session(&session_id);
             }
-            app.status_message = Some("Shell slot removed".to_string());
+            app.status_message = Some("Slot removed".to_string());
         }
 
         // Split pane (Navigation mode only) — opens split picker
@@ -1116,6 +1116,13 @@ fn restore_sessions(
 ) {
     let (rows, cols) = pty_size(terminal, app);
 
+    // Track which worktree paths already got a `--continue` Claude session.
+    // Only the first Claude per path should use `--continue` (resumes the most
+    // recent conversation); additional ones would all resume the same conversation,
+    // so they start fresh instead.
+    let mut continued_claude_paths: std::collections::HashSet<PathBuf> =
+        std::collections::HashSet::new();
+
     for saved in &layout.sessions {
         let saved_path = PathBuf::from(&saved.path);
         let saved_kind = match saved.slot_kind.as_str() {
@@ -1182,7 +1189,13 @@ fn restore_sessions(
         let command = match saved_kind {
             SessionKind::Claude => {
                 let base = config::resolve_session_command(&saved_path, &app.session_command);
-                format!("{} --continue", base)
+                if continued_claude_paths.insert(saved_path.clone()) {
+                    // First Claude for this worktree path — resume most recent conversation
+                    format!("{} --continue", base)
+                } else {
+                    // Additional Claude sessions — start fresh to avoid resuming the same conversation
+                    base
+                }
             }
             SessionKind::Shell => config::resolve_shell_command(&saved_path, &app.shell_command),
         };
