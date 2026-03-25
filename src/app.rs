@@ -463,6 +463,13 @@ impl MainView {
     }
 }
 
+/// What kind of sidebar node is being renamed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RenameTarget {
+    Section(usize),
+    Item(usize, usize),
+}
+
 /// Overlay prompts for user input
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Prompt {
@@ -483,6 +490,8 @@ pub enum Prompt {
     ColorPicker { target: ColorTarget, cursor: usize },
     /// First-launch setup guide for Cmd key configuration
     SetupGuide,
+    /// Rename a section or item
+    Rename { input: String, target: RenameTarget },
     /// Offer to restore previous sessions
     RestoreSession { count: usize },
     /// Planet/theme picker overlay
@@ -3089,6 +3098,51 @@ impl App {
                 }
                 _ => {}
             },
+            Prompt::Rename { input, target } => match key.code {
+                KeyCode::Enter => {
+                    if !input.is_empty() {
+                        let new_name = input.clone();
+                        let target = target.clone();
+                        self.prompt = None;
+                        match target {
+                            RenameTarget::Section(si) => {
+                                if let Some(section) = self.sidebar_tree.sections.get_mut(si) {
+                                    section.name = new_name.clone();
+                                }
+                                self.status_message =
+                                    Some(format!("Renamed section to '{}'", new_name));
+                            }
+                            RenameTarget::Item(si, ii) => {
+                                if let Some(item) = self
+                                    .sidebar_tree
+                                    .sections
+                                    .get_mut(si)
+                                    .and_then(|s| s.items.get_mut(ii))
+                                {
+                                    // Clear custom_name if it matches the auto-detected name
+                                    if new_name == item.display_name {
+                                        item.custom_name = None;
+                                    } else {
+                                        item.custom_name = Some(new_name.clone());
+                                    }
+                                }
+                                self.status_message =
+                                    Some(format!("Renamed item to '{}'", new_name));
+                            }
+                        }
+                    }
+                }
+                KeyCode::Esc => {
+                    self.prompt = None;
+                }
+                KeyCode::Backspace => {
+                    input.pop();
+                }
+                KeyCode::Char(c) => {
+                    input.push(c);
+                }
+                _ => {}
+            },
             Prompt::ConfirmDeleteSection {
                 section_idx,
                 section_name,
@@ -3742,7 +3796,7 @@ impl App {
                 if let Some(item) = self.sidebar_tree.selected_item() {
                     if !item.is_main {
                         self.prompt = Some(Prompt::ConfirmDelete {
-                            worktree_name: item.display_name.clone(),
+                            worktree_name: item.visible_name().to_string(),
                         });
                     } else {
                         self.status_message = Some("Cannot delete main worktree".to_string());
@@ -3799,6 +3853,30 @@ impl App {
                     }
                 }
                 // For non-section nodes, Backspace is handled by needs_session_close in main loop
+            }
+            KeyCode::F(2) => {
+                // Rename section or item
+                use crate::sidebar::tree::TreeNode;
+                if let Some(&node) = self.sidebar_tree.selected_node() {
+                    match node {
+                        TreeNode::Section(si) => {
+                            let current = self.sidebar_tree.sections[si].name.clone();
+                            self.prompt = Some(Prompt::Rename {
+                                input: current,
+                                target: RenameTarget::Section(si),
+                            });
+                        }
+                        TreeNode::Item(si, ii) => {
+                            let item = &self.sidebar_tree.sections[si].items[ii];
+                            let current = item.visible_name().to_string();
+                            self.prompt = Some(Prompt::Rename {
+                                input: current,
+                                target: RenameTarget::Item(si, ii),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
             }
             KeyCode::F(18) => {
                 self.toggle_focus();
@@ -5092,7 +5170,7 @@ impl App {
         // Add all running terminal and shell sessions
         for section in &self.sidebar_tree.sections {
             for item in &section.items {
-                let worktree_name = &item.display_name;
+                let worktree_name = item.visible_name();
                 for slot in &item.sessions {
                     if let Some(ref sid) = slot.session_id {
                         if self.exited_sessions.contains(sid.as_str()) {

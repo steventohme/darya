@@ -530,6 +530,28 @@ fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::
             );
             frame.render_widget(text, inner);
         }
+        Prompt::Rename { input, target } => {
+            let title = match target {
+                crate::app::RenameTarget::Section(_) => " Rename Section ",
+                crate::app::RenameTarget::Item(_, _) => " Rename Item ",
+            };
+            let block = Block::default()
+                .title(title)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
+                .border_style(Style::default().fg(theme.prompt_border))
+                .style(Style::default().bg(theme.bg));
+            let inner = block.inner(popup_area);
+            frame.render_widget(block, popup_area);
+
+            let text = Paragraph::new(format!("{}█", input)).style(
+                Style::default()
+                    .fg(theme.fg)
+                    .bg(theme.bg)
+                    .add_modifier(Modifier::BOLD),
+            );
+            frame.render_widget(text, inner);
+        }
         Prompt::ConfirmDeleteSection { section_name, .. } => {
             let block = Block::default()
                 .title(" Confirm Delete Section ")

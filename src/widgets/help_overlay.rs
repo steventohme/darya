@@ -49,6 +49,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 ("Shift+R", "Force-restart session"),
                 ("Shift+A", "Add Claude slot"),
                 ("Shift+S", "Add shell slot"),
+                ("F2", "Rename section/item"),
                 ("c", "Assign color"),
                 ("Shift+N", "Create section"),
                 ("Backspace", "Close/delete session/section"),

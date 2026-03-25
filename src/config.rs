@@ -378,6 +378,9 @@ pub struct SectionShellToml {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SectionItemToml {
     pub path: String,
+    /// User-set custom name override for this item.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     #[serde(default)]
     pub shells: Vec<SectionShellToml>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

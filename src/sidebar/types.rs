@@ -19,6 +19,8 @@ pub struct Section {
 pub struct SidebarItem {
     pub path: PathBuf,
     pub display_name: String,
+    /// User-set override for display_name. Survives refresh_worktrees().
+    pub custom_name: Option<String>,
     /// Some for git worktrees (branch name), None for plain directories.
     pub branch: Option<String>,
     pub is_main: bool,
@@ -26,6 +28,13 @@ pub struct SidebarItem {
     pub sessions: Vec<SessionSlot>,
     /// User-assigned color for this item's display name.
     pub color: Option<Color>,
+}
+
+impl SidebarItem {
+    /// The name to show in the sidebar (custom_name if set, otherwise display_name).
+    pub fn visible_name(&self) -> &str {
+        self.custom_name.as_deref().unwrap_or(&self.display_name)
+    }
 }
 
 /// A named session slot attached to a sidebar item.

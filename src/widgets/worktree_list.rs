@@ -154,21 +154,22 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                     let max_name_branch = content_width
                         .saturating_sub(prefix_fixed + bracket_overhead + shell_len + anim_reserve);
 
+                    let vis_name = item.visible_name();
                     let (display_name, branch_display) = {
-                        let total = item.display_name.len() + branch_str.len();
+                        let total = vis_name.len() + branch_str.len();
                         if total <= max_name_branch {
-                            (item.display_name.clone(), branch_str.to_string())
+                            (vis_name.to_string(), branch_str.to_string())
                         } else {
                             // Prioritize display_name, truncate branch first
                             let min_branch = 3; // e.g. "ma…"
                             let name_budget = max_name_branch.saturating_sub(min_branch);
-                            let name_len = item.display_name.len().min(name_budget);
+                            let name_len = vis_name.len().min(name_budget);
                             let branch_budget = max_name_branch.saturating_sub(name_len);
 
-                            let dn = if name_len < item.display_name.len() && name_len > 1 {
-                                format!("{}…", &item.display_name[..name_len.saturating_sub(1)])
+                            let dn = if name_len < vis_name.len() && name_len > 1 {
+                                format!("{}…", &vis_name[..name_len.saturating_sub(1)])
                             } else {
-                                item.display_name[..name_len].to_string()
+                                vis_name[..name_len].to_string()
                             };
                             let br = if branch_budget < branch_str.len() && branch_budget > 1 {
                                 format!(

@@ -642,7 +642,7 @@ fn process_event(
                             app.refresh_worktrees(worktrees);
                         }
                         app.status_message =
-                            Some(format!("Deleted worktree '{}'", item.display_name));
+                            Some(format!("Deleted worktree '{}'", item.visible_name()));
                     }
                     Err(e) => {
                         app.prompt = None;

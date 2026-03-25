@@ -37,6 +37,7 @@ impl SidebarTree {
             .map(|wt| SidebarItem {
                 path: wt.path.clone(),
                 display_name: wt.name.clone(),
+                custom_name: None,
                 branch: wt.branch.clone(),
                 is_main: wt.is_main,
                 collapsed: true,
@@ -401,7 +402,7 @@ impl SidebarTree {
             for item in &section.items {
                 for slot in &item.sessions {
                     if slot.session_id.as_deref() == Some(session_id) {
-                        return Some(&item.display_name);
+                        return Some(item.visible_name());
                     }
                 }
             }
@@ -415,7 +416,7 @@ impl SidebarTree {
             for item in &section.items {
                 for slot in &item.sessions {
                     if slot.session_id.as_deref() == Some(session_id) {
-                        return Some((&section.name, &item.display_name));
+                        return Some((&section.name, item.visible_name()));
                     }
                 }
             }
@@ -455,6 +456,7 @@ impl SidebarTree {
                 section.items.push(SidebarItem {
                     path: wt.path.clone(),
                     display_name: wt.name.clone(),
+                    custom_name: None,
                     branch: wt.branch.clone(),
                     is_main: wt.is_main,
                     collapsed: true,
@@ -574,6 +576,7 @@ impl SidebarTree {
                             .collect();
                         SectionItemToml {
                             path: item.path.to_string_lossy().to_string(),
+                            name: item.custom_name.clone(),
                             shells,
                             color: item.color.and_then(color_to_hex),
                         }
@@ -634,6 +637,7 @@ impl SidebarTree {
                                     .map(|n| n.to_string_lossy().to_string())
                                     .unwrap_or_else(|| item_toml.path.clone())
                             }),
+                            custom_name: item_toml.name.clone(),
                             branch: wt.and_then(|w| w.branch.clone()),
                             is_main: wt.map(|w| w.is_main).unwrap_or(false),
                             collapsed: true,

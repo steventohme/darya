@@ -8,7 +8,8 @@ use darya::app::{
     format_relative_time, is_edtui_compatible, status_priority, BlameLine, BranchSwitcherState,
     ColorTarget, CommandId, CommandPaletteState, EditorViewState, GitBlameState, GitFileStatus,
     GitLogEntry, GitLogState, GitStatusCategory, GitStatusEntry, GitStatusState, InputMode,
-    MainView, PaneContent, PanelFocus, Prompt, SidebarView, SplitDirection, SplitNode, ViewKind,
+    MainView, PaneContent, PanelFocus, Prompt, RenameTarget, SidebarView, SplitDirection,
+    SplitNode, ViewKind,
 };
 use darya::config;
 use darya::event::AppEvent;
@@ -2825,6 +2826,7 @@ fn remove_section_returns_session_ids() {
     app.sidebar_tree.sections[si].items.push(SidebarItem {
         path: PathBuf::from("/tmp/test"),
         display_name: "test".to_string(),
+        custom_name: None,
         branch: None,
         is_main: false,
         collapsed: true,
@@ -3636,4 +3638,95 @@ fn command_palette_execute_branch_switcher() {
     assert!(app.branch_switcher.is_some());
     app.branch_switcher = None;
     assert!(app.branch_switcher.is_none());
+}
+
+// ── Rename ──────────────────────────────────────────────────
+
+#[test]
+fn f2_on_section_opens_rename_prompt() {
+    let mut app = make_app(2);
+    // Cursor starts on section header (index 0)
+    assert_eq!(app.sidebar_tree.cursor, 0);
+    app.handle_event(&key(KeyCode::F(2)));
+    match &app.prompt {
+        Some(Prompt::Rename { input, target }) => {
+            assert_eq!(target, &RenameTarget::Section(0));
+            assert_eq!(input, &app.sidebar_tree.sections[0].name);
+        }
+        other => panic!("Expected Prompt::Rename, got {:?}", other),
+    }
+}
+
+#[test]
+fn f2_on_item_opens_rename_prompt() {
+    let mut app = make_app(2);
+    // Move to first item
+    app.handle_event(&key(KeyCode::Char('j')));
+    app.handle_event(&key(KeyCode::F(2)));
+    match &app.prompt {
+        Some(Prompt::Rename { input, target }) => {
+            assert_eq!(target, &RenameTarget::Item(0, 0));
+            assert_eq!(input, app.sidebar_tree.sections[0].items[0].visible_name());
+        }
+        other => panic!("Expected Prompt::Rename, got {:?}", other),
+    }
+}
+
+#[test]
+fn rename_section_updates_name() {
+    let mut app = make_app(2);
+    // Open rename on section
+    app.handle_event(&key(KeyCode::F(2)));
+    // Clear and type new name
+    for _ in 0..50 {
+        app.handle_event(&key(KeyCode::Backspace));
+    }
+    for c in "NewSection".chars() {
+        app.handle_event(&key(KeyCode::Char(c)));
+    }
+    app.handle_event(&key(KeyCode::Enter));
+    assert!(app.prompt.is_none());
+    assert_eq!(app.sidebar_tree.sections[0].name, "NewSection");
+}
+
+#[test]
+fn rename_item_sets_custom_name() {
+    let mut app = make_app(2);
+    app.handle_event(&key(KeyCode::Char('j')));
+    app.handle_event(&key(KeyCode::F(2)));
+    // Clear and type new name
+    for _ in 0..50 {
+        app.handle_event(&key(KeyCode::Backspace));
+    }
+    for c in "CustomName".chars() {
+        app.handle_event(&key(KeyCode::Char(c)));
+    }
+    app.handle_event(&key(KeyCode::Enter));
+    assert!(app.prompt.is_none());
+    let item = &app.sidebar_tree.sections[0].items[0];
+    assert_eq!(item.custom_name.as_deref(), Some("CustomName"));
+    assert_eq!(item.visible_name(), "CustomName");
+}
+
+#[test]
+fn rename_item_to_original_clears_custom_name() {
+    let mut app = make_app(2);
+    app.handle_event(&key(KeyCode::Char('j')));
+    let original = app.sidebar_tree.sections[0].items[0].display_name.clone();
+    // Open rename, submit unchanged
+    app.handle_event(&key(KeyCode::F(2)));
+    app.handle_event(&key(KeyCode::Enter));
+    assert!(app.prompt.is_none());
+    assert_eq!(app.sidebar_tree.sections[0].items[0].custom_name, None);
+    assert_eq!(app.sidebar_tree.sections[0].items[0].visible_name(), original);
+}
+
+#[test]
+fn rename_esc_cancels() {
+    let mut app = make_app(2);
+    app.handle_event(&key(KeyCode::F(2)));
+    assert!(app.prompt.is_some());
+    app.handle_event(&key(KeyCode::Esc));
+    assert!(app.prompt.is_none());
+    // Name unchanged
 }
