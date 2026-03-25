@@ -270,8 +270,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         v
                     };
 
-                    // Right-align bouncing animation
-                    if is_animating {
+                    // Right-align bouncing animation (only when collapsed — when expanded,
+                    // animation shows on individual session slots instead)
+                    if is_animating && item.collapsed {
                         let content_width = (area.width as usize).saturating_sub(4);
                         let text_width: usize = spans.iter().map(|s| s.width()).sum();
                         let anim_width = 5;
@@ -331,9 +332,18 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                         Span::styled(slot.label.clone(), Style::default().fg(label_fg)),
                     ];
 
+                    // Check if this session is animating
+                    let is_slot_animating = slot
+                        .session_id
+                        .as_deref()
+                        .filter(|id| !app.exited_sessions.contains(*id))
+                        .map(|id| app.activity.is_active(id))
+                        .unwrap_or(false);
+
                     if let Some(status) = claude_status {
-                        let max_status_len =
-                            (area.width as usize).saturating_sub(8 + slot.label.len());
+                        let anim_reserve = if is_slot_animating { 7 } else { 0 };
+                        let max_status_len = (area.width as usize)
+                            .saturating_sub(8 + slot.label.len() + anim_reserve);
                         let truncated = if status.len() > max_status_len && max_status_len > 1 {
                             format!("{}…", &status[..max_status_len.saturating_sub(1)])
                         } else {
@@ -350,6 +360,21 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                             status_suffix.to_string(),
                             Style::default().fg(app.theme.fg_dim),
                         ));
+                    }
+
+                    // Right-align bouncing animation on active session slots
+                    if is_slot_animating {
+                        let content_width = (area.width as usize).saturating_sub(4);
+                        let text_width: usize = spans.iter().map(|s| s.width()).sum();
+                        let anim_width = 5;
+                        let right_margin = 1;
+                        let padding =
+                            content_width.saturating_sub(text_width + anim_width + right_margin);
+
+                        spans.push(Span::raw(" ".repeat(padding)));
+                        let trail =
+                            app.activity.trail(slot.session_id.as_deref().unwrap());
+                        spans.extend(build_animation_spans(trail, &app.theme));
                     }
 
                     ListItem::new(Line::from(spans))
