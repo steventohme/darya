@@ -1,43 +1,49 @@
 # darya
 
-A terminal workspace for developers who use git worktrees. Manage multiple branches, Claude Code sessions, shell terminals, and files — all from a single TUI.
+A terminal workspace for developers who use git worktrees. Manage multiple branches, Claude Code sessions, shell terminals, and files from a single TUI.
 
 ## Features
 
 ### Workspace
 
-- **Git worktree management** — create, delete, and jump between worktrees
-- **Split panes** — up to 3 side-by-side or stacked terminal sessions (horizontal & vertical)
-- **Custom sections** — organize worktrees into named groups with custom colors
-- **Layout persistence** — auto-save and restore sessions on restart
-- **Resizable sidebar** — adjust with `Cmd+=` / `Cmd+-` (15%–50%)
+- **Git worktree management** with create, delete, and quick-jump between worktrees
+- **Split panes** with up to 3 side-by-side or stacked terminal sessions
+- **Custom sections** to organize worktrees into named groups with custom colors
+- **Layout persistence** that auto-saves and restores sessions on restart
+- **Resizable sidebar** via `Cmd+=` / `Cmd+-` (15%–50%)
 
 ### Sessions
 
-- **Claude Code integration** — launch and manage AI coding sessions per worktree
-- **Shell sessions** — run multiple named shell terminals per worktree
-- **Session status** — live status text from PTY window titles displayed in sidebar
-- **Activity indicators** — animated scanner for active sessions, bell detection, exit status
-- **Force-restart** — restart running or exited sessions without closing them
+- **Claude Code integration** to launch and manage AI coding sessions per worktree
+- **Shell sessions** for running multiple named shell terminals per worktree
+- **Session status** with live PTY window title display in sidebar
+- **Activity indicators** with animated scanner for active sessions, bell detection, exit status
+- **Force-restart** to restart running or exited sessions without closing them
 
 ### File Explorer
 
 - **Tree view** with expand/collapse directories
 - **File icons** with language-specific colors (Rust, Python, Go, TypeScript, and more)
-- **Git status indicators** — dirty files and directories highlighted
-- **Text selection** — click-drag to select terminal text, auto-copy via OSC 52
+- **Git status indicators** highlighting dirty files and directories
 
 ### Git Views
 
-- **Status** — staged, unstaged, and untracked files with color-coded indicators
-- **Diff** — syntax-highlighted diffs for staged, unstaged, and untracked files
-- **Blame** — commit hash, author, and relative time per line
-- **Log** — last 200 commits with hash, subject, author, and date; select to view full diff
+- **Status** showing staged, unstaged, and untracked files with color-coded indicators
+- **Diff** with syntax-highlighted diffs for staged, unstaged, and untracked files
+- **Blame** showing commit hash, author, and relative time per line
+- **Log** showing recent commits with hash, subject, author, and date; select to view full diff
+- **Log file filtering** that scopes commits to the currently open file
+- **Branch switcher** (`Cmd+B`) with fuzzy search across all branches
 
 ### Editor
 
 - **Built-in editor** via edtui with syntax highlighting
 - **Edit mode** (`e`) and save (`Ctrl+S`)
+
+### Notes
+
+- **Per-worktree markdown notepad** (`Cmd+N`) stored in `~/.config/darya/notes/`
+- Toggle between hidden, preview, and edit modes
 
 ### Search
 
@@ -46,20 +52,21 @@ A terminal workspace for developers who use git worktrees. Manage multiple branc
 
 ### Themes
 
-- **6 planet themes** — Earth, Mars, Venus, Neptune, Jupiter, Pluto
-- **Dark and light modes** — each planet adapts to both
-- **Theme picker** — browse with live planet animation preview
-- **Color picker** — assign custom colors to sections, worktrees, and sessions
-- **Full color customization** — override any color via hex values in config
+- **6 planet themes**: Earth, Mars, Venus, Neptune, Jupiter, Pluto
+- **Dark and light modes** with each planet adapting to both
+- **Theme picker** with live planet animation preview
+- **Color picker** to assign custom colors to sections, worktrees, and sessions
+- **Full color customization** by overriding any color via hex values in config
 
 ### Other
 
-- **Command palette** (`Cmd+K`) — searchable list of all actions with keybindings
-- **Help overlay** (`?`) — quick reference for all shortcuts
-- **First-launch setup guide** — helps configure iTerm2 keybindings
-- **Bracketed paste** — paste multi-line content into terminal sessions
-- **Mouse support** — scroll, click, and drag in terminal views
-- **Kitty keyboard protocol** — Ctrl+number keys work natively
+- **Command palette** (`Cmd+K`) with searchable list of all actions and keybindings
+- **Help overlay** (`?`) for quick reference of all shortcuts
+- **First-launch setup guide** to help configure iTerm2 keybindings
+- **Text selection** with click-drag to select terminal text, auto-copy via OSC 52
+- **Bracketed paste** for multi-line content into terminal sessions
+- **Mouse support** for scroll, click, and drag in terminal views
+- **Kitty keyboard protocol** so Ctrl+number keys work natively
 
 ## Install
 
@@ -67,7 +74,7 @@ A terminal workspace for developers who use git worktrees. Manage multiple branc
 cargo install --path .
 ```
 
-Requires Rust 1.70+. Designed for **macOS with iTerm2**.
+Requires Rust 1.70+. Designed for macOS with iTerm2.
 
 ## Quick Start
 
@@ -81,13 +88,13 @@ On first launch, a setup guide will help configure iTerm2 keybindings.
 
 ## Recommended: Remap Caps Lock
 
-Darya uses **Caps Lock** as the primary panel-switch key. Since terminals can't capture Caps Lock directly, you need to remap it to F18 at the OS level:
+Darya uses Caps Lock as the primary panel-switch key. Since terminals can't capture Caps Lock directly, you need to remap it to F18 at the OS level:
 
 1. Install [Karabiner-Elements](https://karabiner-elements.pqrs.org/)
-2. Open Karabiner → **Simple Modifications**
+2. Open Karabiner, go to **Simple Modifications**
 3. Add a rule: **caps_lock → f18**
 
-This gives you a fast, ergonomic key for switching between the sidebar and terminal without reaching for modifier combos.
+This gives you a fast, ergonomic key for switching between the sidebar and terminal.
 
 ## Keyboard Shortcuts
 
@@ -135,7 +142,7 @@ All `Cmd+` shortcuts require iTerm2 to not intercept them. See the setup guide o
 | Key | Action |
 |-----|--------|
 | `Cmd+\` | Split pane (horizontal) |
-| `Cmd+Shift+\` | Split pane (vertical) |
+| `Ctrl+.` | Split pane (vertical) |
 | `Cmd+W` | Close pane |
 | `CapsLock` | Cycle between panes |
 
@@ -146,6 +153,8 @@ All `Cmd+` shortcuts require iTerm2 to not intercept them. See the setup guide o
 | `Cmd+P` | Fuzzy file finder |
 | `Cmd+F` | Project search |
 | `Cmd+K` | Command palette |
+| `Cmd+B` | Branch switcher |
+| `Cmd+N` | Toggle notes |
 
 ### Worktrees
 
@@ -154,6 +163,7 @@ All `Cmd+` shortcuts require iTerm2 to not intercept them. See the setup guide o
 | `a` | Add worktree |
 | `d` | Delete worktree |
 | `c` | Assign color |
+| `F2` | Rename item or section |
 | `Shift+N` | Create section |
 | `Backspace` | Delete section |
 
@@ -176,7 +186,7 @@ All `Cmd+` shortcuts require iTerm2 to not intercept them. See the setup guide o
 
 | Key | Action |
 |-----|--------|
-| `i` / `Enter` | Enter terminal mode (keys → PTY) |
+| `i` / `Enter` | Enter terminal mode (keys go to PTY) |
 | `Esc` | Exit terminal mode |
 | `e` | Enter editor edit mode |
 | `Ctrl+S` | Save file (editor) |
@@ -208,7 +218,11 @@ command = "/bin/zsh"  # defaults to $SHELL
 # worktrees = "cmd+1"
 # terminal = "cmd+2"
 # fuzzy_finder = "cmd+p"
-# split_pane_vertical = "cmd+shift+\\"
+# branch_switcher = "cmd+b"
+# notes_toggle = "cmd+n"
+# split_pane = "cmd+\\"
+# split_pane_vertical = "ctrl+."
+# close_pane = "cmd+w"
 # sidebar_grow = "cmd+="
 # sidebar_shrink = "cmd+-"
 
