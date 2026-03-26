@@ -1,5 +1,8 @@
 # darya
 
+<img width="3419" height="1363" alt="Screenshot 2026-03-26 at 2 18 32 PM" src="https://github.com/user-attachments/assets/3abfa0b4-836c-48b0-9743-48b969367ca7" />
+
+
 A terminal workspace for developers who use git worktrees. Manage multiple branches, Claude Code sessions, shell terminals, and files from a single TUI.
 
 ## Features
