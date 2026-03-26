@@ -331,6 +331,9 @@ pub struct LayoutSessionToml {
     pub path: String,
     pub slot_kind: String,
     pub slot_label: String,
+    /// Claude Code conversation UUID for resuming the exact session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

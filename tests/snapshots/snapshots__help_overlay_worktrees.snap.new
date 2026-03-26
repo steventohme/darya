@@ -1,0 +1,35 @@
+---
+source: tests/snapshots.rs
+assertion_line: 152
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃│ ▼ my-project     ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓sion               ┃
+┃    1 ▶ ○  [ma…]   ┃ Navigation — Worktrees                                   ┃                   ┃
+┃    2 ▶ ○  [fe…]   ┃ ─────────────────────────────────────                    ┃                   ┃
+┃                   ┃ Cmd+1: Worktrees  Cmd+2: Terminal  Cmd+3: Files  Cmd+4: E┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃ j/k, ↑/↓    Navigate tree                                ┃                   ┃
+┃                   ┃ 1-9, 0      Jump to item                                 ┃                   ┃
+┃                   ┃ Enter       Toggle collapse / start session              ┃                   ┃
+┃                   ┃ l/→         Expand / enter                               ┃                   ┃
+┃                   ┃ h/←         Collapse / parent                            ┃                   ┃
+┃                   ┃ a           Add worktree                                 ┃                   ┃
+┃                   ┃ d           Delete worktree                              ┃                   ┃
+┃                   ┃ r           Restart exited session                       ┃                   ┃
+┗━━━━━━━━━━━━━━━━━━━┃ Shift+R     Force-restart session                        ┃                   ┃
+┏ Notes ━━━━━━━━━━━━┃ Shift+A     Add Claude slot                              ┃                   ┃
+┃  select a worktree┃ Shift+S     Add shell slot                               ┃                   ┃
+┃                   ┃ F2          Rename section/item                          ┃                   ┃
+┃                   ┃ c           Assign color                                 ┃                   ┃
+┃                   ┃ Shift+N     Create section                               ┃                   ┃
+┃                   ┃ Backspace   Close/delete session/section                 ┃                   ┃
+┃                   ┃ CapsLock    Switch panel                                 ┃                   ┃
+┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
+┃                   ┃ Cmd+F       Project search                               ┃                   ┃
+┃                   ┃ Ctrl+Q      Quit                                         ┃                   ┃
+┃                   ┃ Ctrl+C      Close session / Quit                         ┃                   ┃
+┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] worktrees

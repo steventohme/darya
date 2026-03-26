@@ -1,0 +1,20 @@
+---
+source: tests/snapshots.rs
+assertion_line: 516
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━┓┏ Git Log — src/parser.rs (1 commits) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃│ ▼ my-project         ┃┃abc1234 Fix parser bug  Alice 1 hour ago                                 ┃
+┃    1 ▶ ○  [ma…]       ┃┃                                                                         ┃
+┃    2 ▶ ○  [fe…]       ┃┃                                                                         ┃
+┃    3 ▶ ○  [fe…]       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┃                                                                         ┃
+┏ Notes ━━━━━━━━━━━━━━━━┓┃                                                                         ┃
+┃  select a worktree    ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] log

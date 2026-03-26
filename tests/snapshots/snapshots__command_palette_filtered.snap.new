@@ -1,0 +1,35 @@
+---
+source: tests/snapshots.rs
+assertion_line: 569
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃│ ▼ my-project         ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
+┃    1 ▶ ○  [ma…]       ┃┃                                                                         ┃
+┃    2 ▶ ○  [fe…]   ┏ Command Palette ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
+┃    3 ▶ ○  [fe…]   ┃> git█                                                    ┃                   ┃
+┃                   ┃Git: Switch Branch                                   Cmd+B┃                   ┃
+┃                   ┃View: Git Status                                     Cmd+6┃                   ┃
+┃                   ┃Refresh Git Status                                        ┃                   ┃
+┃                   ┃View: Git Blame                                      Cmd+7┃                   ┃
+┃                   ┃View: Git Log                                        Cmd+8┃                   ┃
+┃                   ┃Toggle Split Direction                                    ┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┗━━━━━━━━━━━━━━━━━━━┃                                                          ┃                   ┃
+┏ Notes ━━━━━━━━━━━━┃                                                          ┃                   ┃
+┃  select a worktree┃                                                          ┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] worktrees

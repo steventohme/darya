@@ -692,9 +692,16 @@ fn process_event(
                 } else {
                     // No session yet — spawn one
                     let (rows, cols) = pty_size(terminal, app);
+                    let conv_id = if kind == SessionKind::Claude {
+                        Some(uuid::Uuid::new_v4().to_string())
+                    } else {
+                        None
+                    };
                     let command = match kind {
                         SessionKind::Claude => {
-                            config::resolve_session_command(&wt_path, &app.session_command)
+                            let base =
+                                config::resolve_session_command(&wt_path, &app.session_command);
+                            format!("{} --session-id {}", base, conv_id.as_ref().unwrap())
                         }
                         SessionKind::Shell => {
                             config::resolve_shell_command(&wt_path, &app.shell_command)
@@ -714,6 +721,14 @@ fn process_event(
                             {
                                 app.sidebar_tree
                                     .set_session_id(si, ii, slot_idx, id.clone());
+                                if let Some(cid) = &conv_id {
+                                    app.sidebar_tree.set_conversation_id(
+                                        si,
+                                        ii,
+                                        slot_idx,
+                                        cid.clone(),
+                                    );
+                                }
                             }
                             match kind {
                                 SessionKind::Claude => {
@@ -748,9 +763,15 @@ fn process_event(
                 app.cleanup_session(&old_id);
 
                 let (rows, cols) = pty_size(terminal, app);
+                let conv_id = if kind == SessionKind::Claude {
+                    Some(uuid::Uuid::new_v4().to_string())
+                } else {
+                    None
+                };
                 let command = match kind {
                     SessionKind::Claude => {
-                        config::resolve_session_command(&wt_path, &app.session_command)
+                        let base = config::resolve_session_command(&wt_path, &app.session_command);
+                        format!("{} --session-id {}", base, conv_id.as_ref().unwrap())
                     }
                     SessionKind::Shell => {
                         config::resolve_shell_command(&wt_path, &app.shell_command)
@@ -760,6 +781,10 @@ fn process_event(
                     Ok(id) => {
                         if let Some((si, ii, slot_idx)) = coords {
                             app.sidebar_tree.set_session_id(si, ii, slot_idx, id);
+                            if let Some(cid) = &conv_id {
+                                app.sidebar_tree
+                                    .set_conversation_id(si, ii, slot_idx, cid.clone());
+                            }
                         }
                         match kind {
                             SessionKind::Claude => app.focus_terminal_panel(),
@@ -791,9 +816,15 @@ fn process_event(
                 app.cleanup_session(&old_id);
 
                 let (rows, cols) = pty_size(terminal, app);
+                let conv_id = if kind == SessionKind::Claude {
+                    Some(uuid::Uuid::new_v4().to_string())
+                } else {
+                    None
+                };
                 let command = match kind {
                     SessionKind::Claude => {
-                        config::resolve_session_command(&wt_path, &app.session_command)
+                        let base = config::resolve_session_command(&wt_path, &app.session_command);
+                        format!("{} --session-id {}", base, conv_id.as_ref().unwrap())
                     }
                     SessionKind::Shell => {
                         config::resolve_shell_command(&wt_path, &app.shell_command)
@@ -803,6 +834,10 @@ fn process_event(
                     Ok(id) => {
                         if let Some((si, ii, slot_idx)) = coords {
                             app.sidebar_tree.set_session_id(si, ii, slot_idx, id);
+                            if let Some(cid) = &conv_id {
+                                app.sidebar_tree
+                                    .set_conversation_id(si, ii, slot_idx, cid.clone());
+                            }
                         }
                         match kind {
                             SessionKind::Claude => app.focus_terminal_panel(),
@@ -1176,6 +1211,7 @@ fn restore_sessions(
                         label: saved.slot_label.clone(),
                         session_id: None,
                         color: None,
+                        conversation_id: None,
                     });
                     found = Some((si, ii, slot_idx));
                 }
@@ -1186,24 +1222,41 @@ fn restore_sessions(
             continue;
         };
 
-        let command = match saved_kind {
+        let (command, conv_id) = match saved_kind {
             SessionKind::Claude => {
                 let base = config::resolve_session_command(&saved_path, &app.session_command);
-                if continued_claude_paths.insert(saved_path.clone()) {
-                    // First Claude for this worktree path — resume most recent conversation
-                    format!("{} --continue", base)
+                if let Some(ref cid) = saved.conversation_id {
+                    // Saved conversation ID — resume that exact session
+                    (format!("{} --resume {}", base, cid), Some(cid.clone()))
+                } else if continued_claude_paths.insert(saved_path.clone()) {
+                    // Legacy layout (no conversation_id): first Claude gets --continue
+                    let new_cid = uuid::Uuid::new_v4().to_string();
+                    (
+                        format!(
+                            "{} --continue --fork-session --session-id {}",
+                            base, new_cid
+                        ),
+                        Some(new_cid),
+                    )
                 } else {
-                    // Additional Claude sessions — start fresh to avoid resuming the same conversation
-                    base
+                    // Legacy layout: additional Claude sessions start fresh with tracked ID
+                    let new_cid = uuid::Uuid::new_v4().to_string();
+                    (format!("{} --session-id {}", base, new_cid), Some(new_cid))
                 }
             }
-            SessionKind::Shell => config::resolve_shell_command(&saved_path, &app.shell_command),
+            SessionKind::Shell => (
+                config::resolve_shell_command(&saved_path, &app.shell_command),
+                None,
+            ),
         };
 
         if let Ok(id) =
             session_manager.spawn_session(saved_path, rows, cols, app.theme.mode, &command)
         {
             app.sidebar_tree.set_session_id(si, ii, slot_idx, id);
+            if let Some(cid) = conv_id {
+                app.sidebar_tree.set_conversation_id(si, ii, slot_idx, cid);
+            }
         }
     }
 

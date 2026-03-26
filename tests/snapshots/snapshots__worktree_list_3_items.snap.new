@@ -1,0 +1,25 @@
+---
+source: tests/snapshots.rs
+assertion_line: 85
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━┓┏ my-project ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃  ▼ my-project         ┃┃  No session data                                                        ┃
+┃│   1 ▶ ●  [ma…]       ┃┃                                                                         ┃
+┃    2 ▶ ○  [fe…]       ┃┃                                                                         ┃
+┃    3 ▶ ✕  [fe…] [exite┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┃                                                                         ┃
+┏ Notes ━━━━━━━━━━━━━━━━┓┃                                                                         ┃
+┃  select a worktree    ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] worktrees                             main                             1 running · 1 exited

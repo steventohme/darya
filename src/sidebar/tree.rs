@@ -46,6 +46,7 @@ impl SidebarTree {
                     label: "claude".to_string(),
                     session_id: None,
                     color: None,
+                    conversation_id: None,
                 }],
                 color: None,
             })
@@ -307,6 +308,7 @@ impl SidebarTree {
                 label,
                 session_id: None,
                 color: None,
+                conversation_id: None,
             });
             item.collapsed = false;
             self.rebuild_visible();
@@ -351,6 +353,24 @@ impl SidebarTree {
             .and_then(|item| item.sessions.get_mut(slot_idx))
         {
             slot.session_id = Some(id);
+        }
+    }
+
+    /// Set the Claude Code conversation ID on a specific session slot.
+    pub fn set_conversation_id(
+        &mut self,
+        section_idx: usize,
+        item_idx: usize,
+        slot_idx: usize,
+        conversation_id: String,
+    ) {
+        if let Some(slot) = self
+            .sections
+            .get_mut(section_idx)
+            .and_then(|s| s.items.get_mut(item_idx))
+            .and_then(|item| item.sessions.get_mut(slot_idx))
+        {
+            slot.conversation_id = Some(conversation_id);
         }
     }
 
@@ -465,6 +485,7 @@ impl SidebarTree {
                         label: "claude".to_string(),
                         session_id: None,
                         color: None,
+                        conversation_id: None,
                     }],
                     color: None,
                 });
@@ -620,6 +641,7 @@ impl SidebarTree {
                             label: "claude".to_string(),
                             session_id: None,
                             color: None,
+                            conversation_id: None,
                         }];
                         // Add configured shell slots
                         for shell in &item_toml.shells {
@@ -628,6 +650,7 @@ impl SidebarTree {
                                 label: shell.label.clone(),
                                 session_id: None,
                                 color: shell.color.as_deref().and_then(parse_hex_color),
+                                conversation_id: None,
                             });
                         }
                         SidebarItem {

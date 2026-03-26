@@ -2422,8 +2422,8 @@ pub fn is_edtui_compatible(key: &KeyEvent) -> bool {
 /// Returns `true` if the key was handled, `false` otherwise.
 fn handle_macos_editing_keys(key: KeyEvent, state: &mut EdtuiState) -> bool {
     use edtui::actions::{
-        DeleteChar, DeleteCharForward, DeleteToFirstCharOfLine, MoveToEndOfLine,
-        MoveToStartOfLine, MoveWordBackward, MoveWordForward,
+        DeleteChar, DeleteCharForward, DeleteToFirstCharOfLine, MoveToEndOfLine, MoveToStartOfLine,
+        MoveWordBackward, MoveWordForward,
     };
 
     match key.code {
@@ -2461,10 +2461,7 @@ fn handle_macos_editing_keys(key: KeyEvent, state: &mut EdtuiState) -> bool {
                 }
             } else {
                 // Delete to end of current line + chars on next line
-                let cur_len = state
-                    .lines
-                    .len_col(before.row)
-                    .unwrap_or(0);
+                let cur_len = state.lines.len_col(before.row).unwrap_or(0);
                 let chars = cur_len.saturating_sub(before.col) + 1 + after.col;
                 for _ in 0..chars {
                     state.execute(DeleteCharForward(1));
@@ -3083,8 +3080,7 @@ impl App {
                             SessionKind::Shell => "shell",
                         };
                         self.prompt = None;
-                        self.status_message =
-                            Some(format!("Added {} slot '{}'", kind_name, label));
+                        self.status_message = Some(format!("Added {} slot '{}'", kind_name, label));
                     }
                 }
                 KeyCode::Esc => {
@@ -3698,8 +3694,7 @@ impl App {
             return;
         }
         // Shift+Tab: cycle sub-views within the current panel
-        if is_reverse_focus_key(&key)
-        {
+        if is_reverse_focus_key(&key) {
             match self.panel_focus {
                 PanelFocus::Left => {
                     let next = self.sidebar_view.next();
@@ -3940,8 +3935,7 @@ impl App {
 
     fn handle_terminal_key(&mut self, key: KeyEvent) {
         // Shift+CapsLock: cycle to next main view and focus it
-        if is_reverse_focus_key(&key)
-        {
+        if is_reverse_focus_key(&key) {
             self.main_view = self.main_view.next();
             // Stay in terminal mode for PTY views, enter editor mode for editor, navigation for others
             self.input_mode = match self.main_view {
@@ -4018,14 +4012,15 @@ impl App {
     fn handle_editor_key(&mut self, key: KeyEvent) {
         let Some(ref mut editor) = self.editor else {
             // No file open — only Tab and q work
-            if let KeyCode::F(18) = key.code { self.toggle_focus() }
+            if let KeyCode::F(18) = key.code {
+                self.toggle_focus()
+            }
             return;
         };
 
         if self.input_mode == InputMode::Editor {
             // Shift+CapsLock: exit editor mode and cycle main views
-            if is_reverse_focus_key(&key)
-            {
+            if is_reverse_focus_key(&key) {
                 editor.read_only = true;
                 editor.editor_state.mode = EditorMode::Normal;
                 self.main_view = self.main_view.next();
@@ -4149,8 +4144,7 @@ impl App {
         };
 
         // Shift+Tab: exit edit mode
-        if is_reverse_focus_key(&key)
-        {
+        if is_reverse_focus_key(&key) {
             note.read_only = true;
             note.editor_state.mode = EditorMode::Normal;
             self.input_mode = InputMode::Navigation;

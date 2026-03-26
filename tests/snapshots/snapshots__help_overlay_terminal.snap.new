@@ -1,0 +1,35 @@
+---
+source: tests/snapshots.rs
+assertion_line: 164
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━┓┏ Claude Code ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃│ ▼ my-project         ┃┃  Press Enter on a worktree to start a Claude Code session               ┃
+┃    1 ▶ ○  [ma…]       ┃┃                                                                         ┃
+┃    2 ▶ ○  [fe…]       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                   ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
+┃                   ┃ Navigation — Terminal                                    ┃                   ┃
+┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
+┃                   ┃ Cmd+1: Worktrees  Cmd+2: Terminal  Cmd+3: Files  Cmd+4: E┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃ i, Enter    Enter terminal mode                          ┃                   ┃
+┃                   ┃ PgUp/PgDn   Scroll output                                ┃                   ┃
+┃                   ┃ Cmd+\       Split picker (horizontal)                    ┃                   ┃
+┃                   ┃ Ctrl+.      Split picker (vertical)                      ┃                   ┃
+┗━━━━━━━━━━━━━━━━━━━┃ Cmd+W       Close pane                                   ┃                   ┃
+┏ Notes ━━━━━━━━━━━━┃             Palette: Split Terminal/Shell/Editor         ┃                   ┃
+┃  select a worktree┃ 1-9, 0      Jump to worktree                             ┃                   ┃
+┃                   ┃ CapsLock    Cycle panes / switch panel                   ┃                   ┃
+┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
+┃                   ┃ Cmd+F       Project search                               ┃                   ┃
+┃                   ┃ Ctrl+Q      Quit                                         ┃                   ┃
+┃                   ┃ Ctrl+C      Close session / Quit                         ┃                   ┃
+┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] terminal

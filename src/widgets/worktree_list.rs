@@ -172,10 +172,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                 vis_name[..name_len].to_string()
                             };
                             let br = if branch_budget < branch_str.len() && branch_budget > 1 {
-                                format!(
-                                    "{}…",
-                                    &branch_str[..branch_budget.saturating_sub(1)]
-                                )
+                                format!("{}…", &branch_str[..branch_budget.saturating_sub(1)])
                             } else {
                                 branch_str[..branch_budget.min(branch_str.len())].to_string()
                             };
@@ -217,7 +214,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                     .fg(exited_color)
                                     .add_modifier(Modifier::DIM),
                             ),
-                            Span::styled(shell_indicator.clone(), Style::default().fg(app.theme.fg_dim)),
+                            Span::styled(
+                                shell_indicator.clone(),
+                                Style::default().fg(app.theme.fg_dim),
+                            ),
                         ]
                     } else if needs_attention {
                         let attn = app.theme.session_attention;
@@ -231,8 +231,14 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                 display_name.clone(),
                                 Style::default().fg(attn_name).add_modifier(Modifier::BOLD),
                             ),
-                            Span::styled(format!(" [{}]", branch_display), Style::default().fg(attn)),
-                            Span::styled(shell_indicator.clone(), Style::default().fg(app.theme.fg_dim)),
+                            Span::styled(
+                                format!(" [{}]", branch_display),
+                                Style::default().fg(attn),
+                            ),
+                            Span::styled(
+                                shell_indicator.clone(),
+                                Style::default().fg(app.theme.fg_dim),
+                            ),
                         ]
                     } else {
                         let mut v = vec![
@@ -248,11 +254,19 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                                 format!(" [{}]", branch_display),
                                 Style::default().fg(app.theme.fg_dim),
                             ),
-                            Span::styled(shell_indicator.clone(), Style::default().fg(app.theme.fg_dim)),
+                            Span::styled(
+                                shell_indicator.clone(),
+                                Style::default().fg(app.theme.fg_dim),
+                            ),
                         ];
                         if let Some(ref status) = claude_status {
-                            let prefix_len = 8 + display_name.len() + 3 + branch_display.len() + shell_indicator.len();
-                            let max_len = (area.width as usize).saturating_sub(prefix_len + anim_reserve + 4);
+                            let prefix_len = 8
+                                + display_name.len()
+                                + 3
+                                + branch_display.len()
+                                + shell_indicator.len();
+                            let max_len =
+                                (area.width as usize).saturating_sub(prefix_len + anim_reserve + 4);
                             if max_len > 3 {
                                 let truncated = if status.len() > max_len {
                                     format!(" {}…", &status[..max_len.saturating_sub(1)])
@@ -372,8 +386,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
                             content_width.saturating_sub(text_width + anim_width + right_margin);
 
                         spans.push(Span::raw(" ".repeat(padding)));
-                        let trail =
-                            app.activity.trail(slot.session_id.as_deref().unwrap());
+                        let trail = app.activity.trail(slot.session_id.as_deref().unwrap());
                         spans.extend(build_animation_spans(trail, &app.theme));
                     }
 

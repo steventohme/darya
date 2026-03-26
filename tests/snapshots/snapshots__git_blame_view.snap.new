@@ -1,0 +1,20 @@
+---
+source: tests/snapshots.rs
+assertion_line: 448
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━┓┏ Blame: src/main.rs ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃│ ▼ my-project         ┃┃abc12345 Alice        2 days ago      1 use std::io;                     ┃
+┃    1 ▶ ○  [ma…]       ┃┃def67890 Bob          3 months ago    2 fn main() {                      ┃
+┃    2 ▶ ○  [fe…]       ┃┃def67890 Bob          3 months ago    3     println!("hello");           ┃
+┃    3 ▶ ○  [fe…]       ┃┃abc12345 Alice        2 days ago      4 }                                ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┃                                                                         ┃
+┏ Notes ━━━━━━━━━━━━━━━━┓┃                                                                         ┃
+┃  select a worktree    ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] blame

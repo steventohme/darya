@@ -1,0 +1,35 @@
+---
+source: tests/snapshots.rs
+assertion_line: 285
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━┓┏ Diff ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃│ ▼ my-project         ┃┃  Select a file from Git Status to view diff                             ┃
+┃    1 ▶ ○  [ma…]       ┃┃                                                                         ┃
+┃    2 ▶ ○  [fe…]       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                   ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
+┃                   ┃ Navigation — Diff View                                   ┃                   ┃
+┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
+┃                   ┃ Cmd+1: Worktrees  Cmd+2: Terminal  Cmd+3: Files  Cmd+4: E┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃ j/k, ↑/↓    Scroll line                                  ┃                   ┃
+┃                   ┃ PgUp/PgDn   Scroll page                                  ┃                   ┃
+┗━━━━━━━━━━━━━━━━━━━┃ Esc         Back to terminal                             ┃                   ┃
+┏ Notes ━━━━━━━━━━━━┃ 1-9, 0      Jump to worktree                             ┃                   ┃
+┃  select a worktree┃ CapsLock    Switch panel                                 ┃                   ┃
+┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
+┃                   ┃ Cmd+F       Project search                               ┃                   ┃
+┃                   ┃ Ctrl+Q      Quit                                         ┃                   ┃
+┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] diff

@@ -1,0 +1,20 @@
+---
+source: tests/snapshots.rs
+assertion_line: 489
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━┓┏ Git Log — 3 commits ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃│ ▼ my-project         ┃┃abc1234 Fix bug in parser  Alice 2 hours ago                             ┃
+┃    1 ▶ ○  [ma…]       ┃┃def5678 Add new feature  Bob 3 days ago                                  ┃
+┃    2 ▶ ○  [fe…]       ┃┃ghi9012 Initial commit  Alice 2 weeks ago                                ┃
+┃    3 ▶ ○  [fe…]       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┃                                                                         ┃
+┏ Notes ━━━━━━━━━━━━━━━━┓┃                                                                         ┃
+┃  select a worktree    ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] log

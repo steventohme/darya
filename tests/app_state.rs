@@ -2835,6 +2835,7 @@ fn remove_section_returns_session_ids() {
             label: "claude".to_string(),
             session_id: Some("sess-123".to_string()),
             color: None,
+            conversation_id: None,
         }],
         color: None,
     });
@@ -3072,6 +3073,7 @@ fn restore_session_prompt_y_sets_approved() {
             path: "/tmp/test".to_string(),
             slot_kind: "claude".to_string(),
             slot_label: "claude".to_string(),
+            conversation_id: None,
         }],
         ..Default::default()
     });
@@ -3091,6 +3093,7 @@ fn restore_session_prompt_n_clears_layout() {
             path: "/tmp/test".to_string(),
             slot_kind: "claude".to_string(),
             slot_label: "claude".to_string(),
+            conversation_id: None,
         }],
         ..Default::default()
     });
@@ -3132,11 +3135,13 @@ fn layout_config_roundtrip_toml() {
                 path: "/tmp/project".to_string(),
                 slot_kind: "claude".to_string(),
                 slot_label: "claude".to_string(),
+                conversation_id: Some("abc-123".to_string()),
             },
             config::LayoutSessionToml {
                 path: "/tmp/project".to_string(),
                 slot_kind: "shell".to_string(),
                 slot_label: "my-shell".to_string(),
+                conversation_id: None,
             },
         ],
         sidebar_view: Some("files".to_string()),
@@ -3718,7 +3723,10 @@ fn rename_item_to_original_clears_custom_name() {
     app.handle_event(&key(KeyCode::Enter));
     assert!(app.prompt.is_none());
     assert_eq!(app.sidebar_tree.sections[0].items[0].custom_name, None);
-    assert_eq!(app.sidebar_tree.sections[0].items[0].visible_name(), original);
+    assert_eq!(
+        app.sidebar_tree.sections[0].items[0].visible_name(),
+        original
+    );
 }
 
 #[test]

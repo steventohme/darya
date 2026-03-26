@@ -46,6 +46,9 @@ pub struct SessionSlot {
     pub session_id: Option<String>,
     /// User-assigned color for this session label.
     pub color: Option<Color>,
+    /// Claude Code conversation UUID (passed via `--session-id`).
+    /// Used to resume the exact conversation on restore.
+    pub conversation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

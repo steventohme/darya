@@ -1,0 +1,35 @@
+---
+source: tests/snapshots.rs
+assertion_line: 544
+expression: output
+---
+ darya
+┏ Worktrees ━━━━━━━━━━━━┓┏ Git Log — no data ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃│ ▼ my-project         ┃┃                                                                         ┃
+┃    1 ▶ ○  [ma…]       ┃┃                                                                         ┃
+┃    2 ▶ ○  [fe…]       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                   ┏ Help (? to close) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓                   ┃
+┃                   ┃ Navigation — Git Log                                     ┃                   ┃
+┃                   ┃ ─────────────────────────────────────                    ┃                   ┃
+┃                   ┃ Cmd+1: Worktrees  Cmd+2: Terminal  Cmd+3: Files  Cmd+4: E┃                   ┃
+┃                   ┃                                                          ┃                   ┃
+┃                   ┃ j/k, ↑/↓    Navigate commits                             ┃                   ┃
+┃                   ┃ Enter       View commit diff                             ┃                   ┃
+┗━━━━━━━━━━━━━━━━━━━┃ Esc         Back to terminal                             ┃                   ┃
+┏ Notes ━━━━━━━━━━━━┃ 1-9, 0      Jump to worktree                             ┃                   ┃
+┃  select a worktree┃ CapsLock    Switch panel                                 ┃                   ┃
+┃                   ┃ Cmd+P       Fuzzy file finder                            ┃                   ┃
+┃                   ┃ Cmd+F       Project search                               ┃                   ┃
+┃                   ┃ Ctrl+Q      Quit                                         ┃                   ┃
+┃                   ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛                   ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┃                       ┃┃                                                                         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ [NAV] log
