@@ -3711,6 +3711,17 @@ impl App {
                 }
                 PanelFocus::Right => {
                     self.main_view = self.main_view.next();
+                    self.input_mode = match self.main_view {
+                        MainView::Terminal | MainView::Shell => InputMode::Terminal,
+                        MainView::Editor => {
+                            if let Some(ref mut editor) = self.editor {
+                                editor.read_only = false;
+                                editor.editor_state.mode = EditorMode::Insert;
+                            }
+                            InputMode::Editor
+                        }
+                        _ => InputMode::Navigation,
+                    };
                 }
             }
             return;
@@ -3932,9 +3943,16 @@ impl App {
         if is_reverse_focus_key(&key)
         {
             self.main_view = self.main_view.next();
-            // Stay in terminal mode for PTY views, switch to navigation for others
+            // Stay in terminal mode for PTY views, enter editor mode for editor, navigation for others
             self.input_mode = match self.main_view {
                 MainView::Terminal | MainView::Shell => InputMode::Terminal,
+                MainView::Editor => {
+                    if let Some(ref mut editor) = self.editor {
+                        editor.read_only = false;
+                        editor.editor_state.mode = EditorMode::Insert;
+                    }
+                    InputMode::Editor
+                }
                 _ => InputMode::Navigation,
             };
             return;
