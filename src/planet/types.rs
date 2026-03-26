@@ -97,9 +97,9 @@ impl PlanetKind {
             prompt_border: accent,
             prompt_delete_border: Color::Rgb(0xCC, 0x55, 0x55),
             session_attention: Color::Rgb(
-                ar.saturating_add(0x40).min(0xFF),
-                ag.saturating_add(0x40).min(0xFF),
-                ab.saturating_add(0x40).min(0xFF),
+                ar.saturating_add(0x40),
+                ag.saturating_add(0x40),
+                ab.saturating_add(0x40),
             ),
             session_exited: Color::Rgb(0xCC, 0x55, 0x55),
             warning: Color::Rgb(

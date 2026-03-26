@@ -3013,7 +3013,7 @@ impl App {
             InputMode::Editor => {
                 // Handle notes editing (inline in sidebar or center)
                 if (self.panel_focus == PanelFocus::Left || self.panel_focus == PanelFocus::Center)
-                    && self.note.as_ref().map_or(false, |n| !n.read_only)
+                    && self.note.as_ref().is_some_and(|n| !n.read_only)
                 {
                     self.handle_notes_editor_key(key);
                 } else {
@@ -4018,10 +4018,7 @@ impl App {
     fn handle_editor_key(&mut self, key: KeyEvent) {
         let Some(ref mut editor) = self.editor else {
             // No file open — only Tab and q work
-            match key.code {
-                KeyCode::F(18) => self.toggle_focus(),
-                    _ => {}
-            }
+            if let KeyCode::F(18) = key.code { self.toggle_focus() }
             return;
         };
 
@@ -4902,6 +4899,7 @@ impl App {
                             path: item.path.to_string_lossy().to_string(),
                             slot_kind: slot_kind.to_string(),
                             slot_label: slot.label.clone(),
+                            conversation_id: slot.conversation_id.clone(),
                         });
                     }
                 }

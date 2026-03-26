@@ -12,7 +12,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &mut App, is_focused: bool) {
     let border_style = app.theme.border_style(is_focused);
 
     // Check if we're in edit mode (need mutable access to note)
-    let is_editing = app.note.as_ref().map_or(false, |n| !n.read_only);
+    let is_editing = app.note.as_ref().is_some_and(|n| !n.read_only);
 
     if is_editing {
         render_editor(frame, area, app, border_style);
