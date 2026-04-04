@@ -1,0 +1,25 @@
+src/perf_log.rs
+  4285b2089faa9a51 8
+src/main.rs
+  4285b2089faa9a51 278-279,282-284,452,454-464,466-482,484-485
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "e505752e891aef0e185ea7a79376bb8e37a42c61",
+  "prompts": {
+    "4285b2089faa9a51": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b77c962c-1b7d-4e21-b5dc-9ca51f6dead1",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme",
+      "messages": [],
+      "total_additions": 37,
+      "total_deletions": 12,
+      "accepted_lines": 37,
+      "overriden_lines": 0
+    }
+  }
+}
