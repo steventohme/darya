@@ -3715,8 +3715,10 @@ impl App {
                             if let Some(ref mut editor) = self.editor {
                                 editor.read_only = false;
                                 editor.editor_state.mode = EditorMode::Insert;
+                                InputMode::Editor
+                            } else {
+                                InputMode::Navigation
                             }
-                            InputMode::Editor
                         }
                         _ => InputMode::Navigation,
                     };
@@ -3947,8 +3949,10 @@ impl App {
                     if let Some(ref mut editor) = self.editor {
                         editor.read_only = false;
                         editor.editor_state.mode = EditorMode::Insert;
+                        InputMode::Editor
+                    } else {
+                        InputMode::Navigation
                     }
-                    InputMode::Editor
                 }
                 _ => InputMode::Navigation,
             };
@@ -4014,9 +4018,16 @@ impl App {
 
     fn handle_editor_key(&mut self, key: KeyEvent) {
         let Some(ref mut editor) = self.editor else {
-            // No file open — only Tab and q work
-            if let KeyCode::F(18) = key.code {
-                self.toggle_focus()
+            // No file open — allow focus switching
+            if is_reverse_focus_key(&key) {
+                self.main_view = self.main_view.next();
+                self.input_mode = match self.main_view {
+                    MainView::Terminal | MainView::Shell => InputMode::Terminal,
+                    MainView::Editor => InputMode::Navigation, // still no editor, stay nav
+                    _ => InputMode::Navigation,
+                };
+            } else if let KeyCode::F(18) = key.code {
+                self.toggle_focus();
             }
             return;
         };
