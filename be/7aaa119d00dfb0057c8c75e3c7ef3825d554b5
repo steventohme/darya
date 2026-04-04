@@ -1,0 +1,45 @@
+src/main.rs
+  7ac41d3f4cc075cf 2,1252-1259,1326-1345
+  5759d4af0920757c 480-484
+src/lib.rs
+  5759d4af0920757c 7
+src/perf_log.rs
+  5759d4af0920757c 1-227
+src/session/manager.rs
+  5759d4af0920757c 59-62
+src/profiler.rs
+  5759d4af0920757c 1,36,68,73,112-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "be7aaa119d00dfb0057c8c75e3c7ef3825d554b5",
+  "prompts": {
+    "5759d4af0920757c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9ba7285c-bf98-49dd-817f-676646010f5a",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme",
+      "messages": [],
+      "total_additions": 247,
+      "total_deletions": 30,
+      "accepted_lines": 247,
+      "overriden_lines": 0
+    },
+    "7ac41d3f4cc075cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e88e9d8-5949-47c9-b9bc-5a229a323d36",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme",
+      "messages": [],
+      "total_additions": 29,
+      "total_deletions": 3,
+      "accepted_lines": 29,
+      "overriden_lines": 0
+    }
+  }
+}
