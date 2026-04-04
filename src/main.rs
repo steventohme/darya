@@ -1,5 +1,5 @@
 use std::io::{self, Write as _};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crossterm::event::{
@@ -1183,6 +1183,9 @@ fn restore_sessions(
 
     for saved in &layout.sessions {
         let saved_path = PathBuf::from(&saved.path);
+        if !saved_path.exists() {
+            continue;
+        }
         let saved_kind = match saved.slot_kind.as_str() {
             "claude" => SessionKind::Claude,
             "shell" => SessionKind::Shell,
@@ -1249,7 +1252,7 @@ fn restore_sessions(
             SessionKind::Claude => {
                 let base = config::resolve_session_command(&saved_path, &app.session_command);
                 if let Some(ref cid) = saved.conversation_id {
-                    if conversation_file_exists(&saved_path, cid) {
+                    if conversation_file_exists(cid) {
                         // Conversation file still on disk — safe to resume
                         (format!("{} --resume {}", base, cid), Some(cid.clone()))
                     } else {
@@ -1324,23 +1327,22 @@ fn restore_sessions(
 
 /// Extract text from a finalized TextSelection using the vt100 screen contents.
 /// Check whether a Claude Code conversation `.jsonl` file still exists on disk.
-/// Path convention: `~/.claude/projects/-{path-with-slashes-as-dashes}/{id}.jsonl`
-fn conversation_file_exists(worktree_path: &Path, conversation_id: &str) -> bool {
+/// `--resume` searches globally, so we scan all project dirs under `~/.claude/projects/`.
+fn conversation_file_exists(conversation_id: &str) -> bool {
     let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
         return false;
     };
-    let project_key = format!(
-        "-{}",
-        worktree_path
-            .to_string_lossy()
-            .trim_start_matches('/')
-            .replace('/', "-")
-    );
-    home.join(".claude")
-        .join("projects")
-        .join(project_key)
-        .join(format!("{}.jsonl", conversation_id))
-        .exists()
+    let projects_dir = home.join(".claude").join("projects");
+    let filename = format!("{}.jsonl", conversation_id);
+    let Ok(entries) = std::fs::read_dir(&projects_dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        if entry.path().join(&filename).exists() {
+            return true;
+        }
+    }
+    false
 }
 
 fn extract_selection_text(

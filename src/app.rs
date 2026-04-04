@@ -4887,7 +4887,7 @@ impl App {
         for section in &self.sidebar_tree.sections {
             for item in &section.items {
                 for slot in &item.sessions {
-                    if slot.session_id.is_some() {
+                    if slot.session_id.is_some() && item.path.exists() {
                         let slot_kind = match slot.kind {
                             SessionKind::Claude => "claude",
                             SessionKind::Shell => "shell",
