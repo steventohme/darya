@@ -1,0 +1,25 @@
+src/app.rs
+  7ac41d3f4cc075cf 4890
+src/main.rs
+  7ac41d3f4cc075cf 2,1186-1188,1330-1331,1335-1345
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "7d558672d2e54006477e56b9e4e657d23f0205ee",
+  "prompts": {
+    "7ac41d3f4cc075cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e88e9d8-5949-47c9-b9bc-5a229a323d36",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme",
+      "messages": [],
+      "total_additions": 19,
+      "total_deletions": 17,
+      "accepted_lines": 18,
+      "overriden_lines": 0
+    }
+  }
+}
