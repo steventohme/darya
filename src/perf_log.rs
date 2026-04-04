@@ -5,7 +5,7 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 
-const DEFAULT_THRESHOLD_US: u64 = 50_000; // 50ms
+const DEFAULT_THRESHOLD_US: u64 = 100_000; // 100ms
 const COOLDOWN: Duration = Duration::from_secs(1);
 const MAX_LOG_BYTES: u64 = 1_024 * 1_024; // 1 MB
 

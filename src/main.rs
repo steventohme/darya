@@ -275,9 +275,13 @@ async fn run_loop(
     const DEBOUNCE_SECS: f64 = 3.0;
 
     // Periodic branch polling: git uses atomic renames for HEAD, which file
-    // watchers on macOS can miss. Poll every 2 seconds as a reliable fallback.
+    // watchers on macOS can miss. Poll every 2 seconds on a background thread
+    // to avoid blocking the main render loop.
     let mut last_branch_poll = Instant::now();
     const BRANCH_POLL_INTERVAL_SECS: f64 = 2.0;
+    let (branch_poll_tx, mut branch_poll_rx) =
+        tokio::sync::mpsc::unbounded_channel::<Vec<(usize, Vec<darya::worktree::types::Worktree>)>>();
+    let mut branch_poll_in_flight = false;
 
     while app.running {
         app.profiler.begin_frame();
@@ -445,19 +449,40 @@ async fn run_loop(
         }
         app.profiler.record_resize(t.elapsed());
 
-        // — Branch polling —
+        // — Branch polling (background thread) —
         let t = Instant::now();
-        if last_branch_poll.elapsed().as_secs_f64() >= BRANCH_POLL_INTERVAL_SECS {
-            last_branch_poll = Instant::now();
-            for si in 0..app.sidebar_tree.sections.len() {
-                let root = app.sidebar_tree.sections[si]
-                    .root_path
-                    .clone()
-                    .unwrap_or_else(|| wt_manager.repo_root.clone());
-                if let Ok(wts) = darya::worktree::manager::list_worktrees_for_root(&root) {
-                    app.sidebar_tree.refresh_section_worktrees(si, &wts);
-                }
+        // Apply any results that arrived from a previous background poll.
+        if let Ok(results) = branch_poll_rx.try_recv() {
+            for (si, wts) in results {
+                app.sidebar_tree.refresh_section_worktrees(si, &wts);
             }
+            branch_poll_in_flight = false;
+        }
+        // Kick off a new poll if the interval has elapsed and none is in flight.
+        if !branch_poll_in_flight
+            && last_branch_poll.elapsed().as_secs_f64() >= BRANCH_POLL_INTERVAL_SECS
+        {
+            last_branch_poll = Instant::now();
+            branch_poll_in_flight = true;
+            let roots: Vec<(usize, std::path::PathBuf)> = (0..app.sidebar_tree.sections.len())
+                .map(|si| {
+                    let root = app.sidebar_tree.sections[si]
+                        .root_path
+                        .clone()
+                        .unwrap_or_else(|| wt_manager.repo_root.clone());
+                    (si, root)
+                })
+                .collect();
+            let tx = branch_poll_tx.clone();
+            tokio::task::spawn_blocking(move || {
+                let mut results = Vec::new();
+                for (si, root) in roots {
+                    if let Ok(wts) = darya::worktree::manager::list_worktrees_for_root(&root) {
+                        results.push((si, wts));
+                    }
+                }
+                let _ = tx.send(results);
+            });
         }
         app.profiler.record_branch_poll(t.elapsed());
 
