@@ -1,3 +1,4 @@
+use crate::perf_log::{PerfContext, PerfLog};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
@@ -32,6 +33,7 @@ pub struct Profiler {
     frame_start: Instant,
     // Worst frame seen (by total_us)
     worst: Option<FrameSample>,
+    perf_log: PerfLog,
 }
 
 pub struct ProfileSummary {
@@ -63,80 +65,59 @@ impl Profiler {
             current: FrameSample::default(),
             frame_start: Instant::now(),
             worst: None,
+            perf_log: PerfLog::new(),
         }
     }
 
     pub fn begin_frame(&mut self) {
-        if !self.enabled {
-            return;
-        }
+        // Always track frame start for perf logging, even when overlay is off
         self.frame_start = Instant::now();
         self.current = FrameSample::default();
     }
 
     pub fn record_render(&mut self, elapsed: Duration) {
-        if !self.enabled {
-            return;
-        }
         self.current.render_us = elapsed.as_micros() as u64;
     }
 
     pub fn record_events(&mut self, elapsed: Duration, count: u32) {
-        if !self.enabled {
-            return;
-        }
         self.current.event_us = elapsed.as_micros() as u64;
         self.current.events_count = count;
     }
 
     // Housekeeping sub-phase recorders
     pub fn record_notify(&mut self, elapsed: Duration) {
-        if !self.enabled {
-            return;
-        }
         self.current.notify_us = elapsed.as_micros() as u64;
     }
 
     pub fn record_activity(&mut self, elapsed: Duration) {
-        if !self.enabled {
-            return;
-        }
         self.current.activity_us = elapsed.as_micros() as u64;
     }
 
     pub fn record_resize(&mut self, elapsed: Duration) {
-        if !self.enabled {
-            return;
-        }
         self.current.resize_us = elapsed.as_micros() as u64;
     }
 
     pub fn record_branch_poll(&mut self, elapsed: Duration) {
-        if !self.enabled {
-            return;
-        }
         self.current.branch_poll_us = elapsed.as_micros() as u64;
     }
 
     pub fn record_file_watch(&mut self, elapsed: Duration) {
-        if !self.enabled {
-            return;
-        }
         self.current.file_watch_us = elapsed.as_micros() as u64;
     }
 
     pub fn record_other_hk(&mut self, elapsed: Duration) {
-        if !self.enabled {
-            return;
-        }
         self.current.other_hk_us = elapsed.as_micros() as u64;
     }
 
-    pub fn finish_frame(&mut self) {
+    pub fn finish_frame(&mut self, ctx: &PerfContext) {
+        self.current.total_us = self.frame_start.elapsed().as_micros() as u64;
+
+        // Always check perf log, regardless of profiler overlay toggle
+        self.perf_log.check_and_log(&self.current, ctx);
+
         if !self.enabled {
             return;
         }
-        self.current.total_us = self.frame_start.elapsed().as_micros() as u64;
         let sample = self.current.clone();
 
         // Track worst frame

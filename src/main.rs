@@ -1,5 +1,5 @@
 use std::io::{self, Write as _};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use crossterm::event::{
@@ -477,7 +477,11 @@ async fn run_loop(
         }
         app.profiler.record_file_watch(t.elapsed());
 
-        app.profiler.finish_frame();
+        let perf_ctx = darya::perf_log::PerfContext {
+            active_sessions: session_manager.len(),
+            pane_count: app.pane_layout.as_ref().map_or(1, |l| l.root.leaf_count()),
+        };
+        app.profiler.finish_frame(&perf_ctx);
     }
     Ok(())
 }
@@ -1245,8 +1249,14 @@ fn restore_sessions(
             SessionKind::Claude => {
                 let base = config::resolve_session_command(&saved_path, &app.session_command);
                 if let Some(ref cid) = saved.conversation_id {
-                    // Saved conversation ID — resume that exact session
-                    (format!("{} --resume {}", base, cid), Some(cid.clone()))
+                    if conversation_file_exists(&saved_path, cid) {
+                        // Conversation file still on disk — safe to resume
+                        (format!("{} --resume {}", base, cid), Some(cid.clone()))
+                    } else {
+                        // Conversation was garbage-collected — start fresh
+                        let new_cid = uuid::Uuid::new_v4().to_string();
+                        (format!("{} --session-id {}", base, new_cid), Some(new_cid))
+                    }
                 } else if continued_claude_paths.insert(saved_path.clone()) {
                     // Legacy layout (no conversation_id): first Claude gets --continue
                     let new_cid = uuid::Uuid::new_v4().to_string();
@@ -1313,6 +1323,26 @@ fn restore_sessions(
 }
 
 /// Extract text from a finalized TextSelection using the vt100 screen contents.
+/// Check whether a Claude Code conversation `.jsonl` file still exists on disk.
+/// Path convention: `~/.claude/projects/-{path-with-slashes-as-dashes}/{id}.jsonl`
+fn conversation_file_exists(worktree_path: &Path, conversation_id: &str) -> bool {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return false;
+    };
+    let project_key = format!(
+        "-{}",
+        worktree_path
+            .to_string_lossy()
+            .trim_start_matches('/')
+            .replace('/', "-")
+    );
+    home.join(".claude")
+        .join("projects")
+        .join(project_key)
+        .join(format!("{}.jsonl", conversation_id))
+        .exists()
+}
+
 fn extract_selection_text(
     sel: &app::TextSelection,
     session_manager: &SessionManager,

@@ -56,6 +56,10 @@ impl SessionManager {
         self.sessions.remove(id)
     }
 
+    pub fn len(&self) -> usize {
+        self.sessions.len()
+    }
+
     pub fn session_status(&self, id: &str) -> Option<String> {
         self.sessions.get(id).map(|s| s.status_text())
     }
