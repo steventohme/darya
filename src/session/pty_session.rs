@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 
-use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use tokio::sync::mpsc;
 use tui_term::vt100;
 
@@ -87,6 +87,7 @@ pub struct PtySession {
     status_text: Arc<RwLock<String>>,
     writer: Box<dyn Write + Send>,
     master: Box<dyn MasterPty + Send>,
+    child_killer: Box<dyn ChildKiller + Send + Sync>,
 }
 
 impl PtySession {
@@ -122,16 +123,20 @@ impl PtySession {
             cmd.env("COLORFGBG", "0;15");
         }
 
-        // Spawn child on the slave
+        // Spawn child on the slave, keeping a killer handle to terminate it later
         let slave = pair.slave;
-        std::thread::spawn(move || match slave.spawn_command(cmd) {
+        let child_killer: Box<dyn ChildKiller + Send + Sync> = match slave.spawn_command(cmd) {
             Ok(mut child) => {
-                let _ = child.wait();
+                let killer = child.clone_killer();
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
+                killer
             }
             Err(e) => {
-                eprintln!("Failed to spawn claude: {}", e);
+                return Err(DaryaError::Pty(format!("Failed to spawn claude: {}", e)));
             }
-        });
+        };
 
         // Create vt100 parser with task-done detection callback
         let bell_count = Arc::new(AtomicUsize::new(0));
@@ -206,6 +211,7 @@ impl PtySession {
             status_text,
             writer,
             master: pair.master,
+            child_killer,
         })
     }
 
@@ -226,6 +232,11 @@ impl PtySession {
         Ok(())
     }
 
+    /// Explicitly kill the child process.
+    pub fn kill(&mut self) {
+        let _ = self.child_killer.kill();
+    }
+
     pub fn resize(&mut self, rows: u16, cols: u16) -> Result<()> {
         if let Ok(mut p) = self.parser.write() {
             p.screen_mut().set_size(rows, cols);
@@ -239,5 +250,11 @@ impl PtySession {
             })
             .map_err(|e| DaryaError::Pty(format!("resize failed: {}", e)))?;
         Ok(())
+    }
+}
+
+impl Drop for PtySession {
+    fn drop(&mut self) {
+        self.kill();
     }
 }
