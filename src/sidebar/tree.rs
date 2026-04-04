@@ -298,12 +298,14 @@ impl SidebarTree {
     /// Add a session slot to the currently selected item.
     pub fn add_session_slot(&mut self, kind: SessionKind, label: String) -> bool {
         let node = self.visible.get(self.cursor).copied();
-        let (si, ii) = match node {
-            Some(TreeNode::Item(si, ii)) | Some(TreeNode::Session(si, ii, _)) => (si, ii),
+        let (si, ii, insert_after) = match node {
+            Some(TreeNode::Item(si, ii)) => (si, ii, 0usize),
+            Some(TreeNode::Session(si, ii, slot_idx)) => (si, ii, slot_idx + 1),
             _ => return false,
         };
         if let Some(item) = self.sections.get_mut(si).and_then(|s| s.items.get_mut(ii)) {
-            item.sessions.push(SessionSlot {
+            let insert_idx = insert_after.min(item.sessions.len());
+            item.sessions.insert(insert_idx, SessionSlot {
                 kind,
                 label,
                 session_id: None,
@@ -312,6 +314,12 @@ impl SidebarTree {
             });
             item.collapsed = false;
             self.rebuild_visible();
+            // Move cursor to the newly inserted session slot
+            if let Some(pos) = self.visible.iter().position(|n| {
+                matches!(n, TreeNode::Session(s, i, sl) if *s == si && *i == ii && *sl == insert_idx)
+            }) {
+                self.cursor = pos;
+            }
             return true;
         }
         false
