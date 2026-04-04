@@ -280,7 +280,11 @@ async fn run_loop(
     const BRANCH_POLL_INTERVAL_SECS: f64 = 2.0;
 
     while app.running {
+        app.profiler.begin_frame();
+
+        let render_start = Instant::now();
         terminal.draw(|frame| ui::draw(frame, app, session_manager))?;
+        app.profiler.record_render(render_start.elapsed());
 
         // Wait for the first event or a termination signal
         let event = tokio::select! {
@@ -295,6 +299,8 @@ async fn run_loop(
         };
         // Process the first event, then drain all pending events before redrawing.
         // This batches rapid keystrokes and PtyOutput events into a single redraw.
+        let events_start = Instant::now();
+        let mut event_count: u32 = 1;
         process_event(
             &event,
             terminal,
@@ -307,6 +313,7 @@ async fn run_loop(
 
         // Drain remaining queued events without blocking
         while let Ok(event) = events.try_recv() {
+            event_count += 1;
             process_event(
                 &event,
                 terminal,
@@ -320,10 +327,12 @@ async fn run_loop(
                 break;
             }
         }
+        app.profiler.record_events(events_start.elapsed(), event_count);
 
         // Post-event housekeeping (once per batch, not per event)
 
-        // Flush debounced notifications that have aged past the threshold
+        // — Notifications & attention —
+        let t = Instant::now();
         pending_notify.retain(|_sid, (queued_at, iterm_msg, native_msg)| {
             if queued_at.elapsed().as_secs_f64() >= DEBOUNCE_SECS {
                 if let Some(msg) = iterm_msg {
@@ -333,14 +342,11 @@ async fn run_loop(
                 if let Some(msg) = native_msg {
                     send_native_notification(msg.clone());
                 }
-                false // remove from map
+                false
             } else {
-                true // keep waiting
+                true
             }
         });
-
-        // Flush debounced attention indicators — mark sessions that have been
-        // idle (no PtyOutput) for the debounce period
         pending_attention.retain(|sid, queued_at| {
             if queued_at.elapsed().as_secs_f64() >= DEBOUNCE_SECS {
                 app.attention_sessions.insert(sid.clone());
@@ -349,16 +355,16 @@ async fn run_loop(
                 true
             }
         });
+        app.profiler.record_notify(t.elapsed());
 
-        // Detect sessions whose working animation just stopped (active → idle).
-        // This is the primary completion signal — queue attention + notification.
+        // — Activity drain —
+        let t = Instant::now();
         for sid in app.activity.drain_finished() {
             let viewing = app.focused_session_id().map(|s| s.as_str()) == Some(sid.as_str())
                 && app.input_mode == InputMode::Terminal;
             if !viewing {
                 pending_attention.insert(sid.clone(), std::time::Instant::now());
             }
-            // Also queue a notification
             let done_event = AppEvent::SessionDone {
                 session_id: sid.clone(),
             };
@@ -367,24 +373,31 @@ async fn run_loop(
                 pending_notify.insert(sid, (std::time::Instant::now(), iterm_msg, native_msg));
             }
         }
+        app.profiler.record_activity(t.elapsed());
 
-        // Handle pending section refresh (after dir browser creates a section)
+        // — Section refresh + session restore + session cleanup —
+        let t = Instant::now();
         if let Some((section_idx, root_path)) = app.pending_section_refresh.take() {
             if let Ok(wts) = darya::worktree::manager::list_worktrees_for_root(&root_path) {
                 app.sidebar_tree
                     .refresh_section_worktrees(section_idx, &wts);
             }
         }
-
-        // Deferred session restore: user approved (or auto_resume) + layout pending
         if app.restore_approved {
             if let Some(layout) = app.pending_layout.take() {
                 app.restore_approved = false;
                 restore_sessions(terminal, app, session_manager, &layout);
             }
         }
+        if !app.pending_removed_sessions.is_empty() {
+            for sid in app.pending_removed_sessions.drain(..) {
+                session_manager.remove(&sid);
+            }
+        }
+        app.profiler.record_other_hk(t.elapsed());
 
-        // Handle sidebar resize — trigger PTY resize for all sessions
+        // — Resize —
+        let t = Instant::now();
         if app.sidebar_resized {
             app.sidebar_resized = false;
             let full_size = terminal.size().unwrap_or_default();
@@ -422,8 +435,6 @@ async fn run_loop(
                 );
             }
         }
-
-        // Handle layout direction change — resize all pane sessions
         if app.layout_changed {
             app.layout_changed = false;
             for (sid, rows, cols) in pane_sizes(terminal, app) {
@@ -432,17 +443,10 @@ async fn run_loop(
                 }
             }
         }
+        app.profiler.record_resize(t.elapsed());
 
-        // Clean up sessions from deleted sections
-        if !app.pending_removed_sessions.is_empty() {
-            for sid in app.pending_removed_sessions.drain(..) {
-                session_manager.remove(&sid);
-            }
-        }
-
-        // Periodic branch refresh: poll worktree branches every few seconds.
-        // File watchers can miss git's atomic HEAD writes on macOS, so we poll as fallback.
-        // Refreshes ALL sections — each may have a different repo root.
+        // — Branch polling —
+        let t = Instant::now();
         if last_branch_poll.elapsed().as_secs_f64() >= BRANCH_POLL_INTERVAL_SECS {
             last_branch_poll = Instant::now();
             for si in 0..app.sidebar_tree.sections.len() {
@@ -455,8 +459,10 @@ async fn run_loop(
                 }
             }
         }
+        app.profiler.record_branch_poll(t.elapsed());
 
-        // Rewatch if the file explorer root changed (worktree switch)
+        // — File watcher —
+        let t = Instant::now();
         let current_root = &app.file_explorer.root;
         let needs_rewatch = match file_watcher {
             Some(ref fw) => fw.watched_path() != current_root,
@@ -469,6 +475,9 @@ async fn run_loop(
                 None => FileWatcher::new(new_path, event_tx.clone()).ok(),
             };
         }
+        app.profiler.record_file_watch(t.elapsed());
+
+        app.profiler.finish_frame();
     }
     Ok(())
 }
@@ -527,6 +536,16 @@ fn process_event(
     if let AppEvent::Key(key) = event {
         // Clear status message on any keypress
         app.status_message = None;
+        // Ctrl+P: toggle profiler overlay
+        // Ctrl+Shift+P: toggle profiler overlay
+        if key
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::CONTROL | crossterm::event::KeyModifiers::SHIFT)
+            && key.code == KeyCode::Char('P')
+        {
+            app.profiler.enabled = !app.profiler.enabled;
+            key_consumed = true;
+        }
         // Ctrl+C: dismiss prompt → close active session → quit
         if key
             .modifiers

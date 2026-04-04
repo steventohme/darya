@@ -419,6 +419,11 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
     if app.branch_switcher.is_some() {
         widgets::branch_switcher::render(frame, size, app);
     }
+
+    // Render profiler overlay
+    if app.profiler.enabled {
+        render_profiler_overlay(frame, size, app);
+    }
 }
 
 fn render_prompt(frame: &mut Frame, area: Rect, prompt: &Prompt, theme: &crate::config::Theme) {
@@ -871,5 +876,112 @@ fn render_dir_browser(
     frame.render_widget(
         Paragraph::new(footer).style(Style::default().bg(theme.bg)),
         footer_area,
+    );
+}
+
+fn render_profiler_overlay(frame: &mut Frame, size: Rect, app: &App) {
+    let Some(s) = app.profiler.summary() else {
+        return;
+    };
+
+    let dim = Style::default().fg(app.theme.fg_dim);
+    let val = Style::default().fg(app.theme.fg);
+    let warn = Style::default().fg(app.theme.warning);
+
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled(" FPS: ", dim),
+            Span::styled(format!("{:.0}", s.fps), val),
+            Span::styled("  Frame: ", dim),
+            Span::styled(format!("{:.1}ms", s.frame_avg_ms), val),
+            Span::styled(" avg / ", dim),
+            Span::styled(format!("{:.1}ms", s.frame_max_ms), warn),
+            Span::styled(" max ", dim),
+        ]),
+        Line::from(vec![
+            Span::styled(" Render: ", dim),
+            Span::styled(format!("{:.1}ms", s.render_avg_ms), val),
+            Span::styled(" avg / ", dim),
+            Span::styled(format!("{:.1}ms", s.render_max_ms), warn),
+            Span::styled(" max ", dim),
+        ]),
+        Line::from(vec![
+            Span::styled(" Events: ", dim),
+            Span::styled(format!("{:.1}ms", s.event_avg_ms), val),
+            Span::styled(format!(" ({:.1}/frame) ", s.events_per_frame), dim),
+        ]),
+        Line::from(vec![
+            Span::styled(" Housekeeping: ", dim),
+            Span::styled(format!("{:.1}ms", s.hk_avg_ms), val),
+            Span::styled(" avg / ", dim),
+            Span::styled(format!("{:.1}ms", s.hk_max_ms), warn),
+            Span::styled(" max ", dim),
+        ]),
+        // Sub-phase breakdown
+        Line::from(vec![
+            Span::styled("   notify: ", dim),
+            Span::styled(format!("{:.2}", s.notify_avg_ms), val),
+            Span::styled("  activity: ", dim),
+            Span::styled(format!("{:.2}", s.activity_avg_ms), val),
+            Span::styled("  resize: ", dim),
+            Span::styled(format!("{:.2}", s.resize_avg_ms), val),
+        ]),
+        Line::from(vec![
+            Span::styled("   branch: ", dim),
+            Span::styled(format!("{:.2}", s.branch_poll_avg_ms), val),
+            Span::styled("  fwatch: ", dim),
+            Span::styled(format!("{:.2}", s.file_watch_avg_ms), val),
+            Span::styled("  other: ", dim),
+            Span::styled(format!("{:.2}", s.other_hk_avg_ms), val),
+        ]),
+    ];
+
+    // Worst frame breakdown
+    if let Some(ref w) = s.worst {
+        lines.push(Line::from(vec![
+            Span::styled(" Worst frame: ", warn),
+            Span::styled(format!("{:.1}ms", w.total_us as f64 / 1000.0), warn),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("   r:", dim),
+            Span::styled(format!("{:.1}", w.render_us as f64 / 1000.0), val),
+            Span::styled(" e:", dim),
+            Span::styled(format!("{:.1}", w.event_us as f64 / 1000.0), val),
+            Span::styled(format!("({})", w.events_count), dim),
+            Span::styled(" n:", dim),
+            Span::styled(format!("{:.1}", w.notify_us as f64 / 1000.0), val),
+            Span::styled(" a:", dim),
+            Span::styled(format!("{:.1}", w.activity_us as f64 / 1000.0), val),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("   rs:", dim),
+            Span::styled(format!("{:.1}", w.resize_us as f64 / 1000.0), val),
+            Span::styled(" br:", dim),
+            Span::styled(format!("{:.1}", w.branch_poll_us as f64 / 1000.0), warn),
+            Span::styled(" fw:", dim),
+            Span::styled(format!("{:.1}", w.file_watch_us as f64 / 1000.0), warn),
+            Span::styled(" ot:", dim),
+            Span::styled(format!("{:.1}", w.other_hk_us as f64 / 1000.0), val),
+        ]));
+    }
+
+    let width: u16 = 48;
+    let height: u16 = lines.len() as u16 + 2;
+    let x = size.width.saturating_sub(width + 1);
+    let y = 1;
+    let area = Rect::new(x, y, width.min(size.width), height.min(size.height));
+
+    let block = Block::default()
+        .title(" Profiler (Ctrl+Shift+P) ")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .style(Style::default().bg(app.theme.bg).fg(app.theme.border_active));
+
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .style(Style::default().bg(app.theme.bg)),
+        area,
     );
 }

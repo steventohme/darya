@@ -4,6 +4,7 @@ pub mod error;
 pub mod event;
 pub mod icons;
 pub mod planet;
+pub mod profiler;
 pub mod session;
 pub mod sidebar;
 pub mod ui;

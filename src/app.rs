@@ -2592,6 +2592,8 @@ pub struct App {
     pub planet_animation: Option<PlanetAnimation>,
     /// Start time for the sidebar planet animation (time-based, not tick-based).
     pub planet_start: Instant,
+    /// Performance profiler overlay.
+    pub profiler: crate::profiler::Profiler,
 }
 
 impl App {
@@ -2658,6 +2660,7 @@ impl App {
             show_planet: true,
             planet_animation: None,
             planet_start: Instant::now(),
+            profiler: crate::profiler::Profiler::new(),
         }
     }
 
