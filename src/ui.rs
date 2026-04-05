@@ -144,6 +144,7 @@ fn render_view(
             widgets::terminal_panel::render_shell(frame, area, app, session_manager, is_focused)
         }
         ViewKind::Notes => widgets::notes_editor::render(frame, area, app, is_focused),
+        ViewKind::TodoBoard => widgets::todo_board::render(frame, area, app, is_focused),
     }
 }
 
@@ -323,6 +324,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, session_manager: &SessionManager) 
             ViewKind::GitLog => "log",
             ViewKind::Shell => "shell",
             ViewKind::Notes => "notes",
+            ViewKind::TodoBoard => "todos",
         };
         let left = format!(" [{}] {}", mode_str, view_str);
 

@@ -196,6 +196,20 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 ("Ctrl+Q", "Quit"),
             ],
         ),
+        ViewKind::TodoBoard => (
+            "Navigation — Todo Board",
+            vec![
+                ("h/l, ←/→", "Switch column"),
+                ("j/k, ↑/↓", "Navigate items"),
+                ("a", "Add new task"),
+                ("Enter", "Edit task title"),
+                ("n", "Edit task notes"),
+                ("d", "Delete task"),
+                ("H/L", "Move task left/right"),
+                ("p", "Cycle priority"),
+                ("Esc", "Back to terminal"),
+            ],
+        ),
     };
 
     let key_width = 12;

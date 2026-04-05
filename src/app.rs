@@ -380,6 +380,7 @@ pub enum ViewKind {
     GitLog,
     Shell,
     Notes,
+    TodoBoard,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -427,27 +428,34 @@ pub enum MainView {
     GitBlame,
     GitLog,
     Shell,
+    TodoBoard,
 }
 
 impl MainView {
-    /// Cycle forward through primary main views: Terminal → Editor → Shell → Terminal.
+    /// Cycle forward through primary main views: Terminal → Editor → Shell → TodoBoard → Terminal.
     /// Skips contextual views (DiffView, GitBlame, GitLog).
     pub fn next(self) -> Self {
         match self {
             MainView::Terminal => MainView::Editor,
             MainView::Editor => MainView::Shell,
-            MainView::Shell => MainView::Terminal,
+            MainView::Shell => MainView::TodoBoard,
+            MainView::TodoBoard => MainView::Terminal,
             // Contextual views cycle back to Terminal
-            MainView::DiffView | MainView::GitBlame | MainView::GitLog => MainView::Terminal,
+            MainView::DiffView | MainView::GitBlame | MainView::GitLog => {
+                MainView::Terminal
+            }
         }
     }
 
     pub fn prev(self) -> Self {
         match self {
-            MainView::Terminal => MainView::Shell,
+            MainView::Terminal => MainView::TodoBoard,
+            MainView::TodoBoard => MainView::Shell,
             MainView::Editor => MainView::Terminal,
             MainView::Shell => MainView::Editor,
-            MainView::DiffView | MainView::GitBlame | MainView::GitLog => MainView::Terminal,
+            MainView::DiffView
+            | MainView::GitBlame
+            | MainView::GitLog => MainView::Terminal,
         }
     }
 
@@ -459,6 +467,7 @@ impl MainView {
             MainView::GitBlame => ViewKind::GitBlame,
             MainView::GitLog => ViewKind::GitLog,
             MainView::Shell => ViewKind::Shell,
+            MainView::TodoBoard => ViewKind::TodoBoard,
         }
     }
 }
@@ -995,6 +1004,286 @@ impl NoteViewState {
     }
 }
 
+// ── Todo Board ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Priority {
+    High,
+    Medium,
+    Low,
+}
+
+impl Priority {
+    pub fn cycle(self) -> Self {
+        match self {
+            Priority::Low => Priority::Medium,
+            Priority::Medium => Priority::High,
+            Priority::High => Priority::Low,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Priority::High => "high",
+            Priority::Medium => "med",
+            Priority::Low => "low",
+        }
+    }
+
+    pub fn symbol(self) -> &'static str {
+        match self {
+            Priority::High => "●",
+            Priority::Medium => "●",
+            Priority::Low => "●",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TodoColumn {
+    Todo,
+    #[serde(rename = "in_progress")]
+    InProgress,
+    Done,
+}
+
+impl TodoColumn {
+    pub const ALL: [TodoColumn; 3] = [TodoColumn::Todo, TodoColumn::InProgress, TodoColumn::Done];
+
+    pub fn index(self) -> usize {
+        match self {
+            TodoColumn::Todo => 0,
+            TodoColumn::InProgress => 1,
+            TodoColumn::Done => 2,
+        }
+    }
+
+    pub fn from_index(i: usize) -> Self {
+        match i {
+            0 => TodoColumn::Todo,
+            1 => TodoColumn::InProgress,
+            _ => TodoColumn::Done,
+        }
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            TodoColumn::Todo => "Todo",
+            TodoColumn::InProgress => "In Progress",
+            TodoColumn::Done => "Done",
+        }
+    }
+
+    pub fn next(self) -> Option<Self> {
+        match self {
+            TodoColumn::Todo => Some(TodoColumn::InProgress),
+            TodoColumn::InProgress => Some(TodoColumn::Done),
+            TodoColumn::Done => None,
+        }
+    }
+
+    pub fn prev(self) -> Option<Self> {
+        match self {
+            TodoColumn::Todo => None,
+            TodoColumn::InProgress => Some(TodoColumn::Todo),
+            TodoColumn::Done => Some(TodoColumn::InProgress),
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TodoItem {
+    pub id: u64,
+    pub title: String,
+    #[serde(default)]
+    pub notes: String,
+    pub priority: Priority,
+    pub column: TodoColumn,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct TodoFile {
+    next_id: u64,
+    #[serde(default)]
+    items: Vec<TodoItem>,
+}
+
+#[derive(Debug)]
+pub enum TodoEditMode {
+    NewTitle { column: TodoColumn, input: String },
+    EditTitle { id: u64, input: String },
+    EditNotes { id: u64, input: String },
+}
+
+pub struct TodoBoardState {
+    pub items: Vec<TodoItem>,
+    pub next_id: u64,
+    pub focused_column: TodoColumn,
+    pub selected: [usize; 3],
+    pub file_path: PathBuf,
+    pub section_name: String,
+    pub editing: Option<TodoEditMode>,
+}
+
+impl TodoBoardState {
+    fn todo_path_for_section(section_name: &str) -> PathBuf {
+        let todos_dir = config::config_dir().join("todos");
+        let sanitized = section_name
+            .replace('/', "_")
+            .replace(' ', "_")
+            .to_lowercase();
+        todos_dir.join(format!("{}.toml", sanitized))
+    }
+
+    pub fn open_or_create(section_name: &str) -> Self {
+        let file_path = Self::todo_path_for_section(section_name);
+        let (items, next_id) = if file_path.exists() {
+            match std::fs::read_to_string(&file_path) {
+                Ok(content) => match toml::from_str::<TodoFile>(&content) {
+                    Ok(f) => (f.items, f.next_id),
+                    Err(_) => (Vec::new(), 1),
+                },
+                Err(_) => (Vec::new(), 1),
+            }
+        } else {
+            (Vec::new(), 1)
+        };
+
+        Self {
+            items,
+            next_id,
+            focused_column: TodoColumn::Todo,
+            selected: [0; 3],
+            file_path,
+            section_name: section_name.to_string(),
+            editing: None,
+        }
+    }
+
+    pub fn save(&self) -> Result<(), String> {
+        if let Some(parent) = self.file_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Cannot create todos dir: {}", e))?;
+        }
+        let file = TodoFile {
+            next_id: self.next_id,
+            items: self.items.clone(),
+        };
+        let content =
+            toml::to_string_pretty(&file).map_err(|e| format!("Serialize error: {}", e))?;
+        std::fs::write(&self.file_path, content)
+            .map_err(|e| format!("Failed to save todos: {}", e))?;
+        Ok(())
+    }
+
+    /// Items in a given column, sorted by priority (High first).
+    pub fn column_items(&self, col: TodoColumn) -> Vec<&TodoItem> {
+        let mut items: Vec<&TodoItem> = self.items.iter().filter(|i| i.column == col).collect();
+        items.sort_by_key(|i| match i.priority {
+            Priority::High => 0,
+            Priority::Medium => 1,
+            Priority::Low => 2,
+        });
+        items
+    }
+
+    pub fn column_count(&self, col: TodoColumn) -> usize {
+        self.items.iter().filter(|i| i.column == col).count()
+    }
+
+    pub fn selected_item_id(&self) -> Option<u64> {
+        let col = self.focused_column;
+        let items = self.column_items(col);
+        let sel = self.selected[col.index()];
+        items.get(sel).map(|i| i.id)
+    }
+
+    pub fn add_item(&mut self, title: String, column: TodoColumn) {
+        let item = TodoItem {
+            id: self.next_id,
+            title,
+            notes: String::new(),
+            priority: Priority::Medium,
+            column,
+        };
+        self.next_id += 1;
+        self.items.push(item);
+        let _ = self.save();
+    }
+
+    pub fn delete_selected(&mut self) {
+        if let Some(id) = self.selected_item_id() {
+            self.items.retain(|i| i.id != id);
+            // Adjust selection
+            let col = self.focused_column;
+            let count = self.column_count(col);
+            if count > 0 && self.selected[col.index()] >= count {
+                self.selected[col.index()] = count - 1;
+            }
+            let _ = self.save();
+        }
+    }
+
+    pub fn move_selected_right(&mut self) {
+        if let Some(id) = self.selected_item_id() {
+            if let Some(next_col) = self.focused_column.next() {
+                if let Some(item) = self.items.iter_mut().find(|i| i.id == id) {
+                    item.column = next_col;
+                    // Adjust selection in source column
+                    let src = self.focused_column.index();
+                    let count = self.column_count(self.focused_column);
+                    if count > 0 && self.selected[src] >= count {
+                        self.selected[src] = count - 1;
+                    }
+                    let _ = self.save();
+                }
+            }
+        }
+    }
+
+    pub fn move_selected_left(&mut self) {
+        if let Some(id) = self.selected_item_id() {
+            if let Some(prev_col) = self.focused_column.prev() {
+                if let Some(item) = self.items.iter_mut().find(|i| i.id == id) {
+                    item.column = prev_col;
+                    let src = self.focused_column.index();
+                    let count = self.column_count(self.focused_column);
+                    if count > 0 && self.selected[src] >= count {
+                        self.selected[src] = count - 1;
+                    }
+                    let _ = self.save();
+                }
+            }
+        }
+    }
+
+    pub fn cycle_priority(&mut self) {
+        if let Some(id) = self.selected_item_id() {
+            let col = self.focused_column;
+            if let Some(item) = self.items.iter_mut().find(|i| i.id == id) {
+                item.priority = item.priority.cycle();
+                let _ = self.save();
+            }
+            // Re-find the item's new position after re-sort so selection follows it
+            let items = self.column_items(col);
+            if let Some(new_idx) = items.iter().position(|i| i.id == id) {
+                self.selected[col.index()] = new_idx;
+            }
+        }
+    }
+
+    pub fn clamp_selections(&mut self) {
+        for col in TodoColumn::ALL {
+            let count = self.column_count(col);
+            if count > 0 && self.selected[col.index()] >= count {
+                self.selected[col.index()] = count - 1;
+            }
+        }
+    }
+}
+
 pub struct FuzzyFinderState {
     pub input: String,
     pub all_files: Vec<String>,
@@ -1288,6 +1577,7 @@ pub enum CommandId {
     ThemePicker,
     TogglePlanet,
     BranchSwitcher,
+    ViewTodoBoard,
 }
 
 #[derive(Debug, Clone)]
@@ -1374,6 +1664,11 @@ impl CommandPaletteState {
                 id: CommandId::ViewShell,
                 name: "View: Shell".to_string(),
                 keybinding: Some(KeybindingsConfig::format(&keybindings.shell)),
+            },
+            PaletteCommand {
+                id: CommandId::ViewTodoBoard,
+                name: "View: Todo Board".to_string(),
+                keybinding: Some(KeybindingsConfig::format(&keybindings.todo_board)),
             },
             // ── Sessions ──
             PaletteCommand {
@@ -2582,6 +2877,8 @@ pub struct App {
     pub layout_changed: bool,
     /// Per-worktree notepad state.
     pub note: Option<NoteViewState>,
+    /// Per-section todo board state.
+    pub todo_board: Option<TodoBoardState>,
     /// Where the notes panel is displayed.
     pub note_position: NotePosition,
     /// Active planet kind (for theme + sidebar animation).
@@ -2655,6 +2952,7 @@ impl App {
             split_direction: SplitDirection::Horizontal,
             layout_changed: false,
             note: None,
+            todo_board: None,
             note_position: NotePosition::Sidebar,
             planet_kind: None,
             show_planet: true,
@@ -3460,6 +3758,7 @@ impl App {
             CommandId::ViewGitBlame => self.open_git_blame(),
             CommandId::ViewGitLog => self.open_git_log(),
             CommandId::ViewShell => self.set_main_view(MainView::Shell),
+            CommandId::ViewTodoBoard => self.open_todo_board(),
             CommandId::FuzzyFinder => {
                 let root = self.file_explorer.root.clone();
                 self.fuzzy_finder = Some(FuzzyFinderState::new(root));
@@ -3687,6 +3986,10 @@ impl App {
             self.set_main_view(MainView::Shell);
             return;
         }
+        if KeybindingsConfig::matches(&kb.todo_board, key.modifiers, key.code) {
+            self.open_todo_board();
+            return;
+        }
 
         if key.code == KeyCode::Char('?') {
             self.show_help = !self.show_help;
@@ -3708,7 +4011,7 @@ impl App {
                     self.input_mode = InputMode::Navigation;
                 }
                 PanelFocus::Right => {
-                    self.main_view = self.main_view.next();
+                    self.cycle_main_view_next();
                     self.input_mode = match self.main_view {
                         MainView::Terminal | MainView::Shell => InputMode::Terminal,
                         MainView::Editor => {
@@ -3752,6 +4055,7 @@ impl App {
             ViewKind::GitLog => self.handle_git_log_key(key),
             ViewKind::Shell => self.handle_terminal_nav_key(key),
             ViewKind::Notes => self.handle_notes_nav_key(key),
+            ViewKind::TodoBoard => self.handle_todo_board_key(key),
         }
     }
 
@@ -3941,7 +4245,7 @@ impl App {
     fn handle_terminal_key(&mut self, key: KeyEvent) {
         // Shift+CapsLock: cycle to next main view and focus it
         if is_reverse_focus_key(&key) {
-            self.main_view = self.main_view.next();
+            self.cycle_main_view_next();
             // Stay in terminal mode for PTY views, enter editor mode for editor, navigation for others
             self.input_mode = match self.main_view {
                 MainView::Terminal | MainView::Shell => InputMode::Terminal,
@@ -4020,7 +4324,7 @@ impl App {
         let Some(ref mut editor) = self.editor else {
             // No file open — allow focus switching
             if is_reverse_focus_key(&key) {
-                self.main_view = self.main_view.next();
+                self.cycle_main_view_next();
                 self.input_mode = match self.main_view {
                     MainView::Terminal | MainView::Shell => InputMode::Terminal,
                     MainView::Editor => InputMode::Navigation, // still no editor, stay nav
@@ -4037,7 +4341,7 @@ impl App {
             if is_reverse_focus_key(&key) {
                 editor.read_only = true;
                 editor.editor_state.mode = EditorMode::Normal;
-                self.main_view = self.main_view.next();
+                self.cycle_main_view_next();
                 self.input_mode = match self.main_view {
                     MainView::Terminal | MainView::Shell => InputMode::Terminal,
                     _ => InputMode::Navigation,
@@ -4478,6 +4782,172 @@ impl App {
             Err(e) => {
                 self.status_message = Some(format!("Log error: {}", e));
             }
+        }
+    }
+
+    fn current_section_name(&self) -> Option<String> {
+        use crate::sidebar::tree::TreeNode;
+        match self.sidebar_tree.visible.get(self.sidebar_tree.cursor)? {
+            TreeNode::Section(si) => Some(self.sidebar_tree.sections[*si].name.clone()),
+            TreeNode::Item(si, _) | TreeNode::Session(si, _, _) => {
+                Some(self.sidebar_tree.sections[*si].name.clone())
+            }
+        }
+    }
+
+    /// Cycle main view forward, ensuring TodoBoard is loaded when reached.
+    fn cycle_main_view_next(&mut self) {
+        let next = self.main_view.next();
+        if next == MainView::TodoBoard {
+            self.open_todo_board();
+        } else {
+            self.main_view = next;
+        }
+    }
+
+    fn open_todo_board(&mut self) {
+        let section_name = self.current_section_name().unwrap_or_else(|| "default".to_string());
+        // Reuse existing board if same section, otherwise load
+        let needs_load = match &self.todo_board {
+            Some(board) => board.section_name != section_name,
+            None => true,
+        };
+        if needs_load {
+            self.todo_board = Some(TodoBoardState::open_or_create(&section_name));
+        }
+        self.set_main_view(MainView::TodoBoard);
+    }
+
+    fn handle_todo_board_key(&mut self, key: KeyEvent) {
+        let board = match self.todo_board.as_mut() {
+            Some(b) => b,
+            None => return,
+        };
+
+        // If editing, handle edit keys first
+        if let Some(ref mut edit) = board.editing {
+            match key.code {
+                KeyCode::Esc => {
+                    board.editing = None;
+                }
+                KeyCode::Enter => {
+                    match std::mem::replace(&mut board.editing, None).unwrap() {
+                        TodoEditMode::NewTitle { column, input } => {
+                            if !input.trim().is_empty() {
+                                board.add_item(input.trim().to_string(), column);
+                            }
+                        }
+                        TodoEditMode::EditTitle { id, input } => {
+                            if !input.trim().is_empty() {
+                                if let Some(item) = board.items.iter_mut().find(|i| i.id == id) {
+                                    item.title = input.trim().to_string();
+                                    let _ = board.save();
+                                }
+                            }
+                        }
+                        TodoEditMode::EditNotes { id, input } => {
+                            if let Some(item) = board.items.iter_mut().find(|i| i.id == id) {
+                                item.notes = input.trim().to_string();
+                                let _ = board.save();
+                            }
+                        }
+                    }
+                    board.editing = None;
+                }
+                KeyCode::Backspace => match edit {
+                    TodoEditMode::NewTitle { input, .. }
+                    | TodoEditMode::EditTitle { input, .. }
+                    | TodoEditMode::EditNotes { input, .. } => {
+                        input.pop();
+                    }
+                },
+                KeyCode::Char(c) => match edit {
+                    TodoEditMode::NewTitle { input, .. }
+                    | TodoEditMode::EditTitle { input, .. }
+                    | TodoEditMode::EditNotes { input, .. } => {
+                        input.push(c);
+                    }
+                },
+                _ => {}
+            }
+            return;
+        }
+
+        // Navigation mode
+        match key.code {
+            KeyCode::Char('h') | KeyCode::Left => {
+                if let Some(prev) = board.focused_column.prev() {
+                    board.focused_column = prev;
+                }
+            }
+            KeyCode::Char('l') | KeyCode::Right => {
+                if let Some(next) = board.focused_column.next() {
+                    board.focused_column = next;
+                }
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                let col = board.focused_column;
+                let count = board.column_count(col);
+                if count > 0 {
+                    board.selected[col.index()] =
+                        (board.selected[col.index()] + 1).min(count - 1);
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                let col = board.focused_column;
+                if board.selected[col.index()] > 0 {
+                    board.selected[col.index()] -= 1;
+                }
+            }
+            KeyCode::Char('a') => {
+                let col = board.focused_column;
+                board.editing = Some(TodoEditMode::NewTitle {
+                    column: col,
+                    input: String::new(),
+                });
+            }
+            KeyCode::Enter => {
+                if let Some(id) = board.selected_item_id() {
+                    let title = board
+                        .items
+                        .iter()
+                        .find(|i| i.id == id)
+                        .map(|i| i.title.clone())
+                        .unwrap_or_default();
+                    board.editing = Some(TodoEditMode::EditTitle { id, input: title });
+                }
+            }
+            KeyCode::Char('n') => {
+                if let Some(id) = board.selected_item_id() {
+                    let notes = board
+                        .items
+                        .iter()
+                        .find(|i| i.id == id)
+                        .map(|i| i.notes.clone())
+                        .unwrap_or_default();
+                    board.editing = Some(TodoEditMode::EditNotes { id, input: notes });
+                }
+            }
+            KeyCode::Char('d') => {
+                board.delete_selected();
+            }
+            KeyCode::Char('H') => {
+                board.move_selected_left();
+            }
+            KeyCode::Char('L') => {
+                board.move_selected_right();
+            }
+            KeyCode::Char('p') => {
+                board.cycle_priority();
+            }
+            KeyCode::F(18) => {
+                self.toggle_focus();
+                return;
+            }
+            KeyCode::Esc => {
+                self.set_main_view(MainView::Terminal);
+            }
+            _ => {}
         }
     }
 
@@ -4932,6 +5402,7 @@ impl App {
                 MainView::GitBlame => "blame",
                 MainView::GitLog => "log",
                 MainView::Shell => "shell",
+                MainView::TodoBoard => "todos",
             }
             .to_string(),
         );

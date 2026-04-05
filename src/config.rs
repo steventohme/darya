@@ -174,6 +174,7 @@ struct KeybindingsToml {
     split_pane_vertical: Option<String>,
     branch_switcher: Option<String>,
     notes_toggle: Option<String>,
+    todo_board: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -197,6 +198,7 @@ pub struct KeybindingsConfig {
     pub split_pane_vertical: (KeyModifiers, KeyCode),
     pub branch_switcher: (KeyModifiers, KeyCode),
     pub notes_toggle: (KeyModifiers, KeyCode),
+    pub todo_board: (KeyModifiers, KeyCode),
 }
 
 impl Default for KeybindingsConfig {
@@ -221,6 +223,7 @@ impl Default for KeybindingsConfig {
             split_pane_vertical: (KeyModifiers::CONTROL, KeyCode::Char('.')),
             branch_switcher: (KeyModifiers::SUPER, KeyCode::Char('b')),
             notes_toggle: (KeyModifiers::SUPER, KeyCode::Char('n')),
+            todo_board: (KeyModifiers::SUPER, KeyCode::Char('0')),
         }
     }
 }
@@ -605,6 +608,7 @@ pub fn load_config() -> AppConfig {
         apply_kb!(split_pane_vertical);
         apply_kb!(branch_switcher);
         apply_kb!(notes_toggle);
+        apply_kb!(todo_board);
     }
 
     if let Some(ref s) = config.session {

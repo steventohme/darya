@@ -1393,6 +1393,7 @@ fn restore_sessions(
             "blame" => app::MainView::GitBlame,
             "log" => app::MainView::GitLog,
             "shell" => app::MainView::Shell,
+            "todos" => app::MainView::TodoBoard,
             _ => app.main_view,
         };
     }

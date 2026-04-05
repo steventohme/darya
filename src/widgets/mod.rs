@@ -15,5 +15,6 @@ pub mod search_results;
 pub mod split_picker;
 pub mod status_bar;
 pub mod terminal_panel;
+pub mod todo_board;
 pub mod theme_picker;
 pub mod worktree_list;
