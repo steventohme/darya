@@ -999,6 +999,20 @@ fn process_event(
                 app.session_statuses.insert(session_id.clone(), status);
             }
         }
+        // Update conversation ID if Claude Code reported a new one via OSC 9999
+        if let Some(real_cid) = session_manager.session_conversation_id(session_id) {
+            if let Some((si, ii, slot_idx)) = app.sidebar_tree.find_session_slot(session_id) {
+                let current_cid = app.sidebar_tree.sections.get(si)
+                    .and_then(|s| s.items.get(ii))
+                    .and_then(|item| item.sessions.get(slot_idx))
+                    .and_then(|slot| slot.conversation_id.as_ref());
+                if current_cid != Some(&real_cid) {
+                    app.sidebar_tree.set_conversation_id(si, ii, slot_idx, real_cid);
+                    // Persist immediately so a crash doesn't lose the updated ID
+                    config::save_layout(&app.to_layout_config());
+                }
+            }
+        }
     }
 
     // Handle mouse scroll — works in ALL modes
@@ -1162,6 +1176,42 @@ fn process_event(
                 if !viewing {
                     pending_attention.insert(session_id.clone(), std::time::Instant::now());
                 }
+                // Detect real conversation ID from filesystem (fallback for when
+                // OSC 9999 isn't available). If our stored conversation file
+                // hasn't been touched recently but a different one has, it means
+                // Claude Code is using a different conversation than we think.
+                if let Some((si, ii, slot_idx)) =
+                    app.sidebar_tree.find_session_slot(session_id)
+                {
+                    let slot_info = app.sidebar_tree.sections.get(si)
+                        .and_then(|s| s.items.get(ii))
+                        .map(|item| (
+                            item.path.clone(),
+                            item.sessions.get(slot_idx).and_then(|s| s.conversation_id.clone()),
+                            item.sessions.get(slot_idx).map_or(false, |s| s.kind == SessionKind::Claude),
+                        ));
+                    if let Some((wt_path, current_cid, true)) = slot_info {
+                        if let Some(latest) = find_latest_conversation(&wt_path) {
+                            let should_update = match &current_cid {
+                                // No stored ID — always adopt the latest
+                                None => true,
+                                // Stored ID differs from latest AND the stored
+                                // file hasn't been modified in the last 30 seconds
+                                // (meaning our session isn't writing to it)
+                                Some(cid) if cid != &latest => {
+                                    !conversation_recently_modified(cid, std::time::Duration::from_secs(30))
+                                }
+                                _ => false,
+                            };
+                            if should_update {
+                                app.sidebar_tree.set_conversation_id(
+                                    si, ii, slot_idx, latest,
+                                );
+                                config::save_layout(&app.to_layout_config());
+                            }
+                        }
+                    }
+                }
             }
         }
         AppEvent::SessionExited { ref session_id } => {
@@ -1320,6 +1370,11 @@ fn restore_sessions(
     // Rebuild visible nodes in case new slots were created during restore
     app.sidebar_tree.rebuild_visible();
 
+    // Persist layout immediately after restore — conversation IDs may have
+    // changed (e.g., GC'd files replaced with new UUIDs) and we don't want
+    // a crash to lose the updated state.
+    config::save_layout(&app.to_layout_config());
+
     // Restore UI state
     if let Some(ref sv) = layout.sidebar_view {
         app.sidebar_view = match sv.as_str() {
@@ -1350,7 +1405,6 @@ fn restore_sessions(
     }
 }
 
-/// Extract text from a finalized TextSelection using the vt100 screen contents.
 /// Check whether a Claude Code conversation `.jsonl` file still exists on disk.
 /// `--resume` searches globally, so we scan all project dirs under `~/.claude/projects/`.
 fn conversation_file_exists(conversation_id: &str) -> bool {
@@ -1368,6 +1422,74 @@ fn conversation_file_exists(conversation_id: &str) -> bool {
         }
     }
     false
+}
+
+/// Compute the Claude projects directory for a given worktree path.
+/// Claude Code stores conversations in `~/.claude/projects/<encoded-path>/`.
+/// The encoded path replaces `/` with `-` and strips the leading `-`.
+fn claude_project_dir(worktree_path: &std::path::Path) -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    let path_str = worktree_path.to_string_lossy();
+    // Claude encodes the path by replacing `/` with `-`
+    let encoded = path_str.replace('/', "-");
+    Some(home.join(".claude").join("projects").join(encoded))
+}
+
+/// Check whether the `.jsonl` file for a conversation ID was modified within the
+/// given duration. Used to determine if a session is actively writing to a file.
+fn conversation_recently_modified(conversation_id: &str, within: std::time::Duration) -> bool {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return false;
+    };
+    let projects_dir = home.join(".claude").join("projects");
+    let filename = format!("{}.jsonl", conversation_id);
+    let Ok(entries) = std::fs::read_dir(&projects_dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path().join(&filename);
+        if let Ok(metadata) = std::fs::metadata(&path) {
+            if let Ok(modified) = metadata.modified() {
+                if let Ok(elapsed) = modified.elapsed() {
+                    return elapsed < within;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Find the most recently modified `.jsonl` conversation file in the Claude
+/// project directory for the given worktree path. Returns the conversation ID
+/// (filename stem) if found.
+fn find_latest_conversation(worktree_path: &std::path::Path) -> Option<String> {
+    let project_dir = claude_project_dir(worktree_path)?;
+    let entries = std::fs::read_dir(&project_dir).ok()?;
+    let mut newest: Option<(String, std::time::SystemTime)> = None;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+            continue;
+        }
+        // Skip subagent directories
+        if !path.is_file() {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        // Conversation IDs are UUIDs — quick sanity check
+        if stem.len() < 32 {
+            continue;
+        }
+        let modified = entry.metadata().ok().and_then(|m| m.modified().ok());
+        if let Some(mtime) = modified {
+            if newest.as_ref().map_or(true, |(_, best)| mtime > *best) {
+                newest = Some((stem.to_string(), mtime));
+            }
+        }
+    }
+    newest.map(|(id, _)| id)
 }
 
 fn extract_selection_text(

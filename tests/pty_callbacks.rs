@@ -18,6 +18,7 @@ fn make_parser() -> (Arc<RwLock<vt100::Parser<PtyCallback>>>, PtyCallback) {
             bell_count: bell_count.clone(),
             done_count: done_count.clone(),
             status_text: status_text.clone(),
+            conversation_id: Arc::new(RwLock::new(None)),
         },
     );
     (
@@ -26,6 +27,7 @@ fn make_parser() -> (Arc<RwLock<vt100::Parser<PtyCallback>>>, PtyCallback) {
             bell_count,
             done_count,
             status_text,
+            conversation_id: Arc::new(RwLock::new(None)),
         },
     )
 }

@@ -64,6 +64,11 @@ impl SessionManager {
         self.sessions.get(id).map(|s| s.status_text())
     }
 
+    /// Returns the real conversation ID reported by Claude Code via OSC 9999.
+    pub fn session_conversation_id(&self, id: &str) -> Option<String> {
+        self.sessions.get(id).and_then(|s| s.conversation_id())
+    }
+
     pub fn resize_all(&mut self, rows: u16, cols: u16) {
         for session in self.sessions.values_mut() {
             let _ = session.resize(rows, cols);

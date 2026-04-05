@@ -18,6 +18,8 @@ pub struct PtyCallback {
     pub bell_count: Arc<AtomicUsize>,
     pub done_count: Arc<AtomicUsize>,
     pub status_text: Arc<RwLock<String>>,
+    /// Real conversation ID reported by Claude Code via OSC 9999.
+    pub conversation_id: Arc<RwLock<Option<String>>>,
 }
 
 impl Default for PtyCallback {
@@ -26,6 +28,7 @@ impl Default for PtyCallback {
             bell_count: Arc::new(AtomicUsize::new(0)),
             done_count: Arc::new(AtomicUsize::new(0)),
             status_text: Arc::new(RwLock::new(String::new())),
+            conversation_id: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -74,6 +77,18 @@ impl vt100::Callbacks for PtyCallback {
             Some(b"777") => {
                 self.bell_count.fetch_add(1, Ordering::Relaxed);
             }
+            // OSC 9999 — Darya status line: conv_id=<uuid>
+            Some(b"9999") => {
+                if let Some(payload) = params.get(1) {
+                    if let Ok(text) = std::str::from_utf8(payload) {
+                        if let Some(cid) = text.strip_prefix("conv_id=") {
+                            if let Ok(mut guard) = self.conversation_id.write() {
+                                *guard = Some(cid.to_string());
+                            }
+                        }
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -85,6 +100,8 @@ pub struct PtySession {
     pub worktree_path: PathBuf,
     pub parser: Arc<RwLock<vt100::Parser<PtyCallback>>>,
     status_text: Arc<RwLock<String>>,
+    /// Real conversation ID reported by Claude Code via OSC 9999.
+    conversation_id: Arc<RwLock<Option<String>>>,
     writer: Box<dyn Write + Send>,
     master: Box<dyn MasterPty + Send>,
     child_killer: Box<dyn ChildKiller + Send + Sync>,
@@ -142,10 +159,12 @@ impl PtySession {
         let bell_count = Arc::new(AtomicUsize::new(0));
         let done_count = Arc::new(AtomicUsize::new(0));
         let status_text = Arc::new(RwLock::new(String::new()));
+        let conversation_id: Arc<RwLock<Option<String>>> = Arc::new(RwLock::new(None));
         let callbacks = PtyCallback {
             bell_count: bell_count.clone(),
             done_count: done_count.clone(),
             status_text: status_text.clone(),
+            conversation_id: conversation_id.clone(),
         };
         let parser = Arc::new(RwLock::new(vt100::Parser::new_with_callbacks(
             rows, cols, 1000, callbacks,
@@ -209,6 +228,7 @@ impl PtySession {
             worktree_path,
             parser,
             status_text,
+            conversation_id,
             writer,
             master: pair.master,
             child_killer,
@@ -220,6 +240,14 @@ impl PtySession {
             .read()
             .map(|s| s.clone())
             .unwrap_or_default()
+    }
+
+    /// Returns the real conversation ID if Claude Code has reported one via OSC 9999.
+    pub fn conversation_id(&self) -> Option<String> {
+        self.conversation_id
+            .read()
+            .ok()
+            .and_then(|guard| guard.clone())
     }
 
     pub fn write_input(&mut self, bytes: &[u8]) -> Result<()> {
