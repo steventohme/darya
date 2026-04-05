@@ -1,0 +1,81 @@
+tests/pty_callbacks.rs
+  0e707e1a9491e92e 21,30
+src/session/pty_session.rs
+  0e707e1a9491e92e 21-22,31,80-91,103-104,162,167,231,245-252
+src/main.rs
+  0e707e1a9491e92e 1002-1015,1179-1214,1373-1377,1427-1492
+src/session/manager.rs
+  0e707e1a9491e92e 67-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "018a621fa95c87b66ff45481f7f93755406d7674",
+  "prompts": {
+    "0e707e1a9491e92e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1c511bc2-deb3-4020-8c13-5f6f8e5ac0d6",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme",
+      "messages": [],
+      "total_additions": 179,
+      "total_deletions": 22,
+      "accepted_lines": 158,
+      "overriden_lines": 0
+    },
+    "803388d92d62915c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b1be9e4-291f-4662-8561-c70321c61579",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme",
+      "messages": [],
+      "total_additions": 10,
+      "total_deletions": 0,
+      "accepted_lines": 10,
+      "overriden_lines": 0
+    },
+    "953d1d3ccaaff465": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "95a75434-2c93-4ad6-8238-fef38308590e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme",
+      "messages": [],
+      "total_additions": 86,
+      "total_deletions": 28,
+      "accepted_lines": 79,
+      "overriden_lines": 0
+    },
+    "b302c612514464c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "991ecab4-bdf8-4233-abd8-c59e17d81d8e",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme",
+      "messages": [],
+      "total_additions": 117,
+      "total_deletions": 105,
+      "accepted_lines": 117,
+      "overriden_lines": 0
+    },
+    "fdf771f40b2fb119": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0c47cda7-c6b9-4081-8eeb-fac0e228ee78",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "steventohme",
+      "messages": [],
+      "total_additions": 621,
+      "total_deletions": 8,
+      "accepted_lines": 602,
+      "overriden_lines": 0
+    }
+  }
+}
