@@ -33,140 +33,152 @@ pub fn render_session(
     frame.render_widget(block, area);
 
     if let Some(session) = session_manager.get(session_id) {
-        if let Ok(mut parser) = session.parser.write() {
-            let offset = app.scroll_offset_for(session_id);
+        let offset = app.scroll_offset_for(session_id);
+
+        // Acquire parser write lock only for the minimal work needed
+        {
+            let mut parser = match session.parser.write() {
+                Ok(p) => p,
+                Err(_) => {
+                    let placeholder = Paragraph::new("  No session data")
+                        .style(Style::default().fg(app.theme.fg_dim));
+                    frame.render_widget(placeholder, inner);
+                    return;
+                }
+            };
             parser.screen_mut().set_scrollback(offset);
             let pseudo_term = PseudoTerminal::new(parser.screen());
             frame.render_widget(pseudo_term, inner);
+            // Write lock dropped here
+        }
 
-            // Post-process: replace Color::Reset with theme colors.
-            let buf = frame.buffer_mut();
-            for y in inner.y..inner.y + inner.height {
-                for x in inner.x..inner.x + inner.width {
-                    let cell = &mut buf[(x, y)];
-                    if cell.bg == Color::Reset {
-                        cell.bg = app.theme.bg;
-                    }
-                    if cell.fg == Color::Reset {
-                        cell.fg = app.theme.fg;
-                    }
+        // Post-process: replace Color::Reset with theme colors.
+        let buf = frame.buffer_mut();
+        for y in inner.y..inner.y + inner.height {
+            for x in inner.x..inner.x + inner.width {
+                let cell = &mut buf[(x, y)];
+                if cell.bg == Color::Reset {
+                    cell.bg = app.theme.bg;
+                }
+                if cell.fg == Color::Reset {
+                    cell.fg = app.theme.fg;
                 }
             }
+        }
 
-            // Bottom-align: shift content rows to the bottom of the widget
-            if app.terminal_start_bottom && inner.height > 0 {
-                let bottom = inner.y + inner.height - 1;
-                let mut last_content_row = inner.y;
-                for y in (inner.y..=bottom).rev() {
-                    let mut has_content = false;
-                    for x in inner.x..inner.x + inner.width {
-                        let sym = buf[(x, y)].symbol();
-                        if sym != " " && !sym.is_empty() {
-                            has_content = true;
-                            break;
-                        }
-                    }
-                    if has_content {
-                        last_content_row = y;
+        // Bottom-align: shift content rows to the bottom of the widget
+        if app.terminal_start_bottom && inner.height > 0 {
+            let bottom = inner.y + inner.height - 1;
+            let mut last_content_row = inner.y;
+            for y in (inner.y..=bottom).rev() {
+                let mut has_content = false;
+                for x in inner.x..inner.x + inner.width {
+                    let sym = buf[(x, y)].symbol();
+                    if sym != " " && !sym.is_empty() {
+                        has_content = true;
                         break;
                     }
                 }
-
-                let shift = bottom - last_content_row;
-                if shift > 0 {
-                    for y in (inner.y..=last_content_row).rev() {
-                        let dst_y = y + shift;
-                        for x in inner.x..inner.x + inner.width {
-                            let cell = buf[(x, y)].clone();
-                            buf[(x, dst_y)] = cell;
-                        }
-                    }
-                    for y in inner.y..inner.y + shift {
-                        for x in inner.x..inner.x + inner.width {
-                            let cell = &mut buf[(x, y)];
-                            cell.reset();
-                            cell.fg = app.theme.fg;
-                            cell.bg = app.theme.bg;
-                        }
-                    }
+                if has_content {
+                    last_content_row = y;
+                    break;
                 }
             }
 
-            // Render text selection highlight (after bottom-align shift so coords are correct)
-            if let Some(ref sel) = app.text_selection {
-                if sel.session_id == session_id && !sel.pane_inner.is_empty() {
-                    // Normalize start/end so start is before end
-                    let (start_row, start_col, end_row, end_col) = if sel.start <= sel.end {
-                        (sel.start.0, sel.start.1, sel.end.0, sel.end.1)
+            let shift = bottom - last_content_row;
+            if shift > 0 {
+                for y in (inner.y..=last_content_row).rev() {
+                    let dst_y = y + shift;
+                    for x in inner.x..inner.x + inner.width {
+                        let cell = buf[(x, y)].clone();
+                        buf[(x, dst_y)] = cell;
+                    }
+                }
+                for y in inner.y..inner.y + shift {
+                    for x in inner.x..inner.x + inner.width {
+                        let cell = &mut buf[(x, y)];
+                        cell.reset();
+                        cell.fg = app.theme.fg;
+                        cell.bg = app.theme.bg;
+                    }
+                }
+            }
+        }
+
+        // Render text selection highlight (after bottom-align shift so coords are correct)
+        if let Some(ref sel) = app.text_selection {
+            if sel.session_id == session_id && !sel.pane_inner.is_empty() {
+                // Normalize start/end so start is before end
+                let (start_row, start_col, end_row, end_col) = if sel.start <= sel.end {
+                    (sel.start.0, sel.start.1, sel.end.0, sel.end.1)
+                } else {
+                    (sel.end.0, sel.end.1, sel.start.0, sel.start.1)
+                };
+
+                for row in start_row..=end_row {
+                    let abs_y = inner.y + row;
+                    if abs_y >= inner.y + inner.height {
+                        break;
+                    }
+
+                    let col_start = if row == start_row { start_col } else { 0 };
+                    let col_end = if row == end_row {
+                        end_col
                     } else {
-                        (sel.end.0, sel.end.1, sel.start.0, sel.start.1)
+                        inner.width.saturating_sub(1)
                     };
 
-                    for row in start_row..=end_row {
-                        let abs_y = inner.y + row;
-                        if abs_y >= inner.y + inner.height {
+                    for col in col_start..=col_end {
+                        let abs_x = inner.x + col;
+                        if abs_x >= inner.x + inner.width {
                             break;
                         }
-
-                        let col_start = if row == start_row { start_col } else { 0 };
-                        let col_end = if row == end_row {
-                            end_col
-                        } else {
-                            inner.width.saturating_sub(1)
-                        };
-
-                        for col in col_start..=col_end {
-                            let abs_x = inner.x + col;
-                            if abs_x >= inner.x + inner.width {
-                                break;
-                            }
-                            let cell = &mut buf[(abs_x, abs_y)];
-                            std::mem::swap(&mut cell.fg, &mut cell.bg);
-                        }
+                        let cell = &mut buf[(abs_x, abs_y)];
+                        std::mem::swap(&mut cell.fg, &mut cell.bg);
                     }
                 }
             }
+        }
 
-            // Show scroll indicator and scrollbar when scrolled back
-            if offset > 0 && inner.height > 0 {
-                let max_scroll: usize = 1000;
-                let indicator_area = Rect::new(inner.x, inner.y, inner.width, 1);
-                let indicator = Paragraph::new(format!(
-                    " \u{2191} line {offset}/{max_scroll} (scroll \u{2193} to return) "
-                ))
-                .alignment(Alignment::Right)
+        // Show scroll indicator and scrollbar when scrolled back
+        if offset > 0 && inner.height > 0 {
+            let max_scroll: usize = 1000;
+            let indicator_area = Rect::new(inner.x, inner.y, inner.width, 1);
+            let indicator = Paragraph::new(format!(
+                " \u{2191} line {offset}/{max_scroll} (scroll \u{2193} to return) "
+            ))
+            .alignment(Alignment::Right)
+            .style(
+                Style::default()
+                    .fg(app.theme.fg_dim)
+                    .bg(app.theme.highlight_bg),
+            );
+            frame.render_widget(indicator, indicator_area);
+
+            // Vertical scrollbar on the right edge
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .thumb_style(Style::default().fg(app.theme.fg_dim))
+                .track_style(Style::default().fg(app.theme.highlight_bg));
+            // Position is inverted: offset=1000 means top, offset=0 means bottom
+            let position = max_scroll.saturating_sub(offset);
+            let mut scrollbar_state = ScrollbarState::new(max_scroll).position(position);
+            frame.render_stateful_widget(scrollbar, inner, &mut scrollbar_state);
+        }
+
+        // Show overlay bar if session has exited
+        if app.exited_sessions.contains(session_id) && inner.height > 0 {
+            let overlay_area = Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1);
+            let overlay = Paragraph::new(" [exited] press r to restart ")
+                .alignment(Alignment::Center)
                 .style(
                     Style::default()
-                        .fg(app.theme.fg_dim)
-                        .bg(app.theme.highlight_bg),
+                        .fg(app.theme.bg)
+                        .bg(app.theme.session_exited),
                 );
-                frame.render_widget(indicator, indicator_area);
-
-                // Vertical scrollbar on the right edge
-                let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                    .thumb_style(Style::default().fg(app.theme.fg_dim))
-                    .track_style(Style::default().fg(app.theme.highlight_bg));
-                // Position is inverted: offset=1000 means top, offset=0 means bottom
-                let position = max_scroll.saturating_sub(offset);
-                let mut scrollbar_state = ScrollbarState::new(max_scroll).position(position);
-                frame.render_stateful_widget(scrollbar, inner, &mut scrollbar_state);
-            }
-
-            // Show overlay bar if session has exited
-            if app.exited_sessions.contains(session_id) && inner.height > 0 {
-                let overlay_area = Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1);
-                let overlay = Paragraph::new(" [exited] press r to restart ")
-                    .alignment(Alignment::Center)
-                    .style(
-                        Style::default()
-                            .fg(app.theme.bg)
-                            .bg(app.theme.session_exited),
-                    );
-                frame.render_widget(overlay, overlay_area);
-            }
-
-            return;
+            frame.render_widget(overlay, overlay_area);
         }
+
+        return;
     }
 
     // No session data available — show placeholder
